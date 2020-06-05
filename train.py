@@ -29,7 +29,8 @@ import torch.optim as optim
 import environment as gym
 from model import to_torch, to_numpy, to_gpu_or_not, softmax, RandomModel
 from model import DuelingNet as Model
-from connection import ServiceExit, SafeThread, MultiProcessWorkers, MultiThreadWorkers, accept_socket_connections
+from connection import MultiProcessWorkers, MultiThreadWorkers
+from connection import accept_socket_connections
 from worker import Workers
 
 
@@ -424,7 +425,7 @@ class Trainer:
 class Learner:
     def __init__(self, args):
         self.args = args
-        random.seed(self.args['seed'])
+        random.seed(args['seed'])
         self.env = gym.make()
         self.shutdown_flag = False
 
@@ -452,7 +453,6 @@ class Learner:
         self.trainer.shutdown()
         self.workers.shutdown()
         for thread in self.threads:
-            thread.shutdown()
             thread.join()
 
     def model_path(self, model_id):
@@ -600,17 +600,17 @@ class Learner:
     def run(self):
         try:
             # open threads
-            self.threads = [SafeThread(target=self.trainer.run)]
+            self.threads = [threading.Thread(target=self.trainer.run)]
             if self.args['remote']:
-                self.threads.append(SafeThread(target=self.entry_server))
+                self.threads.append(threading.Thread(target=self.entry_server))
             for thread in self.threads:
+                thread.daemon = True
                 thread.start()
             # open generator, evaluator
             self.workers.run()
             self.server()
 
-        except ServiceExit:
-            print('exit exception occured')
+        finally:
             self.shutdown()
 
 
@@ -618,16 +618,10 @@ if __name__ == '__main__':
     with open('config.yaml') as f:
         args = yaml.load(f)
     print(args)
+
     train_args = args['train_args']
     env_args = args['env_args']
-
     train_args['env'] = env_args
-
-    def service_shutdown(signum, frame):
-        raise ServiceExit
-
-    signal.signal(signal.SIGTERM, service_shutdown)
-    signal.signal(signal.SIGINT, service_shutdown)
 
     gym.prepare(env_args)
     learner = Learner(train_args)

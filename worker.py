@@ -6,14 +6,15 @@
 import os
 import random
 import queue
+import threading
 import time
 import yaml
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
 
-from connection import SafeThread, QueueCommunicator
-from connection import open_socket_connections, open_multiprocessing_connections
+from connection import QueueCommunicator
+from connection import open_multiprocessing_connections
 from connection import connect_socket_connection, accept_socket_connections
 from evaluation import Evaluator
 from generation import Generator
@@ -131,26 +132,22 @@ class Workers(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.server_thread = None
-
-    def shutdown(self):
-        super().shutdown()
-        if self.server_thread is not None:
-            self.server_thread.shutdown()
 
     def run(self):
         if self.args['remote']:
             # prepare listening connections
-            def worker_server():
-                conn_acceptor = accept_socket_connections(port=9998, timeout=0.5)
-                print('started worker server')
-                while not self.shutdown_flag:
+            def worker_server(port):
+                conn_acceptor = accept_socket_connections(port=port, timeout=0.5)
+                print('started worker server %d' % port)
+                while not self.shutdown_flag:  # use super class's flag
                     conn = next(conn_acceptor)
                     if conn is not None:
                         self.add(conn)
                 print('finished worker server')
-            self.server_thread = SafeThread(target=worker_server)
-            self.server_thread.start()
+            # use super class's thread list
+            self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
+            self.threads[-1].daemon = True
+            self.threads[-1].start()
         else:
             # open local connections
             eids = [0, 1]
@@ -194,4 +191,4 @@ if __name__ == '__main__':
             time.sleep(100)
     finally:
         for p in process:
-            p.termiinate()
+            p.terminate()
