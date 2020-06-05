@@ -78,15 +78,6 @@ class PickledConnection:
             self._send(chunk)
 
 
-class SafeProcess(mp.Process):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.shutdown_flag = mp.Event()
-
-    def shutdown(self):
-        self.shutdown_flag.set()
-
-
 def open_socket_connection(port, reuse=False):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(
@@ -148,36 +139,6 @@ def open_multiprocessing_connections(num_process, target, args_func):
     return s_conns
 
 
-def open_socket_connections(port, num_process, target, args_func):
-    # open connections
-    conn_acceptor = accept_socket_connections(port)
-    time.sleep(0.8)
-
-    # open workers
-    for i in range(num_process):
-        def target2(i):
-            print('started')
-            conn = connect_socket_connection('', port)
-            target(*args_func(i, conn))
-        SafeProcess(target=target2, args=(i,)).start()
-
-    # accept connections
-    return list(conn_acceptor)
-
-
-class ServiceExit(Exception):
-    pass
-
-
-class SafeThread(threading.Thread):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.shutdown_flag = threading.Event()
-
-    def shutdown(self):
-        self.shutdown_flag.set()
-
-
 class MultiProcessWorkers:
     def __init__(self, func, send_generator, num, postprocess=None, buffer_length=512, num_receivers=1):
         self.send_generator = send_generator
@@ -201,16 +162,17 @@ class MultiProcessWorkers:
     def shutdown(self):
         self.shutdown_flag = True
         for thread in self.threads:
-            thread.shutdown()
+            thread.join()
 
     def recv(self):
         return self.output_queue.get()
 
     def start(self):
-        self.threads.append(SafeThread(target=self._sender))
+        self.threads.append(threading.Thread(target=self._sender))
         for i in range(self.num_receivers):
-            self.threads.append(SafeThread(target=self._receiver, args=(i,)))
+            self.threads.append(threading.Thread(target=self._receiver, args=(i,)))
         for thread in self.threads:
+            thread.daemon = True
             thread.start()
 
     def _sender(self):
@@ -265,7 +227,7 @@ class MultiThreadWorkers:
     def shutdown(self):
         self.shutdown_flag = True
         for thread in self.threads:
-            thread.shutdown()
+            thread.join()
 
     def recv(self):
         return self.output_queue.get()
@@ -294,7 +256,8 @@ class MultiThreadWorkers:
 
         for i in range(self.num):
             conn = LocalConnection(self)
-            self.threads.append(SafeThread(target=self.func, args=(conn, i)))
+            self.threads.append(threading.Thread(target=self.func, args=(conn, i)))
+            self.threads[-1].daemon = True
             self.threads[-1].start()
 
 
@@ -306,15 +269,17 @@ class QueueCommunicator:
         for conn in conns:
             self.add(conn)
         self.shutdown_flag = False
-        self.send_thread = SafeThread(target=self._send_thread)
-        self.recv_thread = SafeThread(target=self._recv_thread)
-        self.send_thread.start()
-        self.recv_thread.start()
+        self.threads = [
+            threading.Thread(target=self._send_thread),
+            threading.Thread(target=self._recv_thread),
+        ]
+        for thread in self.threads:
+            thread.daemon = True
+            thread.start()
 
     def shutdown(self):
         self.shutdown_flag = True
-        for thread in [self.send_thread, self.recv_thread]:
-            thread.shutdown()
+        for thread in self.threads:
             thread.join()
 
     def recv(self):
