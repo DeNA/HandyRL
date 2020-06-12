@@ -234,13 +234,14 @@ class Evaluator:
             model = send_recv(self.conn, ('model', model_id))
             self.agent = model_id, Agent(model, self.args['observation'])
         agents = [(self.agent[1] if p == args['player'] else self.opp_agent[1]) for p in range(2)]
+
         reward = exec_match(self.env, agents, None)
         if reward is None:
             print('None episode in evaluation!')
         else:
             reward = reward[args['player']]
-        continue_flag = send_recv(self.conn, ('result', (model_id, reward)))
-        return continue_flag
+
+        send_recv(self.conn, ('result', (model_id, reward)))
 
 
 def wp_func(results):

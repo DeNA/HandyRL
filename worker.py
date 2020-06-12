@@ -28,7 +28,7 @@ class Worker:
         self.worker_id = wid
         env = gym.make({'id': wid})
         random.seed(args['seed'] + wid)
-        self.continue_flag = True
+
         if wid in args['gids']:
             print('I\'m a generator wid:%d pid:%d' % (wid, os.getpid()))
             self.work_instance = Generator(env, args, conn)
@@ -40,8 +40,8 @@ class Worker:
         print('closed worker %d' % self.worker_id)
 
     def run(self):
-        while self.continue_flag:
-            self.continue_flag = self.work_instance.execute()
+        while True:
+            self.work_instance.execute()
 
 
 class Gather(QueueCommunicator):
@@ -54,7 +54,6 @@ class Gather(QueueCommunicator):
         self.data_map = {'model': {}}
         self.result_send_map = {}
         self.result_send_cnt = 0
-        self.continue_flag = True
 
         def worker(args, conn, wid):
             worker = Worker(args, conn, wid)
@@ -107,8 +106,8 @@ class Gather(QueueCommunicator):
                 self.send(conn, self.data_map[command][data_id])
 
             else:
-                # return continue flag and first and store data temporalily
-                self.send(conn, self.continue_flag)
+                # return flag first and store data
+                self.send(conn, None)
                 if command not in self.result_send_map:
                     self.result_send_map[command] = []
                 self.result_send_map[command].append(args)
@@ -118,7 +117,7 @@ class Gather(QueueCommunicator):
                     # send datum to server after buffering certain number of datum
                     for command, args_list in self.result_send_map.items():
                         self.server_conn.send((command, args_list))
-                        self.continue_flag = self.server_conn.recv()
+                        self.server_conn.recv()
                     self.result_send_map = {}
                     self.result_send_cnt = 0
 

@@ -546,11 +546,11 @@ class Learner:
                 elif req == 'episode':
                     # report generated episodes
                     self.feed_episodes(data)
-                    send_data = [True] * len(data)
+                    send_data = [None] * len(data)
                 elif req == 'result':
                     # report evaluation results
                     self.feed_results(data)
-                    send_data = [True] * len(data)
+                    send_data = [None] * len(data)
                 elif req == 'model':
                     for model_id in data:
                         if model_id == self.model_era:

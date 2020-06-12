@@ -108,5 +108,4 @@ class Generator:
         if episode is None:
             print('None episode in generation!')
 
-        continue_flag = send_recv(self.conn, ('episode', episode))
-        return continue_flag
+        send_recv(self.conn, ('episode', episode))
