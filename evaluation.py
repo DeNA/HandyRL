@@ -280,8 +280,10 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
     for pat_idx, args in args_patterns.items():
         for i in range(num_games):
             if len(agents) == 2:
+                # When playing two player game,
+                # the number of games with first or second player is equalized.
                 first_agent = 0 if i < (num_games // 2) else 1
-                tmp_pat_idx, agent_ids = (pat_idx + '-先', [0, 1]) if first_agent == 0 else (pat_idx + '-後', [1, 0])
+                tmp_pat_idx, agent_ids = (pat_idx + '-F', [0, 1]) if first_agent == 0 else (pat_idx + '-S', [1, 0])
             else:
                 tmp_pat_idx, agent_ids = pat_idx, random.sample(list(range(len(agents))), len(agents))
             in_queue.put((args_cnt, agent_ids, tmp_pat_idx, args))
