@@ -9,7 +9,7 @@ import pickle
 
 import numpy as np
 
-from model import to_torch, to_numpy, softmax, ModelCongress
+from model import reload_model, softmax, ModelCongress
 from connection import send_recv
 
 
@@ -86,7 +86,7 @@ class Generator:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = send_recv(self.conn, ('model', model_id))
+                    model_pool[model_id] = reload_model(send_recv(self.conn, ('model', model_id)))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]

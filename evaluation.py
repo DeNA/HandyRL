@@ -12,6 +12,7 @@ import multiprocessing as mp
 import numpy as np
 
 from model import DuelingNet as Model
+from model import reload_model
 from connection import send_recv, accept_socket_connections, connect_socket_connection
 import environment as gym
 
@@ -231,7 +232,7 @@ class Evaluator:
         args = send_recv(self.conn, ('eargs', None))
         model_id = args['model_id']
         if model_id != self.agent[0]:
-            model = send_recv(self.conn, ('model', model_id))
+            model = reload_model(send_recv(self.conn, ('model', model_id)))
             self.agent = model_id, Agent(model, self.args['observation'])
         agents = [(self.agent[1] if p == args['player'] else self.opp_agent[1]) for p in range(2)]
         reward = exec_match(self.env, agents, None)

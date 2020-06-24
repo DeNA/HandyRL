@@ -10,10 +10,10 @@ train_args:
     remote: False
     observation: False
     forward_steps: 32
-    update_episodes: 2000
+    update_episodes: 200
     congress: False
     batch_size: 128
-    minimum_episodes: 20000
+    minimum_episodes: 200
     maximum_episodes: 200000
     num_batchers: 2
     eworker_rate: 0.1

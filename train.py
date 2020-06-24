@@ -20,14 +20,10 @@ import yaml
 from collections import deque
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.distributions as dist
-import torch.optim as optim
+import tensorflow as tf
 
 import environment as gym
-from model import to_torch, to_numpy, to_gpu_or_not, softmax, RandomModel
+from model import to_tensor, to_numpy, to_gpu_or_not, softmax, RandomModel
 from model import DuelingNet as Model
 from connection import MultiProcessWorkers, MultiThreadWorkers
 from connection import accept_socket_connections
@@ -42,7 +38,7 @@ def make_batch(episodes, args):
         args (dict): training configuration
 
     Returns:
-        dict: PyTorch input and target tensors
+        dict: input and target tensors
 
     Note:
         Basic data shape is (T, B, P, ...) .
@@ -110,15 +106,15 @@ def make_batch(episodes, args):
 
     obs, tmsk, pmsk, vmsk, act, p, v, ret, progress = zip(*datum)
 
-    obs = tuple(to_torch(o, transpose=True) for o in zip(*obs))
-    tmsk = to_torch(tmsk, transpose=True)
-    pmsk = to_torch(pmsk, transpose=True)
-    vmsk = to_torch(vmsk, transpose=True)
-    act = to_torch(act, transpose=True)
-    p = to_torch(p, transpose=True)
-    v = to_torch(v, transpose=True)
-    ret = to_torch(ret, transpose=True)
-    progress = to_torch(progress, transpose=True)
+    obs = tuple(to_tensor(o, transpose=True) for o in zip(*obs))
+    tmsk = to_tensor(tmsk, transpose=True)
+    pmsk = to_tensor(pmsk, transpose=True)
+    vmsk = to_tensor(vmsk, transpose=True)
+    act = to_tensor(act, transpose=True)
+    p = to_tensor(p, transpose=True)
+    v = to_tensor(v, transpose=True)
+    ret = to_tensor(ret, transpose=True)
+    progress = to_tensor(progress, transpose=True)
 
     return {
         'observation': obs, 'tmask': tmsk, 'pmask': pmsk, 'vmask': vmsk,
@@ -130,7 +126,7 @@ def forward_prediction(model, hidden, batch):
     """Forward calculation via neural network
 
     Args:
-        model (torch.nn.Module): neural network
+        model (tensorflow.keras.Model): neural network
         hidden: initial hidden state
         batch (dict): training batch (output of make_batch() function)
 
@@ -139,42 +135,43 @@ def forward_prediction(model, hidden, batch):
     """
 
     observations = batch['observation']
-    time_length = observations[0].size(0)
 
     if hidden is None:
         # feed-forward neural network
-        obs = tuple(o.view(-1, *o.size()[3:]) for o in observations)
+        obs = tuple(tf.reshape(o, [-1, *(o.shape[3:])]) for o in observations)
         t_policies, t_values, _ = model(obs, None)
     else:
         # sequential computation with RNN
+        time_length = observations[0].shape[0]
         bmasks = batch['tmask'] + batch['vmask']
-        bmasks = tuple(bmasks.view(time_length, 1, bmasks.size(1), bmasks.size(2),
-            *[1 for _ in range(len(h.size()) - 3)]) for h in hidden)
+        bmasks = tuple(tf.reshape(bmasks, [time_length, 1, bmasks.shape[1], bmasks.shape[2],
+            *[1 for _ in range(len(h.shape) - 3)]]) for h in hidden)
 
         t_policies, t_values = [], []
         for t in range(time_length):
             bmask = tuple(m[t] for m in bmasks)
-            obs = tuple(o[t].view(-1, *o.size()[3:]) for o in observations)
+            obs = tuple(tf.reshape(o[t], [-1, o.shape[1], *(o.shape[3:])]) for o in observations)
             hidden = tuple(h * bmask[i] for i, h in enumerate(hidden))
-            if observations[0].size(2) == 1:
-                hid = tuple(h.sum(dim=2) for h in hidden)
+            if observations[0].shape[2] == 1:
+                hid = tuple(tf.reduce_sum(h, 2) for h in hidden)
             else:
-                hid = tuple(h.view(h.size(0), -1, *h.size()[3:]) for h in hidden)
+                hid = tuple(tf.reshape(h, [-1, h.shape[1] * h.shape[2], *(h.shape[3:])]) for h in hidden)
             t_policy, t_value, next_hidden = model(obs, hid)
             t_policies.append(t_policy)
             t_values.append(t_value)
-            next_hidden = tuple(h.view(h.size(0), -1, observations[0].size(2), *h.size()[2:]) for h in next_hidden)
+            next_hidden = tuple(tf.reshape(h, [h.shape[0], -1, observations[0].shape[2], *(h.shape[2:])]) for h in next_hidden)
             hidden = tuple(hidden[i] * (1 - bmask[i]) + h * bmask[i] for i, h in enumerate(next_hidden))
-        t_policies = torch.stack(t_policies)
-        t_values = torch.stack(t_values)
+        t_policies = tf.stack(t_policies)
+        t_values = tf.stack(t_values)
 
     # gather turn player's policies
-    t_policies = t_policies.view(*observations[0].size()[:3], t_policies.size(-1))
-    t_policies = t_policies.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
+    t_policies = tf.reshape(t_policies, [*observations[0].shape[:3], t_policies.shape[-1]])
+    t_policies = t_policies * tf.expand_dims(batch['tmask'], -1)
+    t_policies = tf.reduce_sum(t_policies, -2) - batch['pmask']
 
     # mask valid target values
-    t_values = t_values.view(*observations[0].size()[:3])
-    t_values = t_values.mul(batch['vmask'])
+    t_values = tf.reshape(t_values, [*(observations[0].shape[:3])])
+    t_values = t_values * batch['vmask']
 
     return t_policies, t_values
 
@@ -187,17 +184,20 @@ def compose_losses(policies, values, log_selected_policies, advantages, value_ta
     """
 
     losses = {}
-    dcnt = tmasks.sum().item()
+    dcnt = tmasks.sum()
 
-    turn_advantages = advantages.mul(tmasks).sum(-1, keepdim=True)
+    turn_advantages = tf.reduce_sum(advantages * tmasks, -1, keepdims=True)
 
-    losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    losses['v'] = ((values - value_targets) ** 2).mul(vmasks).sum() / 2
+    losses['p'] = tf.reduce_sum(-log_selected_policies * turn_advantages)
+    losses['v'] = tf.reduce_sum(((values - value_targets) ** 2) * vmasks) / 2
 
-    entropy = dist.Categorical(logits=policies).entropy().mul(tmasks.sum(-1))
-    losses['ent'] = entropy.sum()
+    def compute_entropy(p):
+        return -tf.reduce_sum(tf.nn.softmax(p) * tf.nn.log_softmax(p), -1)
 
-    losses['total'] = losses['p'] + losses['v'] + entropy.mul(1 - progress * 0.9).sum() * -3e-1
+    entropy = compute_entropy(policies) * tf.reduce_sum(tmasks, -1)
+    losses['ent'] = tf.reduce_sum(entropy)
+
+    losses['total'] = losses['p'] + losses['v'] + tf.reduce_sum(entropy * (1 - progress * 0.9)) * -3e-1
 
     return losses, dcnt
 
@@ -205,21 +205,21 @@ def compose_losses(policies, values, log_selected_policies, advantages, value_ta
 def vtrace_base(batch, model, hidden, args):
     t_policies, t_values = forward_prediction(model, hidden, batch)
     actions = batch['action']
-    gmasks = batch['tmask'].sum(-1, keepdim=True)
+    gmasks = tf.reduce_sum(batch['tmask'], -1, keepdims=True)
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = F.log_softmax(batch['policy'], dim=-1).gather(-1, actions) * gmasks
-    log_selected_t_policies = F.log_softmax(t_policies     , dim=-1).gather(-1, actions) * gmasks
+    log_selected_b_policies = tf.gather(tf.nn.log_softmax(batch['policy']), actions, axis=-1, batch_dims=2) * gmasks
+    log_selected_t_policies = tf.gather(tf.nn.log_softmax(t_policies     ), actions, axis=-1, batch_dims=2) * gmasks
 
     # thresholds of importance sampling
-    log_rhos = log_selected_t_policies.detach() - log_selected_b_policies
-    rhos = torch.exp(log_rhos)
-    clipped_rhos = torch.clamp(rhos, 0, clip_rho_threshold)
-    cs = torch.clamp(rhos, 0, clip_c_threshold)
-    values_nograd = t_values.detach()
+    log_rhos = tf.stop_gradient(log_selected_t_policies) - log_selected_b_policies
+    rhos = tf.exp(log_rhos)
+    clipped_rhos = tf.clip_by_value(rhos, 0, clip_rho_threshold)
+    cs = tf.clip_by_value(rhos, 0, clip_c_threshold)
+    values_nograd = tf.stop_gradient(t_values)
 
-    if values_nograd.size(2) == 2:  # two player zerosum game
-        values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=-1)
+    if values_nograd.shape[2] == 2:  # two player zerosum game
+        values_nograd_opponent = -tf.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], -1)
         if args['observation']:
             values_nograd = (values_nograd + values_nograd_opponent) / 2
         else:
@@ -236,33 +236,33 @@ def vtrace(batch, model, hidden, args):
 
     t_policies, t_values, log_selected_t_policies, values_nograd, clipped_rhos, cs = vtrace_base(batch, model, hidden, args)
     returns = batch['return']
-    time_length = batch['vmask'].size(0)
+    time_length = batch['vmask'].shape[0]
 
     if args['return'] == 'MC':
         # VTrace with naive advantage
         value_targets = returns
         advantages = clipped_rhos * (returns - values_nograd)
     elif args['return'] == 'TD0':
-        values_t_plus_1 = torch.cat([values_nograd[1:], returns])
+        values_t_plus_1 = tf.concat([values_nograd[1:], returns])
         deltas = clipped_rhos * (values_t_plus_1 - values_nograd)
 
         # compute Vtrace value target recursively
         vs_minus_v_xs = deque([deltas[-1]])
         for i in range(time_length - 2, -1, -1):
             vs_minus_v_xs.appendleft(deltas[i] + cs[i] * vs_minus_v_xs[0])
-        vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs))
+        vs_minus_v_xs = tf.stack(tuple(vs_minus_v_xs))
         vs = vs_minus_v_xs + values_nograd
 
         # compute policy advantage
         value_targets = vs
-        vs_t_plus_1 = torch.cat([vs[1:], returns])
+        vs_t_plus_1 = tf.concat([vs[1:], returns])
         advantages = clipped_rhos * (vs_t_plus_1 - values_nograd)
     elif args['return'] == 'TDLAMBDA':
         lmb = 0.7
         lambda_returns = deque([returns[-1]])
         for i in range(time_length - 1, 0, -1):
             lambda_returns.appendleft((1 - lmb) * values_nograd[i] + lmb * lambda_returns[0])
-        lambda_returns = torch.stack(tuple(lambda_returns))
+        lambda_returns = tf.stack(tuple(lambda_returns))
 
         value_targets = lambda_returns
         advantages = clipped_rhos * (value_targets - values_nograd)
@@ -274,10 +274,9 @@ def vtrace(batch, model, hidden, args):
 
 
 class Batcher:
-    def __init__(self, args, episodes, gpu):
+    def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.gpu = gpu
         self.shutdown_flag = False
 
         def selector():
@@ -296,11 +295,8 @@ class Batcher:
                     episodes = []
             print('finished batcher %d' % bid)
 
-        def postprocess(batch):
-            return to_gpu_or_not(batch, self.gpu)
-
-        # self.workers = MultiProcessWorkers(worker, selector(), self.args['num_batchers'], postprocess, buffer_length=self.args['batch_size'] * 3, num_receivers=2)
-        self.workers = MultiThreadWorkers(worker, selector(), self.args['num_batchers'], postprocess)
+        # self.workers = MultiProcessWorkers(worker, selector(), self.args['num_batchers'], buffer_length=self.args['batch_size'] * 3, num_receivers=2)
+        self.workers = MultiThreadWorkers(worker, selector(), self.args['num_batchers'])
 
     def run(self):
         self.workers.start()
@@ -324,102 +320,77 @@ class Trainer:
     def __init__(self, args, model):
         self.episodes = deque()
         self.args = args
-        self.gpu = torch.cuda.device_count()
         self.model = model
         self.defalut_lr = 3e-8
-        self.data_cnt_ema = self.args['batch_size'] * self.args['forward_steps']
-        self.params = list(self.model.parameters())
-        lr = self.defalut_lr * self.data_cnt_ema
-        self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
+        batch_data_cnt = self.args['batch_size'] * self.args['forward_steps']
+        lr = self.defalut_lr * batch_data_cnt
+        self.optimizer = tf.keras.optimizers.Adam(lr) if len(self.model.trainable_variables) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
-        self.batcher = Batcher(self.args, self.episodes, self.gpu)
-        self.updated_model = None, 0
-        self.update_flag = False
+        self.batcher = Batcher(self.args, self.episodes)
         self.shutdown_flag = False
+
+        # temporal datum
+        self.data_cnt = 0
+        self.loss_sum = {}
 
     def update(self):
         if len(self.episodes) < self.args['minimum_episodes']:
             return None, 0  # return None before training
-        self.update_flag = True
-        while True:
-            time.sleep(0.1)
-            model, steps = self.recheck_update()
-            if model is not None:
-                break
-        return model, steps
-
-    def report_update(self, model, steps):
         self.lock.acquire()
-        self.update_flag = False
-        self.updated_model = model, steps
+        weights = self.model.get_weights()
+        steps = self.steps
+        data_cnt = self.data_cnt
+        loss_sum = copy.deepcopy(self.loss_sum)
+        self.data_cnt, self.loss_sum = 0, {}  # clear temporal stats
         self.lock.release()
-
-    def recheck_update(self):
-        self.lock.acquire()
-        flag = self.update_flag
-        self.lock.release()
-        return (None, -1) if flag else self.updated_model
+        if data_cnt > 0:
+            print('loss = %s' % ' '.join([k + ':' + '%.3f' % (l / data_cnt) for k, l in loss_sum.items()]))
+        return weights, steps
 
     def shutdown(self):
         self.shutdown_flag = True
         self.batcher.shutdown()
 
     def train(self):
-        if self.optimizer is None:  # non-parametric model
-            print()
-            return
-
-        batch_cnt, data_cnt, loss_sum = 0, 0, {}
+        print('started training')
         train_model = self.model
-        if self.gpu:
-            if self.gpu > 1:
-                train_model = nn.DataParallel(self.model)
-            train_model.cuda()
-        train_model.train()
 
-        while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
+        @tf.function
+        def train_model_fn(x, h):
+            return train_model(x, h)
+
+        while not self.shutdown_flag:
             # episodes were only tuple of arrays
             batch = self.batcher.batch()
-            batch_size = batch['value'].size(1)
-            player_count = batch['value'].size(2)
-            hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
+            batch_size = batch['value'].shape[1]
+            player_count = batch['value'].shape[2]
+            hidden = self.model.init_hidden([batch_size, player_count])
 
-            losses, dcnt = vtrace(batch, train_model, hidden, self.args)
+            self.lock.acquire()
+            with tf.GradientTape() as tape:
+                losses, dcnt = vtrace(batch, train_model_fn, hidden, self.args)
 
-            self.optimizer.zero_grad()
-            losses['total'].backward()
-            nn.utils.clip_grad_norm_(self.params, 4.0)
-            self.optimizer.step()
+            gradients = tape.gradient(losses['total'], self.model.trainable_variables)
+            #nn.utils.clip_grad_norm_(self.params, 4.0)
+            self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
-            batch_cnt += 1
-            data_cnt += dcnt
+            self.data_cnt += dcnt
             for k, l in losses.items():
-                loss_sum[k] = loss_sum.get(k, 0.0) + l.item()
-
+                self.loss_sum[k] = self.loss_sum.get(k, 0.0) + float(to_numpy(l))
             self.steps += 1
-
-        print('loss = %s' % ' '.join([k + ':' + '%.3f' % (l / data_cnt) for k, l in loss_sum.items()]))
-
-        self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.defalut_lr * self.data_cnt_ema * (1 + self.steps * 1e-5)
-        self.model.cpu()
-        self.model.eval()
-        return copy.deepcopy(self.model)
+            self.lock.release()
+        print('finished training')
 
     def run(self):
         print('waiting training')
-        while not self.shutdown_flag:
-            if len(self.episodes) < self.args['minimum_episodes']:
-                time.sleep(1)
-                continue
-            if self.steps == 0:
-                self.batcher.run()
-                print('started training')
-            model = self.train()
-            self.report_update(model, self.steps)
-        print('finished training')
+        while (not self.shutdown_flag) and len(self.episodes) < self.args['minimum_episodes']:
+            time.sleep(0.2)
+            continue
+
+        if self.optimizer is not None:
+            self.batcher.run()
+            self.train()
 
 
 class Learner:
@@ -432,8 +403,9 @@ class Learner:
         # trained datum
         self.model_era = 0
         self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        self.model = RandomModel(self.env)
-        train_model = self.model_class(self.env, args)
+        self.model = self.model_class(self.env, args)
+        self.model.inference(self.env.observation())
+        tf.saved_model.save(self.model, self.model_path(self.model_era))
 
         # generated datum
         self.num_episodes = 0
@@ -446,6 +418,8 @@ class Learner:
         self.workers = Workers(args)
 
         # thread connection
+        train_model = self.model_class(self.env, args)
+        train_model.inference(self.env.observation())
         self.trainer = Trainer(args, train_model)
 
     def shutdown(self):
@@ -456,15 +430,16 @@ class Learner:
             thread.join()
 
     def model_path(self, model_id):
-        return os.path.join('models', str(model_id) + '.pth')
+        return os.path.join('models', str(model_id))
 
-    def update_model(self, model, steps):
+    def update_model(self, weights, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
         self.model_era += 1
-        self.model = model
+        if weights is not None:
+            self.model.set_weights(weights)
         os.makedirs('models', exist_ok=True)
-        torch.save(model.state_dict(), self.model_path(self.model_era))
+        tf.saved_model.save(self.model, self.model_path(self.model_era))
 
     def feed_episodes(self, episodes):
         # store generated episodes
@@ -496,10 +471,8 @@ class Learner:
                 n += cnt
                 win += (r + 1) / 2 * cnt
             print('win rate = %.3f (%.1f / %d)' % (win / n, win, n))
-        model, steps = self.trainer.update()
-        if model is None:
-            model = self.model
-        self.update_model(model, steps)
+        weights, steps = self.trainer.update()
+        self.update_model(weights, steps)
 
     def server(self):
         # central conductor server
@@ -552,17 +525,17 @@ class Learner:
                     self.feed_results(data)
                     send_data = [True] * len(data)
                 elif req == 'model':
+                    send_data = []
                     for model_id in data:
                         if model_id == self.model_era:
                             model = self.model
                         else:
                             try:
-                                model = self.model_class(self.env, self.args)
-                                model.load_state_dict(torch.load(self.model_path(model_id)))
+                                model = tf.keras.models.load_model()
                             except:
                                 # return latest model if failed to load specified model
                                 pass
-                        send_data.append(model)
+                        send_data.append((model.get_weights()))
                 if not multi_req and len(send_data) == 1:
                     send_data = send_data[0]
                 self.workers.send(conn, send_data)

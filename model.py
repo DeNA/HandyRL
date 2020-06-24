@@ -4,17 +4,15 @@
 # neural nets
 
 import numpy as np
-import torch
-torch.set_num_threads(1)
-
-import torch.nn as nn
-import torch.nn.functional as F
+import tensorflow as tf
+from tensorflow.keras.layers import Layer, Dense, Flatten, Conv2D
+from tensorflow.keras import Model
 
 
-def to_torch(x, transpose=False):
+def to_tensor(x, transpose=False):
     if x is None:
         return None
-    elif isinstance(x, torch.Tensor):
+    elif isinstance(x, tf.Tensor):
         return x
 
     a = np.array(x)
@@ -22,18 +20,18 @@ def to_torch(x, transpose=False):
         a = np.swapaxes(a, 0, 1)
 
     if a.dtype == np.int32 or a.dtype == np.int64:
-        t = torch.LongTensor(a)
+        a = a.astype(np.int64)
     else:
-        t = torch.FloatTensor(a)
+        a = a.astype(np.float32)
 
-    return t.contiguous()
+    return a
 
 
 def to_numpy(x):
     if x is None:
         return None
-    elif isinstance(x, torch.Tensor):
-        a = x.detach().numpy()
+    elif isinstance(x, tf.Tensor):
+        a = x.numpy()
     elif isinstance(x, np.ndarray):
         a = x
     elif isinstance(x, tuple):
@@ -44,15 +42,7 @@ def to_numpy(x):
 
 
 def to_gpu(data):
-    if data is None:
-        return None
-    if isinstance(data, tuple):
-        return tuple(to_gpu(d) for d in data)
-    elif isinstance(data, list):
-        return [to_gpu(d) for d in data]
-    elif isinstance(data, dict):
-        return {k: to_gpu(d) for k, d in data.items()}
-    return data.cuda()
+    return data
 
 
 def to_gpu_or_not(data, gpu):
@@ -64,33 +54,40 @@ def softmax(x):
     return x / x.sum(axis=-1)
 
 
-class Conv(nn.Module):
-    def __init__(self, filters0, filters1, kernel_size, bn, bias=True):
+def reload_model(x):
+    weights = x
+    from environments.tictactoe import Environment
+    env = Environment()
+    model = DuelingNet(env, {})
+    model.inference(env.observation())
+    model.set_weights(weights)
+    return model
+
+
+class ConvBN(Layer):
+    def __init__(self, filters, kernel_size, bn, bias=True):
         super().__init__()
         if bn:
             bias = False
-        self.conv = nn.Conv2d(
-            filters0, filters1, kernel_size,
-            stride=1, padding=kernel_size//2, bias=bias
-        )
-        self.bn = nn.BatchNorm2d(filters1) if bn else None
+        self.conv = Conv2D(filters, kernel_size, padding='same', use_bias=bias)
+        self.bn = tf.keras.layers.BatchNormalization() if bn else None
 
-    def forward(self, x):
+    def call(self, x):
         h = self.conv(x)
         if self.bn is not None:
             h = self.bn(h)
         return h
 
 
-class Dense(nn.Module):
-    def __init__(self, units0, units1, bnunits=0, bias=True):
+class DenseBN(Layer):
+    def __init__(self, units, bn, bias=True):
         super().__init__()
-        if bnunits > 0:
+        if bn:
             bias = False
-        self.dense = nn.Linear(units0, units1, bias=bias)
-        self.bn = nn.BatchNorm1d(bnunits) if bnunits > 0 else None
+        self.dense = Dense(units, use_bias=bias)
+        self.bn = tf.keras.layers.BatchNormalization() if bn else None
 
-    def forward(self, x):
+    def call(self, x):
         h = self.dense(x)
         if self.bn is not None:
             size = h.size()
@@ -100,60 +97,55 @@ class Dense(nn.Module):
         return h
 
 
-class WideResidualBlock(nn.Module):
+class WideResidualBlock(Layer):
     def __init__(self, filters, kernel_size, bn):
         super().__init__()
-        self.conv1 = Conv(filters, filters, kernel_size, bn, not bn)
-        self.conv2 = Conv(filters, filters, kernel_size, bn, not bn)
+        self.conv1 = ConvBN(filters, kernel_size, bn)
+        self.conv2 = ConvBN(filters, kernel_size, bn)
 
-    def forward(self, x):
-        return F.relu(x + self.conv2(F.relu(self.conv1(x))))
+    def call(self, x):
+        return tf.nn.relu(x + self.conv2(tf.nn.relu(self.conv1(x))))
 
 
-class WideResNet(nn.Module):
+class WideResNet(Layer):
     def __init__(self, blocks, filters):
         super().__init__()
-        self.blocks = nn.ModuleList([
-            WideResidualBlock(filters, 3, bn=False) for _ in range(blocks)
-        ])
+        self.blocks = [WideResidualBlock(filters, 3, bn=False) for _ in range(blocks)]
 
-    def forward(self, x):
+    def call(self, x):
         h = x
         for block in self.blocks:
             h = block(h)
         return h
 
 
-class Encoder(nn.Module):
+class Encoder(Layer):
     def __init__(self, input_size, filters):
         super().__init__()
+        self.conv = Conv2D(filters, 3, padding='same')
 
-        self.input_size = input_size
-        self.conv = Conv(input_size[0], filters, 3, bn=False)
-        self.activation = nn.LeakyReLU(0.1)
-
-    def forward(self, x):
-        return self.activation(self.conv(x))
+    def call(self, x):
+        return tf.nn.leaky_relu(self.conv(x), 0.1)
 
 
-class Head(nn.Module):
-    def __init__(self, input_size, out_filters, outputs):
+class Head(Layer):
+    def __init__(self, input_size, filters, outputs):
         super().__init__()
 
         self.board_size = input_size[1] * input_size[2]
-        self.out_filters = out_filters
+        self.filters = filters
 
-        self.conv = Conv(input_size[0], out_filters, 1, bn=False)
-        self.activation = nn.LeakyReLU(0.1)
-        self.fc = nn.Linear(self.board_size * out_filters, outputs, bias=False)
+        self.conv = Conv2D(filters, 1, padding='same')
+        self.fc = Dense(outputs, use_bias=False)
 
-    def forward(self, x):
-        h = self.activation(self.conv(x))
-        h = self.fc(h.view(-1, self.board_size * self.out_filters))
+    def call(self, x):
+        h = tf.nn.leaky_relu(self.conv(x), 0.1)
+        h = tf.reshape(h, [-1, self.board_size * self.filters])
+        h = self.fc(h)
         return h
 
 
-class ConvLSTMCell(nn.Module):
+'''class ConvLSTMCell(Model):
     def __init__(self, input_dim, hidden_dim, kernel_size, bias):
         super().__init__()
 
@@ -196,7 +188,7 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
 
-class DRCCore(nn.Module):
+class DRCCore(Model):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
         super().__init__()
         self.num_layers = num_layers
@@ -209,7 +201,7 @@ class DRCCore(nn.Module):
                 kernel_size=(kernel_size, kernel_size),
                 bias=bias)
             )
-        self.blocks = nn.ModuleList(blocks)
+        self.blocks = blocks
 
     def init_hidden(self, input_size, batch_size):
         hs, cs = [], []
@@ -230,12 +222,12 @@ class DRCCore(nn.Module):
             for i, block in enumerate(self.blocks):
                 hs[i], cs[i] = block(x, (hs[i], cs[i]))
 
-        return hs[-1], (torch.stack(hs), torch.stack(cs))
+        return hs[-1], (torch.stack(hs), torch.stack(cs))'''
 
 
 # simple model
 
-class BaseModel(nn.Module):
+class BaseModel(Model):
     def __init__(self, env, args=None, action_length=None):
         super().__init__()
         self.action_length = env.action_length() if action_length is None else action_length
@@ -243,33 +235,31 @@ class BaseModel(nn.Module):
     def init_hidden(self, batch_size=None):
         return None
 
-    def inference(self, x, hidden, **kwargs):
+    def inference(self, x, hidden=None, **kwargs):
         # numpy array -> numpy array
-        self.eval()
-        with torch.no_grad():
-            xt = tuple(to_torch(xx).unsqueeze(0) for xx in x)
-            ht = tuple(to_torch(hh).unsqueeze(1) for hh in hidden) if hidden is not None else None
-            outputs = self.forward(xt, ht, **kwargs)
+        xt = tuple(np.expand_dims(xx, 0) for xx in x)
+        ht = tuple(np.expand_dims(hh, 1) for hh in hidden) if hidden is not None else None
+        outputs = self.call(xt, ht, **kwargs)
 
         return tuple(
-            [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
-            [tuple(to_numpy(o).squeeze(1) for o in outputs[-1]) if outputs[-1] is not None else None]
+            [tf.squeeze(o, 0).numpy() for o in outputs[:-1]] + \
+            [tuple(tf.squeeze(o, 1).numpy() for o in outputs[-1]) if outputs[-1] is not None else None]
         )
 
 
 class RandomModel(BaseModel):
-    def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None
+    def call(self, x=None, hidden=None):
+        return tf.zeros((1, self.action_length)), tf.zeros((1, 1)), None
 
 
-class LinearModel(BaseModel):
+'''class LinearModel(BaseModel):
     def __init__(self, env, args=None, action_length=None):
         super().__init__(env, args, action_length)
-        self.fc_p = nn.Linear(1, self.action_length, bias=True)
-        self.fc_v = nn.Linear(1, 1, bias=True)
+        self.fc_p = Dense(self.action_length, use_bias=True)
+        self.fc_v = Dense(use_bias=True)
 
-    def forward(self, x, hidden=None):
-        return self.fc_p(x), self.fc_v(x), None
+    def call(self, x, hidden=None):
+        return self.fc_p(x), self.fc_v(x), None'''
 
 
 class DuelingNet(BaseModel):
@@ -286,16 +276,16 @@ class DuelingNet(BaseModel):
         self.head_p = Head(internal_size, 2, self.action_length)
         self.head_v = Head(internal_size, 1, 1)
 
-    def forward(self, x, hidden=None):
+    def call(self, x, hidden=None):
         h = self.encoder(x[0])
         h = self.body(h)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), None
+        return h_p, tf.nn.tanh(h_v), None
 
 
-class DRC(BaseModel):
+'''class DRC(BaseModel):
     def __init__(self, env, args={}, action_length=None):
         super().__init__(env, args, action_length)
         self.input_size = env.observation()[0].shape
@@ -315,13 +305,13 @@ class DRC(BaseModel):
         else:  # for training
             return self.body.init_hidden(self.input_size[1:], batch_size)
 
-    def forward(self, x, hidden, num_repeats=1):
+    def call(self, x, hidden, num_repeats=1):
         h = self.encoder(x[0])
         h, hidden = self.body(h, hidden, num_repeats)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), hidden
+        return h_p, tf.nn.tanh(h_v), hidden'''
 
 
 class ModelCongress:
@@ -331,13 +321,12 @@ class ModelCongress:
     def init_hidden(self, batch_size=None):
         return [m.init_hidden(batch_size) for m in self.models]
 
-    def inference(self, x, hiddens):
+    def call(self, x, hiddens):
         # conmputes mean value of outputs
         ps, vs, nhiddens = [], [], []
         for i, model in enumerate(self.models):
-            with torch.no_grad():
-                p, v, nhidden = model.inference(x, hiddens[i])
-                ps.append(softmax(p))
-                vs.append(v)
-                nhiddens.append(nhidden)
+            p, v, nhidden = model(x, hiddens[i])
+            ps.append(softmax(p))
+            vs.append(v)
+            nhiddens.append(nhidden)
         return np.log(np.mean(ps, axis=0) + 1e-8), np.mean(vs, axis=0), nhiddens
