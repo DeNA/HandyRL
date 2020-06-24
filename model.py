@@ -173,10 +173,10 @@ class ConvLSTMCell(nn.Module):
         )
 
     def init_hidden(self, input_size, batch_size):
-        return tuple(
+        return [
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
-        )
+        ]
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
