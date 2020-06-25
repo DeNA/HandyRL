@@ -27,7 +27,8 @@ import torch.distributions as dist
 import torch.optim as optim
 
 import environment as gym
-from model import to_torch, to_numpy, to_gpu_or_not, softmax, RandomModel
+from util import map_r, bimap_r, trimap_r, rotate, type_r
+from model import to_torch, to_gpu_or_not, RandomModel
 from model import DuelingNet as Model
 from connection import MultiProcessWorkers, MultiThreadWorkers
 from connection import accept_socket_connections
@@ -49,7 +50,7 @@ def make_batch(episodes, args):
         (T is time length, B is batch size, P is player count)
     """
 
-    datum = []  # obs, act, p, v, ret, adv, len
+    obss, datum = [], []
     steps = args['forward_steps']
 
     for ep in episodes:
@@ -62,21 +63,15 @@ def make_batch(episodes, args):
         st = random.randrange(turn_candidates)
         ed = min(st + steps, len(ep['turn']))
 
-        obs_sample = ep['observation'][ep['turn'][st]][st]
+        obs_zeros = map_r(ep['observation'][ep['turn'][0]][0], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
-            obs_zeros = tuple(np.zeros_like(o) for o in obs_sample)  # template for padding
-            # transpose observation from (P, T, tuple) to (tuple, T, P)
-            obs = []
-            for i, _ in enumerate(obs_zeros):
-                obs.append([])
-                for t in range(st, ed):
-                    obs[-1].append([])
-                    for player in players:
-                        obs[-1][-1].append(ep['observation'][player][t][i] if ep['observation'][player][t] is not None else obs_zeros[i])
+            # replace None with zeros
+            obs = [[(lambda x : (x if x is not None else obs_zeros))(ep['observation'][pl][t]) for pl in players] for t in range(st, ed)]
         else:
-            obs = tuple([[ep['observation'][ep['turn'][t]][t][i]] for t in range(st, ed)] for i, _ in enumerate(obs_sample))
-
-        obs = tuple(np.array(o) for o in obs)
+            obs = [[ep['observation'][ep['turn'][t]][t]] for t in range(st, ed)]
+        obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
+        obs = rotate(obs)  # (T, ..., P, ...) -> (..., P, T, ...)
+        obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
         v = np.array(
@@ -97,7 +92,7 @@ def make_batch(episodes, args):
         # pad each array if step length is short
         if traj_steps < steps:
             pad_len = steps - traj_steps
-            obs = tuple(np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0) for o in obs)
+            obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             v = np.concatenate([v, np.tile(ret, [pad_len, 1])])
             tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             pmsk = np.pad(pmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
@@ -106,19 +101,20 @@ def make_batch(episodes, args):
             p = np.pad(p, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             progress = np.pad(progress, [(0, pad_len)], 'constant', constant_values=1)
 
-        datum.append((obs, tmsk, pmsk, vmsk, act, p, v, ret, progress))
+        obss.append(obs)
+        datum.append((tmsk, pmsk, vmsk, act, p, v, ret, progress))
 
-    obs, tmsk, pmsk, vmsk, act, p, v, ret, progress = zip(*datum)
+    tmsk, pmsk, vmsk, act, p, v, ret, progress = zip(*datum)
 
-    obs = tuple(to_torch(o, transpose=True) for o in zip(*obs))
-    tmsk = to_torch(tmsk, transpose=True)
-    pmsk = to_torch(pmsk, transpose=True)
-    vmsk = to_torch(vmsk, transpose=True)
-    act = to_torch(act, transpose=True)
-    p = to_torch(p, transpose=True)
-    v = to_torch(v, transpose=True)
-    ret = to_torch(ret, transpose=True)
-    progress = to_torch(progress, transpose=True)
+    obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)), transpose=True)
+    tmsk = to_torch(np.array(tmsk), transpose=True)
+    pmsk = to_torch(np.array(pmsk), transpose=True)
+    vmsk = to_torch(np.array(vmsk), transpose=True)
+    act = to_torch(np.array(act), transpose=True)
+    p = to_torch(np.array(p), transpose=True)
+    v = to_torch(np.array(v), transpose=True)
+    ret = to_torch(np.array(ret), transpose=True)
+    progress = to_torch(np.array(progress), transpose=True)
 
     return {
         'observation': obs, 'tmask': tmsk, 'pmask': pmsk, 'vmask': vmsk,
@@ -126,54 +122,53 @@ def make_batch(episodes, args):
     }
 
 
-def forward_prediction(model, hidden, batch):
+def forward_prediction(model, hidden, batch, obs_mode):
     """Forward calculation via neural network
 
     Args:
         model (torch.nn.Module): neural network
-        hidden: initial hidden state
+        hidden: initial hidden state (..., L, B, P, ...)
         batch (dict): training batch (output of make_batch() function)
 
     Returns:
         tuple: calculated policy and value
     """
 
-    observations = batch['observation']
-    time_length = observations[0].size(0)
+    observations = batch['observation']  # (T, B, P, ...)
 
     if hidden is None:
         # feed-forward neural network
-        obs = tuple(o.view(-1, *o.size()[3:]) for o in observations)
+        obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
         t_policies, t_values, _ = model(obs, None)
     else:
         # sequential computation with RNN
-        bmasks = batch['tmask'] + batch['vmask']
-        bmasks = tuple(bmasks.view(time_length, 1, bmasks.size(1), bmasks.size(2),
-            *[1 for _ in range(len(h.size()) - 3)]) for h in hidden)
+        bmask = batch['tmask'] + batch['vmask']  # (T, B, P)
+        bmasks = map_r(hidden, lambda h: bmask.view(-1, 1, *bmask.size()[1:3], *([1] * (len(h.size()) - 3))))  # (..., T, L(1), B, P, ...)
+        hidden_shape = map_r(hidden, lambda h: h.size())
 
         t_policies, t_values = [], []
-        for t in range(time_length):
-            bmask = tuple(m[t] for m in bmasks)
-            obs = tuple(o[t].view(-1, *o.size()[3:]) for o in observations)
-            hidden = tuple(h * bmask[i] for i, h in enumerate(hidden))
-            if observations[0].size(2) == 1:
-                hid = tuple(h.sum(dim=2) for h in hidden)
+        for t in range(batch['tmask'].size(0)):
+            bmask = map_r(bmasks, lambda m: m[t])
+            obs = map_r(observations, lambda o: o[t].view(-1, *o.size()[3:]))  # (..., B * P, ...)
+            hidden = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., L, B, P, ...)
+            if obs_mode:
+                hid = map_r(hidden, lambda h: h.view(h.size(0), -1, *h.size()[3:]))  # (..., L, B * P, ...)
             else:
-                hid = tuple(h.view(h.size(0), -1, *h.size()[3:]) for h in hidden)
+                hid = map_r(hidden, lambda h: h.sum(2))  # (..., L, B * 1, ...)
             t_policy, t_value, next_hidden = model(obs, hid)
             t_policies.append(t_policy)
             t_values.append(t_value)
-            next_hidden = tuple(h.view(h.size(0), -1, observations[0].size(2), *h.size()[2:]) for h in next_hidden)
-            hidden = tuple(hidden[i] * (1 - bmask[i]) + h * bmask[i] for i, h in enumerate(next_hidden))
+            next_hidden = bimap_r(next_hidden, hidden_shape, lambda h, s: h.view(*s[:2], -1, *s[3:]))  # (..., L, B, P or 1, ...)
+            hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
         t_policies = torch.stack(t_policies)
         t_values = torch.stack(t_values)
 
     # gather turn player's policies
-    t_policies = t_policies.view(*observations[0].size()[:3], t_policies.size(-1))
+    t_policies = t_policies.view(*batch['tmask'].size()[:2], -1, t_policies.size(-1))
     t_policies = t_policies.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
 
     # mask valid target values
-    t_values = t_values.view(*observations[0].size()[:3])
+    t_values = t_values.view(*batch['tmask'].size()[:2], -1)
     t_values = t_values.mul(batch['vmask'])
 
     return t_policies, t_values
@@ -203,7 +198,7 @@ def compose_losses(policies, values, log_selected_policies, advantages, value_ta
 
 
 def vtrace_base(batch, model, hidden, args):
-    t_policies, t_values = forward_prediction(model, hidden, batch)
+    t_policies, t_values = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
     gmasks = batch['tmask'].sum(-1, keepdim=True)
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0

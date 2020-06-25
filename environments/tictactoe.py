@@ -108,7 +108,7 @@ class Environment(BaseEnvironment):
             self.board == color,
             self.board == -color
         ]).astype(np.float32)
-        return (a,)
+        return a
 
 
 if __name__ == '__main__':
