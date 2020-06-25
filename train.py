@@ -27,7 +27,7 @@ import torch.distributions as dist
 import torch.optim as optim
 
 import environment as gym
-from model import to_torch, to_numpy, to_gpu_or_not, softmax, RandomModel
+from model import to_torch, to_gpu_or_not, softmax, RandomModel
 from model import DuelingNet as Model
 from connection import MultiProcessWorkers, MultiThreadWorkers
 from connection import accept_socket_connections
