@@ -241,7 +241,7 @@ class BaseModel(nn.Module):
 
         return tuple(
             [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
-            [tuple(to_numpy(o).squeeze(1) for o in outputs[-1]) if outputs[-1] is not None else None]
+            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(1)) if outputs[-1] is not None else None]
         )
 
 
