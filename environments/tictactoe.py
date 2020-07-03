@@ -96,7 +96,7 @@ class Environment(BaseEnvironment):
         return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
     def action_length(self):
-        # maximum size of policy (policyの出力サイズを決める)
+        # maximum size of policy (it determines output size of policy function)
         return 3 * 3
 
     def observation(self, player=-1):
