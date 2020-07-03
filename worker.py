@@ -124,8 +124,11 @@ class Gather(QueueCommunicator):
 
 
 def gather_loop(args, conn, gaid):
-    gather = Gather(args, conn, gaid)
-    gather.run()
+    try:
+        gather = Gather(args, conn, gaid)
+        gather.run()
+    finally:
+        gather.shutdown()
 
 
 class Workers(QueueCommunicator):
@@ -146,7 +149,6 @@ class Workers(QueueCommunicator):
                 print('finished worker server')
             # use super class's thread list
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-            self.threads[-1].daemon = True
             self.threads[-1].start()
         else:
             # open local connections

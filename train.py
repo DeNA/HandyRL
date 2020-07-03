@@ -604,7 +604,6 @@ class Learner:
             if self.args['remote']:
                 self.threads.append(threading.Thread(target=self.entry_server))
             for thread in self.threads:
-                thread.daemon = True
                 thread.start()
             # open generator, evaluator
             self.workers.run()
