@@ -12,14 +12,6 @@ import select
 import multiprocessing as mp
 
 
-debug = False
-
-
-def debug_print(*args):
-    if debug:
-        print(*args)
-
-
 def send_recv(conn, sdata):
     conn.send(sdata)
     rdata = conn.recv()
