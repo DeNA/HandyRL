@@ -226,9 +226,8 @@ class Evaluator:
         self.default_agent = RuleBasedAgent()
 
     def execute(self, models, args):
-        agents = [None] * len(args['model_id'])
-        for p, model_id in args['model_id'].items():
-            model = models[p]
+        agents = [None] * len(models)
+        for p, model in models.items():
             if model is None:
                 agents[p] = self.default_agent
             else:

@@ -39,21 +39,21 @@ class Worker:
         print('closed worker %d' % self.worker_id)
 
     def _gather_models(self, model_ids):
-        models = {}
+        model_pool = {}
         for model_id in model_ids:
-            if model_id not in models:
+            if model_id not in model_pool:
                 if model_id < 0:
-                    models[model_id] = None
+                    model_pool[model_id] = None
                 elif model_id == self.latest_model[0]:
                     # use latest model
-                    models[model_id] = self.latest_model[1]
+                    model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    models[model_id] = send_recv(self.conn, ('model', model_id))
+                    model_pool[model_id] = send_recv(self.conn, ('model', model_id))
                     # update latest model
                     if model_id > self.latest_model[0]:
-                        self.latest_model = model_id, models[model_id]
-        return models
+                        self.latest_model = model_id, model_pool[model_id]
+        return model_pool
 
     def run(self):
         while True:
@@ -63,11 +63,11 @@ class Worker:
             models = {}
             if 'model_id' in args:
                 model_ids = list(args['model_id'].values())
-                models = self._gather_models(model_ids)
+                model_pool = self._gather_models(model_ids)
 
                 # make dict of models
                 for p, model_id in args['model_id'].items():
-                    models[p] = models[model_id]
+                    models[p] = model_pool[model_id]
 
             if role == 'g':
                 episode = self.generator.execute(models, args)
