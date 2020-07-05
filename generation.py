@@ -9,16 +9,14 @@ import pickle
 
 import numpy as np
 
-from model import softmax, ModelCongress
+from model import to_torch, to_numpy, softmax, ModelCongress
 from connection import send_recv
 
 
 class Generator:
-    def __init__(self, env, args, conn):
+    def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.conn = conn
-        self.latest_model = -1, None  # id, model
 
     def generate(self, models, args):
         # episode generation
@@ -77,36 +75,8 @@ class Generator:
 
         return bz2.compress(pickle.dumps(episode))
 
-    def _gather_models(self, model_ids):
-        model_pool = {}
-        for model_id in model_ids:
-            if model_id not in model_pool:
-                if model_id == self.latest_model[0]:
-                    # use latest model
-                    model_pool[model_id] = self.latest_model[1]
-                else:
-                    # get model from server
-                    model_pool[model_id] = send_recv(self.conn, ('model', model_id))
-                    # update latest model
-                    if model_id > self.latest_model[0]:
-                        self.latest_model = model_id, model_pool[model_id]
-        return model_pool
-
-    def execute(self):
-        args = send_recv(self.conn, ('gargs', None))
-        model_pool = self._gather_models([idx for m in args['model_id'].values() for idx in m])
-
-        # make dict of models
-        models = {}
-        for p, model_ids in args['model_id'].items():
-            if len(model_ids) == 1:
-                models[p] = model_pool[model_ids[0]]
-            else:
-                models[p] = ModelCongress([model_pool[model_id] for model_id in model_ids])
-
+    def execute(self, models, args):
         episode = self.generate(models, args)
         if episode is None:
             print('None episode in generation!')
-
-        continue_flag = send_recv(self.conn, ('episode', episode))
-        return continue_flag
+        return episode

@@ -220,27 +220,25 @@ def exec_io_match(env, io_agents, critic, show=False, game_args=None):
 
 
 class Evaluator:
-    def __init__(self, env, args, conn):
+    def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.conn = conn
-        self.opp_agent = None, RuleBasedAgent()
-        self.agent = -1, None
+        self.default_agent = RuleBasedAgent()
 
-    def execute(self):
-        args = send_recv(self.conn, ('eargs', None))
-        model_id = args['model_id']
-        if model_id != self.agent[0]:
-            model = send_recv(self.conn, ('model', model_id))
-            self.agent = model_id, Agent(model, self.args['observation'])
-        agents = [(self.agent[1] if p == args['player'] else self.opp_agent[1]) for p in range(2)]
+    def execute(self, models, args):
+        agents = [None] * len(args['model_id'])
+        for p, model_id in args['model_id'].items():
+            model = models[p]
+            if model is None:
+                agents[p] = self.default_agent
+            else:
+                agents[p] = Agent(model, self.args['observation'])
         reward = exec_match(self.env, agents, None)
         if reward is None:
             print('None episode in evaluation!')
         else:
             reward = reward[args['player']]
-        continue_flag = send_recv(self.conn, ('result', (model_id, reward)))
-        return continue_flag
+        return reward
 
 
 def wp_func(results):
