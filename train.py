@@ -427,6 +427,8 @@ class Learner:
         self.args = args
         random.seed(args['seed'])
         self.env = gym.make()
+        eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
+        self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
 
         # trained datum
@@ -515,42 +517,48 @@ class Learner:
                 if not multi_req:
                     data = [data]
                 send_data = []
-                if req == 'gargs':
-                    # genatation configuration
+
+                if req == 'args':
                     for _ in data:
-                        args = {
-                            'episode_id': self.num_episodes,
-                            'player': self.env.players()[self.num_episodes % len(self.env.players())],
-                            'model_id': {}
-                        }
-                        num_congress = int(1 + np.log2(self.model_era + 1)) if self.args['congress'] else 1
-                        for p in self.env.players():
-                            if p == args['player']:
-                                args['model_id'][p] = [self.model_era]
-                            else:
-                                args['model_id'][p] = [self.model_era]  # [random.randrange(self.model_era + 1) for _ in range(num_congress)]
+                        args = {'model_id': {}}
+
+                        # decide role
+                        if self.num_results < self.eval_rate * self.num_episodes:
+                            args['role'] = 'e'
+                        else:
+                            args['role'] = 'g'
+
+                        if args['role'] == 'g':
+                            # genatation configuration
+                            args['player'] = self.env.players()[self.num_episodes % len(self.env.players())]
+                            for p in range(2):
+                                args['model_id'][p] = self.model_era
+                            self.num_episodes += 1
+                            if self.num_episodes % 100 == 0:
+                                print(self.num_episodes, end=' ', flush=True)
+
+                        elif args['role'] == 'e':
+                            # evaluation configuration
+                            args['player'] = self.env.players()[self.num_results % len(self.env.players())]
+                            for p in range(2):
+                                if p == args['player']:
+                                    args['model_id'][p] = self.model_era
+                                else:
+                                    args['model_id'][p] = -1
+                            self.num_results += 1
+
                         send_data.append(args)
 
-                        self.num_episodes += 1
-                        if self.num_episodes % 100 == 0:
-                            print(self.num_episodes, end=' ', flush=True)
-                elif req == 'eargs':
-                    # evaluation configuration
-                    for _ in data:
-                        args = {
-                            'model_id': self.model_era,
-                            'player': self.env.players()[self.num_results % len(self.env.players())]
-                        }
-                        send_data.append(args)
-                        self.num_results += 1
                 elif req == 'episode':
                     # report generated episodes
                     self.feed_episodes(data)
                     send_data = [None] * len(data)
+
                 elif req == 'result':
                     # report evaluation results
                     self.feed_results(data)
                     send_data = [None] * len(data)
+
                 elif req == 'model':
                     for model_id in data:
                         if model_id == self.model_era:
@@ -563,6 +571,7 @@ class Learner:
                                 # return latest model if failed to load specified model
                                 pass
                         send_data.append(model)
+
                 if not multi_req and len(send_data) == 1:
                     send_data = send_data[0]
                 self.workers.send(conn, send_data)
@@ -574,25 +583,13 @@ class Learner:
         port = 9999
         print('started entry server %d' % port)
         conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-        total_gids, total_eids, worker_cnt = [], [], 0
         while not self.shutdown_flag:
             conn = next(conn_acceptor)
             if conn is not None:
                 entry_args = conn.recv()
                 print('accepted entry from %s!' % entry_args['host'])
-                gids, eids = [], []
-                # divide workers into generator/worker
-                for _ in range(entry_args['num_process']):
-                    if len(total_gids) * self.args['eworker_rate'] < len(total_eids) - 1:
-                        gids.append(worker_cnt)
-                        total_gids.append(worker_cnt)
-                    else:
-                        eids.append(worker_cnt)
-                        total_eids.append(worker_cnt)
-                    worker_cnt += 1
                 args = copy.deepcopy(self.args)
                 args['worker'] = entry_args
-                args['gids'], args['eids'] = gids, eids
                 conn.send(args)
                 conn.close()
         print('finished entry server')
