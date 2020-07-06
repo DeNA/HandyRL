@@ -35,7 +35,6 @@ class GeisterNet(BaseModel):
 
 
 class Environment(BaseEnvironment):
-    '''ガイスターの実装'''
     X, Y = 'ABCDEF', '123456'
     BLACK, WHITE = 0, 1
     BLUE, RED = 0, 1
@@ -262,7 +261,7 @@ class Environment(BaseEnvironment):
             self.play(info)
 
     def turn(self):
-        return self.turn_count % 2
+        return self.players()[self.turn_count % 2]
 
     def terminal(self):
         # check whether terminal state or not
@@ -275,7 +274,7 @@ class Environment(BaseEnvironment):
             rewards = [1, -1]
         elif self.win_color == self.WHITE:
             rewards = [-1, 1]
-        return rewards
+        return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
     def legal(self, action):
         if self.turn_count < 0:
@@ -320,12 +319,15 @@ class Environment(BaseEnvironment):
         # maximul action label (it determines output size of policy function)
         return 70 if self.turn_count < 0 else 4 * 6 * 6
 
-    def observation(self, player=-1):
+    def players(self):
+        return [0, 1]
+
+    def observation(self, player=None):
         # state representation to be fed into neural networks
         if self.turn_count < 0:
             return (np.array([1 if self.color == self.BLACK else 0], dtype=np.float32),)
 
-        turn_view = player < 0 or player == self.turn()
+        turn_view = player is None or player == self.turn()
         color = self.color if turn_view else self.opponent(self.color)
         opponent = self.opponent(color)
 
@@ -352,8 +354,8 @@ class Environment(BaseEnvironment):
             blue_c,
             red_c,
             # opponent's blue/red pieces
-            blue_o if player < 0 else np.zeros_like(self.board),
-            red_o  if player < 0 else np.zeros_like(self.board),
+            blue_o if player is None else np.zeros_like(self.board),
+            red_o  if player is None else np.zeros_like(self.board),
         ]).astype(np.float32)
 
         return np.concatenate([np.tile(s.reshape([len(s), 1, 1]), [1, 6, 6]), b]),

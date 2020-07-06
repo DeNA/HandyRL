@@ -520,11 +520,11 @@ class Learner:
                     for _ in data:
                         args = {
                             'episode_id': self.num_episodes,
-                            'player': self.num_episodes % 2,
+                            'player': self.env.players()[self.num_episodes % len(self.env.players())],
                             'model_id': {}
                         }
                         num_congress = int(1 + np.log2(self.model_era + 1)) if self.args['congress'] else 1
-                        for p in range(2):
+                        for p in self.env.players():
                             if p == args['player']:
                                 args['model_id'][p] = [self.model_era]
                             else:
@@ -539,7 +539,7 @@ class Learner:
                     for _ in data:
                         args = {
                             'model_id': self.model_era,
-                            'player': self.num_results % 2,
+                            'player': self.env.players()[self.num_results % len(self.env.players())]
                         }
                         send_data.append(args)
                         self.num_results += 1
