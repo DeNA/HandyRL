@@ -22,13 +22,13 @@ class GeisterNet(BaseModel):
         return self.move.init_hidden(batch_size)
 
     def forward(self, x, hidden):
-        if x[0].size(1) == 1:
+        if x.size(1) == 1:
             return self.set(x)[:-1], hidden
         else:
             return self.move(x, hidden, num_repeats=3)
 
     def inference(self, x, hidden):
-        if len(x[0]) == 1:
+        if len(x) == 1:
             return self.set.inference(x)[:-1], hidden
         else:
             return self.move.inference(x, hidden, num_repeats=3)
@@ -325,7 +325,7 @@ class Environment(BaseEnvironment):
     def observation(self, player=None):
         # state representation to be fed into neural networks
         if self.turn_count < 0:
-            return (np.array([1 if self.color == self.BLACK else 0], dtype=np.float32),)
+            return np.array([1 if self.color == self.BLACK else 0], dtype=np.float32)
 
         turn_view = player is None or player == self.turn()
         color = self.color if turn_view else self.opponent(self.color)
@@ -358,7 +358,7 @@ class Environment(BaseEnvironment):
             red_o  if player is None else np.zeros_like(self.board),
         ]).astype(np.float32)
 
-        return np.concatenate([np.tile(s.reshape([len(s), 1, 1]), [1, 6, 6]), b]),
+        return np.concatenate([np.tile(s.reshape([len(s), 1, 1]), [1, 6, 6]), b])
 
     def net(self):
         return GeisterNet
