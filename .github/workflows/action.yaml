@@ -2,9 +2,8 @@
 name: pytest
 
 on:
-  push:
   pull_request:
-    types: [opened, synchronize, reopened]
+  push:
 
 jobs:
   pytest:
