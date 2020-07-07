@@ -7,31 +7,39 @@ import random
 import itertools
 
 import numpy as np
+import torch
 
 from environment import BaseEnvironment
-from model import BaseModel, LinearModel, DRC
+from model import BaseModel, Encoder, Head, DRC
 
 
 class GeisterNet(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
-        self.set = LinearModel(env, action_length=70)
-        self.move = DRC(env, args={'layers': 3, 'filters': 32}, action_length=6 * 6 * 4)
+
+        layers, filters = 3, 32
+        o = env.observation()
+        input_channels = o['scalar'].shape[-1] + o['board'].shape[-3]
+        self.input_size = (input_channels, 6, 6)
+
+        self.encoder = Encoder(self.input_size, filters)
+        self.body = DRC(layers, filters, filters)
+        self.head_p = Head((filters, 6, 6), 2, 6 * 6 * 4)
+        self.head_v = Head((filters, 6, 6), 1, 1)
 
     def init_hidden(self, batch_size=None):
-        return self.move.init_hidden(batch_size)
+        return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
-        if x.size(1) == 1:
-            return self.set(x)[:-1], hidden
-        else:
-            return self.move(x, hidden, num_repeats=3)
+        s = x['scalar'].reshape(*x['scalar'].size(), 1, 1).repeat(1, 1, 6, 6)
+        h = torch.cat([s, x['board']], -3)
 
-    def inference(self, x, hidden):
-        if len(x) == 1:
-            return self.set.inference(x)[:-1], hidden
-        else:
-            return self.move.inference(x, hidden, num_repeats=3)
+        h = self.encoder(h)
+        h, hidden = self.body(h, hidden, num_repeats=3)
+        h_p = self.head_p(h)
+        h_v = self.head_v(h)
+
+        return h_p, torch.tanh(h_v), hidden
 
 
 class Environment(BaseEnvironment):
@@ -331,14 +339,19 @@ class Environment(BaseEnvironment):
         color = self.color if turn_view else self.opponent(self.color)
         opponent = self.opponent(color)
 
+        nbcolor = self.piece_cnt[self.colortype2piece(color,    self.BLUE)]
+        nrcolor = self.piece_cnt[self.colortype2piece(color,    self.RED )]
+        nbopp   = self.piece_cnt[self.colortype2piece(opponent, self.BLUE)]
+        nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
+
         s = np.array([
             1 if turn_view           else 0,  # view point is turn player
             1 if color == self.BLACK else 0,  # black is color to move
             # the number of remained pieces
-            np.log2(self.piece_cnt[self.colortype2piece(color,    self.BLUE)]),
-            np.log2(self.piece_cnt[self.colortype2piece(color,    self.RED )]),
-            np.log2(self.piece_cnt[self.colortype2piece(opponent, self.BLUE)]),
-            np.log2(self.piece_cnt[self.colortype2piece(opponent, self.RED )]),
+            *[(1 if nbcolor == i else 0) for i in range(1, 5)],
+            *[(1 if nbcolor == i else 0) for i in range(1, 5)],
+            *[(1 if nbopp   == i else 0) for i in range(1, 5)],
+            *[(1 if nropp   == i else 0) for i in range(1, 5)],
         ]).astype(np.float32)
 
         blue_c = self.board == self.colortype2piece(color,    self.BLUE)
@@ -358,7 +371,7 @@ class Environment(BaseEnvironment):
             red_o  if player is None else np.zeros_like(self.board),
         ]).astype(np.float32)
 
-        return np.concatenate([np.tile(s.reshape([len(s), 1, 1]), [1, 6, 6]), b])
+        return {'scalar': s, 'board': b}
 
     def net(self):
         return GeisterNet
