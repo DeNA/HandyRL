@@ -1,8 +1,10 @@
 
-name: test_env_push
+name: pytest
 
 on:
   push:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   pytest:
