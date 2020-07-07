@@ -342,8 +342,8 @@ def io_match_acception(n, num_agents, port):
             conn.send((env_args, None))  # send accpept with environment arguments
 
     agents_list = [
-        [IOAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)] \
-            for i in range(n)
+        [IOAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
+        for i in range(n)
     ]
 
     return agents_list
