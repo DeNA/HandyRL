@@ -275,22 +275,3 @@ class DuelingNet(BaseModel):
         h_v = self.head_v(h)
 
         return h_p, torch.tanh(h_v), None
-
-
-class ModelCongress:
-    def __init__(self, models):
-        self.models = models
-
-    def init_hidden(self, batch_size=None):
-        return [m.init_hidden(batch_size) for m in self.models]
-
-    def inference(self, x, hiddens):
-        # conmputes mean value of outputs
-        ps, vs, nhiddens = [], [], []
-        for i, model in enumerate(self.models):
-            with torch.no_grad():
-                p, v, nhidden = model.inference(x, hiddens[i])
-                ps.append(softmax(p))
-                vs.append(v)
-                nhiddens.append(nhidden)
-        return np.log(np.mean(ps, axis=0) + 1e-8), np.mean(vs, axis=0), nhiddens

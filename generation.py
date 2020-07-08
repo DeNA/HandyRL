@@ -9,7 +9,7 @@ import pickle
 
 import numpy as np
 
-from model import to_torch, to_numpy, softmax, ModelCongress
+from model import softmax
 from connection import send_recv
 
 
