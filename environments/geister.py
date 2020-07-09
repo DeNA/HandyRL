@@ -207,9 +207,6 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def chance(self):
-        pass
-
     def play(self, action):
         # state transition
         if isinstance(action, str):
