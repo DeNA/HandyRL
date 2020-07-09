@@ -124,4 +124,4 @@ if __name__ == '__main__':
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward(0))
+        print(e.reward())
