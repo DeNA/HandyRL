@@ -10,6 +10,7 @@ train_args:
     remote: False
     observation: False
     forward_steps: 16
+    entropy_regularization: 3.0e-1
     update_episodes: 2000
     batch_size: 128
     minimum_episodes: 20000
