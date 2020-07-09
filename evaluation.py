@@ -351,7 +351,7 @@ def io_match_acception(n, num_agents, port):
 
 if __name__ == '__main__':
     with open('config.yaml') as f:
-        env_args = yaml.load(f)['env_args']
+        env_args = yaml.safe_load(f)['env_args']
 
     gym.prepare(env_args)
     env = gym.make()

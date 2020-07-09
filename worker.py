@@ -198,7 +198,7 @@ def entry(entry_args):
 if __name__ == '__main__':
     # offline generation worker
     with open('config.yaml') as f:
-        entry_args = yaml.load(f)['entry_args']
+        entry_args = yaml.safe_load(f)['entry_args']
     entry_args['host'] = gethostname()
 
     args = entry(entry_args)

@@ -608,7 +608,7 @@ class Learner:
 
 if __name__ == '__main__':
     with open('config.yaml') as f:
-        args = yaml.load(f)
+        args = yaml.safe_load(f)
     print(args)
 
     train_args = args['train_args']
