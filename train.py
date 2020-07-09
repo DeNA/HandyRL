@@ -399,7 +399,7 @@ class Trainer:
 
         self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.defalut_lr * self.data_cnt_ema * (1 + self.steps * 1e-5)
+            param_group['lr'] = self.defalut_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
         self.model.cpu()
         self.model.eval()
         return copy.deepcopy(self.model)
