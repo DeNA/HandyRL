@@ -12,32 +12,32 @@ import numpy as np
 
 sys.path.append(os.path.dirname(__file__))
 
-_envname = None
+_env_name = None
 _env_module = None
 
 
 def prepare(env_args):
-    envname = env_args['env']
+    env_name = env_args['env']
     env_source = env_args['source']
 
-    global _envname
+    global _env_name
     global _env_module
 
-    _envname = envname
+    _env_name = env_name
     _env_module = importlib.import_module(env_source)
 
     if _env_module is None:
-        print("No environment %s" % envname)
+        print("No environment %s" % env_name)
     elif hasattr(_env_module, 'prepare'):
         _env_module.prepare()
 
 
 def make(args=None):
-    global _envname
+    global _env_name
     global _env_module
 
     if _env_module is None:
-        print("No environment %s" % _envname)
+        print("No environment %s" % _env_name)
     else:
         if hasattr(_env_module, 'default_env_args'):
             env_args = copy.deepcopy(_env_module.default_env_args)
