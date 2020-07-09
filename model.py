@@ -10,16 +10,22 @@ torch.set_num_threads(1)
 import torch.nn as nn
 import torch.nn.functional as F
 
+from util import map_r
 
-def to_torch(x, transpose=False):
+
+def to_torch(x, transpose=False, unsqueeze=None):
     if x is None:
         return None
-    elif isinstance(x, torch.Tensor):
-        return x
+    elif isinstance(x, (list, tuple, set)):
+        return type(x)(to_torch(xx, transpose, unsqueeze) for xx in x)
+    elif isinstance(x, dict):
+        return type(x)((key, to_torch(xx, transpose, unsqueeze)) for key, xx in x.items())
 
     a = np.array(x)
     if transpose:
         a = np.swapaxes(a, 0, 1)
+    if unsqueeze is not None:
+        a = np.expand_dims(a, unsqueeze)
 
     if a.dtype == np.int32 or a.dtype == np.int64:
         t = torch.LongTensor(a)
@@ -30,29 +36,11 @@ def to_torch(x, transpose=False):
 
 
 def to_numpy(x):
-    if x is None:
-        return None
-    elif isinstance(x, torch.Tensor):
-        a = x.detach().numpy()
-    elif isinstance(x, np.ndarray):
-        a = x
-    elif isinstance(x, tuple):
-        return tuple(to_numpy(xx) for xx in x)
-    else:
-        a = np.array(x)
-    return a
+    return map_r(x, lambda x: x.detach().numpy() if x is not None else None)
 
 
 def to_gpu(data):
-    if data is None:
-        return None
-    if isinstance(data, tuple):
-        return tuple(to_gpu(d) for d in data)
-    elif isinstance(data, list):
-        return [to_gpu(d) for d in data]
-    elif isinstance(data, dict):
-        return {k: to_gpu(d) for k, d in data.items()}
-    return data.cuda()
+    return map_r(data, lambda x: x.cuda() if x is not None else None)
 
 
 def to_gpu_or_not(data, gpu):
@@ -173,10 +161,10 @@ class ConvLSTMCell(nn.Module):
         )
 
     def init_hidden(self, input_size, batch_size):
-        return [
+        return tuple([
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
-        ]
+        ])
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
@@ -196,7 +184,7 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
 
-class DRCCore(nn.Module):
+class DRC(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
         super().__init__()
         self.num_layers = num_layers
@@ -212,13 +200,17 @@ class DRCCore(nn.Module):
         self.blocks = nn.ModuleList(blocks)
 
     def init_hidden(self, input_size, batch_size):
-        hs, cs = [], []
-        for block in self.blocks:
-            h, c = block.init_hidden(input_size, batch_size)
-            hs.append(h)
-            cs.append(c)
+        if batch_size is None:  # for inference
+            with torch.no_grad():
+                return to_numpy(self.init_hidden(input_size, []))
+        else:  # for training
+            hs, cs = [], []
+            for block in self.blocks:
+                h, c = block.init_hidden(input_size, batch_size)
+                hs.append(h)
+                cs.append(c)
 
-        return torch.stack(hs), torch.stack(cs)
+            return torch.stack(hs), torch.stack(cs)
 
     def forward(self, x, hidden, num_repeats):
         if hidden is None:
@@ -247,13 +239,13 @@ class BaseModel(nn.Module):
         # numpy array -> numpy array
         self.eval()
         with torch.no_grad():
-            xt = tuple(to_torch(xx).unsqueeze(0) for xx in x)
-            ht = tuple(to_torch(hh).unsqueeze(1) for hh in hidden) if hidden is not None else None
+            xt = to_torch(x, unsqueeze=0)
+            ht = to_torch(hidden, unsqueeze=1)
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
             [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
-            [tuple(to_numpy(o).squeeze(1) for o in outputs[-1]) if outputs[-1] is not None else None]
+            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(1)) if outputs[-1] is not None else None]
         )
 
 
@@ -262,21 +254,11 @@ class RandomModel(BaseModel):
         return np.zeros(self.action_length), np.zeros(1), None
 
 
-class LinearModel(BaseModel):
-    def __init__(self, env, args=None, action_length=None):
-        super().__init__(env, args, action_length)
-        self.fc_p = nn.Linear(1, self.action_length, bias=True)
-        self.fc_v = nn.Linear(1, 1, bias=True)
-
-    def forward(self, x, hidden=None):
-        return self.fc_p(x), self.fc_v(x), None
-
-
 class DuelingNet(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
-        self.input_size = env.observation()[0].shape
+        self.input_size = env.observation().shape
 
         layers, filters = args.get('layers', 3), args.get('filters', 32)
         internal_size = (filters, *self.input_size[1:])
@@ -287,57 +269,9 @@ class DuelingNet(BaseModel):
         self.head_v = Head(internal_size, 1, 1)
 
     def forward(self, x, hidden=None):
-        h = self.encoder(x[0])
+        h = self.encoder(x)
         h = self.body(h)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
         return h_p, torch.tanh(h_v), None
-
-
-class DRC(BaseModel):
-    def __init__(self, env, args={}, action_length=None):
-        super().__init__(env, args, action_length)
-        self.input_size = env.observation()[0].shape
-
-        layers, filters = args.get('layers', 3), args.get('filters', 32)
-        internal_size = (filters, *self.input_size[1:])
-
-        self.encoder = Encoder(self.input_size, filters)
-        self.body = DRCCore(layers, filters, filters)
-        self.head_p = Head(internal_size, 2, self.action_length)
-        self.head_v = Head(internal_size, 1, 1)
-
-    def init_hidden(self, batch_size=None):
-        if batch_size is None:  # for inference
-            with torch.no_grad():
-                return to_numpy(self.body.init_hidden(self.input_size[1:], []))
-        else:  # for training
-            return self.body.init_hidden(self.input_size[1:], batch_size)
-
-    def forward(self, x, hidden, num_repeats=1):
-        h = self.encoder(x[0])
-        h, hidden = self.body(h, hidden, num_repeats)
-        h_p = self.head_p(h)
-        h_v = self.head_v(h)
-
-        return h_p, torch.tanh(h_v), hidden
-
-
-class ModelCongress:
-    def __init__(self, models):
-        self.models = models
-
-    def init_hidden(self, batch_size=None):
-        return [m.init_hidden(batch_size) for m in self.models]
-
-    def inference(self, x, hiddens):
-        # conmputes mean value of outputs
-        ps, vs, nhiddens = [], [], []
-        for i, model in enumerate(self.models):
-            with torch.no_grad():
-                p, v, nhidden = model.inference(x, hiddens[i])
-                ps.append(softmax(p))
-                vs.append(v)
-                nhiddens.append(nhidden)
-        return np.log(np.mean(ps, axis=0) + 1e-8), np.mean(vs, axis=0), nhiddens

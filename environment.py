@@ -107,6 +107,12 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
+    # Should be defined if you use multiplayer game or add name to each player
+    #
+    def players(self):
+        return [0]
+
+    #
     # Should be defined in all games
     #
     def observation(self, player=-1):

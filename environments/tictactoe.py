@@ -76,7 +76,7 @@ class Environment(BaseEnvironment):
             self.play(info)
 
     def turn(self):
-        return len(self.record) % 2
+        return self.players()[len(self.record) % 2]
 
     def terminal(self):
         # check whether the state is terminal
@@ -89,7 +89,7 @@ class Environment(BaseEnvironment):
             rewards = [1, -1]
         if self.win_color < 0:
             rewards = [-1, 1]
-        return rewards
+        return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self):
         # legal action list
@@ -99,16 +99,19 @@ class Environment(BaseEnvironment):
         # maximum size of policy (it determines output size of policy function)
         return 3 * 3
 
-    def observation(self, player=-1):
+    def players(self):
+        return [0, 1]
+
+    def observation(self, player=None):
         # input feature for neural nets
-        turn_view = player < 0 or player == self.turn()
+        turn_view = player is None or player == self.turn()
         color = self.color if turn_view else -self.color
         a = np.stack([
             np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
             self.board == color,
             self.board == -color
         ]).astype(np.float32)
-        return (a,)
+        return a
 
 
 if __name__ == '__main__':
@@ -121,4 +124,4 @@ if __name__ == '__main__':
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward(0))
+        print(e.reward())
