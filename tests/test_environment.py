@@ -25,6 +25,7 @@ def test_environment(environment_path, env):
             while not e.terminal():
                 actions = e.legal_actions()
                 e.play(random.choice(actions))
+            _ = e.reward()
         no_error_loop = True
     except Exception:
         traceback.print_exc()
