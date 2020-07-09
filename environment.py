@@ -91,7 +91,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def reward(self, player=-1):
+    def reward(self):
         raise NotImplementedError()
 
     #
@@ -115,7 +115,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def observation(self, player=-1):
+    def observation(self, player=None):
         raise NotImplementedError()
 
     #
