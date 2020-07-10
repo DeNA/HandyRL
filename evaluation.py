@@ -49,7 +49,7 @@ def softmax(p, actions):
     return p
 
 
-def view(env, player=-1):
+def view(env, player=None):
     if hasattr(env, 'view'):
         env.view(player=player)
     else:
@@ -154,8 +154,8 @@ class IOAgent:
     def action(self):
         return send_recv(self.conn, ('action', []))
 
-    def observe(self, player_id):
-        return send_recv(self.conn, ('observe', [player_id]))
+    def observe(self, player):
+        return send_recv(self.conn, ('observe', [player]))
 
 
 def exec_match(env, agents, critic, show=False, game_args=None):
@@ -170,7 +170,7 @@ def exec_match(env, agents, critic, show=False, game_args=None):
         if env.terminal():
             break
         if show and critic is not None:
-            print('cv = ', critic.observe(env, -1, show=False)[0])
+            print('cv = ', critic.observe(env, None, show=False)[0])
         for p, agent in agents.items():
             if p == env.turn():
                 action = agent.action(env, show=show)
@@ -202,7 +202,7 @@ def exec_io_match(env, io_agents, critic, show=False, game_args=None):
         if env.terminal():
             break
         if show and critic is not None:
-            print('cv = ', critic.observe(env, -1, show=False)[0])
+            print('cv = ', critic.observe(env, None, show=False)[0])
         for p, agent in io_agents.items():
             if p == env.turn():
                 action = agent.action()
@@ -248,7 +248,7 @@ def wp_func(results):
     return win / games
 
 
-def eval_process_mp_child(env_args, agents, critic, index, in_queue, out_queue, seed, show=False):
+def eval_process_mp_child(agents, critic, index, in_queue, out_queue, seed, show=False):
     random.seed(seed + index)
     env = gym.make({'id': index})
     while True:
@@ -290,13 +290,13 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
 
     io_mode = agents[0] is None
     if io_mode:  # network battle mode
-        agents = io_match_acception(num_process, len(agents), io_match_port)
+        agents = io_match_acception(num_process, env_args, len(agents), io_match_port)
     else:
         agents = [agents] * num_process
 
     for i in range(num_process):
         in_queue.put(None)
-        args = env_args, agents[i], critic, i, in_queue, out_queue, seed
+        args = agents[i], critic, i, in_queue, out_queue, seed
         if num_process > 1:
             mp.Process(target=eval_process_mp_child, args=args).start()
             if io_mode:
@@ -326,7 +326,7 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
         print('total', {k: total_results[p][k] for k in sorted(total_results[p].keys(), reverse=True)}, wp_func(total_results[p]))
 
 
-def io_match_acception(n, num_agents, port):
+def io_match_acception(n, env_args, num_agents, port):
     waiting_conns = []
     accepted_conns = []
 
