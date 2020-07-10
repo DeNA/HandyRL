@@ -366,7 +366,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         if sys.argv[1] == 's':
             print('io-match server mode')
-            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 1, 100)
+            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 1, 1000)
         elif sys.argv[1] == 'c':
             print('io-match client mode')
             while True:
