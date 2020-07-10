@@ -386,7 +386,7 @@ if __name__ == '__main__':
         else:
             print('unknown mode')
     else:
-        agent1 = Agent(get_model(env, 'models/20.pth'))
+        agent1 = Agent(get_model(env, 'models/1.pth'))
         critic = None
 
         agents = [agent1, RandomAgent()]
