@@ -11,7 +11,6 @@ import multiprocessing as mp
 
 import numpy as np
 
-from model import DuelingNet as Model
 from connection import send_recv, accept_socket_connections, connect_socket_connection
 import environment as gym
 
@@ -349,19 +348,25 @@ def io_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
+def get_model(env, model_path):
+    import torch
+    from model import DuelingNet as Model
+    model = env.net()(env) if hasattr(env, 'net') else Model(env)
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+    return model
+
+
+def client_mp_child(env, model_path, conn):
+    IOAgentClient(Agent(get_model(env, model_path)), conn).run()
+
+
 if __name__ == '__main__':
     with open('config.yaml') as f:
         env_args = yaml.safe_load(f)['env_args']
 
     gym.prepare(env_args)
     env = gym.make()
-
-    def get_model(model_path):
-        import torch
-        model = env.net()(env) if hasattr(env, 'net') else Model(env)
-        model.load_state_dict(torch.load(model_path))
-        model.eval()
-        return model
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 's':
@@ -376,14 +381,12 @@ if __name__ == '__main__':
                 except EOFError:
                     break
 
-                def client_mp_child(env_args, model_path, conn):
-                    IOAgentClient(Agent(get_model(model_path)), conn).run()
-                mp.Process(target=client_mp_child, args=(env_args, sys.argv[2], conn)).start()
+                mp.Process(target=client_mp_child, args=(env, sys.argv[2], conn)).start()
                 conn.close()
         else:
             print('unknown mode')
     else:
-        agent1 = Agent(get_model('models/20.pth'))
+        agent1 = Agent(get_model(env, 'models/20.pth'))
         critic = None
 
         agents = [agent1, RandomAgent()]

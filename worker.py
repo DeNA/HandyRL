@@ -8,6 +8,7 @@ import random
 import threading
 import time
 import yaml
+import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
@@ -77,6 +78,15 @@ class Worker:
                 send_recv(self.conn, ('result', (player_model_id, result)))
 
 
+def make_worker_args(args, n_ga, gaid, wid, conn):
+    return args, conn, wid * n_ga + gaid
+
+
+def open_worker(args, conn, wid):
+    worker = Worker(args, conn, wid)
+    worker.run()
+
+
 class Gather(QueueCommunicator):
     def __init__(self, args, conn, gaid):
         print('started gather %d' % gaid)
@@ -88,20 +98,13 @@ class Gather(QueueCommunicator):
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        def worker(args, conn, wid):
-            worker = Worker(args, conn, wid)
-            worker.run()
-
         n_pro, n_ga = args['worker']['num_process'], args['worker']['num_gather']
-
-        def worker_args(wid, conn):
-            return args, conn, wid * n_ga + gaid
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
             num_workers_per_gather,
-            worker,
-            worker_args
+            open_worker,
+            functools.partial(make_worker_args, args, n_ga, gaid)
         )
 
         for conn in worker_conns:
