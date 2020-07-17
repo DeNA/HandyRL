@@ -76,13 +76,14 @@ class Dense(nn.Module):
         if bnunits > 0:
             bias = False
         self.dense = nn.Linear(units0, units1, bias=bias)
+        self.bnunits = bnunits
         self.bn = nn.BatchNorm1d(bnunits) if bnunits > 0 else None
 
     def forward(self, x):
         h = self.dense(x)
         if self.bn is not None:
             size = h.size()
-            h = h.view(h.size(0), -1)
+            h = h.view(-1, self.bnunits)
             h = self.bn(h)
             h = h.view(*size)
         return h
