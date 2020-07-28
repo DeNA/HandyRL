@@ -25,7 +25,7 @@ class Generator:
         observations, values = {}, {}
         hidden = {}
         for index, player in enumerate(self.env.players()):
-            hidden[index] = models[player].init_hidden()
+            hidden[player] = models[player].init_hidden()
             observations[index] = []
             values[index] = []
 
@@ -45,7 +45,7 @@ class Generator:
                 if player == self.env.turn() or self.args['observation']:
                     observation = self.env.observation(player)
                     model = models[player]
-                    p, v, hidden[index] = model.inference(observation, hidden[index])
+                    p, v, hidden[player] = model.inference(observation, hidden[player])
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
                         pmask = np.ones_like(p) * 1e32
