@@ -27,7 +27,6 @@ def prepare(env_args):
 def make(env_args):
     env_name = env_args['env']
     env_source = env_args['source']
-    print(env_name, env_args)
 
     env_module = importlib.import_module(env_source)
 
