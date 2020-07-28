@@ -422,7 +422,7 @@ class Learner:
     def __init__(self, args):
         self.args = args
         random.seed(args['seed'])
-        self.env = gym.make()
+        self.env = gym.make(args['env'])
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False

@@ -29,7 +29,7 @@ class Worker:
         self.conn = conn
         self.latest_model = -1, None
 
-        env = gym.make({'id': wid})
+        env = gym.make({**args['env'], 'id': wid})
         self.generator = Generator(env, self.args)
         self.evaluator = Evaluator(env, self.args)
 

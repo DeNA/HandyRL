@@ -5,48 +5,36 @@
 
 import os
 import sys
-import copy
 import importlib
 
 import numpy as np
 
 sys.path.append(os.path.dirname(__file__))
 
-_env_name = None
-_env_module = None
-
 
 def prepare(env_args):
     env_name = env_args['env']
     env_source = env_args['source']
 
-    global _env_name
-    global _env_module
+    env_module = importlib.import_module(env_source)
 
-    _env_name = env_name
-    _env_module = importlib.import_module(env_source)
-
-    if _env_module is None:
+    if env_module is None:
         print("No environment %s" % env_name)
-    elif hasattr(_env_module, 'prepare'):
-        _env_module.prepare()
+    elif hasattr(env_module, 'prepare'):
+        env_module.prepare()
 
 
-def make(args=None):
-    global _env_name
-    global _env_module
+def make(env_args):
+    env_name = env_args['env']
+    env_source = env_args['source']
+    print(env_name, env_args)
 
-    if _env_module is None:
-        print("No environment %s" % _env_name)
+    env_module = importlib.import_module(env_source)
+
+    if env_module is None:
+        print("No environment %s" % env_name)
     else:
-        if hasattr(_env_module, 'default_env_args'):
-            env_args = copy.deepcopy(_env_module.default_env_args)
-        else:
-            env_args = {}
-
-        if args is not None and 'id' in args:
-            env_args['id'] = args['id']
-        return _env_module.Environment(env_args)
+        return env_module.Environment(env_args)
 
 
 # base class of Environment

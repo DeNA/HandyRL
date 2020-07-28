@@ -110,10 +110,10 @@ class SoftAgent(Agent):
 
 
 class IOAgentClient:
-    def __init__(self, agent, conn):
+    def __init__(self, agent, env, conn):
         self.conn = conn
         self.agent = agent
-        self.env = gym.make()
+        self.env = env
 
     def run(self):
         while True:
@@ -247,9 +247,9 @@ def wp_func(results):
     return win / games
 
 
-def eval_process_mp_child(agents, critic, index, in_queue, out_queue, seed, show=False):
+def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, seed, show=False):
     random.seed(seed + index)
-    env = gym.make({'id': index})
+    env = gym.make({**env_args, 'id': index})
     while True:
         args = in_queue.get()
         if args is None:
@@ -295,7 +295,7 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
 
     for i in range(num_process):
         in_queue.put(None)
-        args = agents[i], critic, i, in_queue, out_queue, seed
+        args = agents[i], critic, env_args, i, in_queue, out_queue, seed
         if num_process > 1:
             mp.Process(target=eval_process_mp_child, args=args).start()
             if io_mode:
@@ -338,7 +338,7 @@ def io_match_acception(n, env_args, num_agents, port):
             conn = waiting_conns[0]
             accepted_conns.append(conn)
             waiting_conns = waiting_conns[1:]
-            conn.send((env_args, None))  # send accpept with environment arguments
+            conn.send(env_args)  # send accpept with environment arguments
 
     agents_list = [
         [IOAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
@@ -357,8 +357,10 @@ def get_model(env, model_path):
     return model
 
 
-def client_mp_child(env, model_path, conn):
-    IOAgentClient(Agent(get_model(env, model_path)), conn).run()
+def client_mp_child(env_args, model_path, conn):
+    env = gym.make(env_args)
+    model = get_model(env, model_path)
+    IOAgentClient(Agent(model), env, conn).run()
 
 
 if __name__ == '__main__':
@@ -366,7 +368,7 @@ if __name__ == '__main__':
         env_args = yaml.safe_load(f)['env_args']
 
     gym.prepare(env_args)
-    env = gym.make()
+    env = gym.make(env_args)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 's':
@@ -377,11 +379,11 @@ if __name__ == '__main__':
             while True:
                 try:
                     conn = connect_socket_connection('', io_match_port)
-                    env_args, _ = conn.recv()
+                    env_args = conn.recv()
                 except EOFError:
                     break
 
-                mp.Process(target=client_mp_child, args=(env, sys.argv[2], conn)).start()
+                mp.Process(target=client_mp_child, args=(env_args, sys.argv[2], conn)).start()
                 conn.close()
         else:
             print('unknown mode')
