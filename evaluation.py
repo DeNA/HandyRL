@@ -157,7 +157,7 @@ class IOAgent:
         return send_recv(self.conn, ('observe', [player]))
 
 
-def exec_match(env, agents, critic, show=False, game_args=None):
+def exec_match(env, agents, critic, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
@@ -184,7 +184,7 @@ def exec_match(env, agents, critic, show=False, game_args=None):
     return env.reward()
 
 
-def exec_io_match(env, io_agents, critic, show=False, game_args=None):
+def exec_io_match(env, io_agents, critic, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
