@@ -399,7 +399,7 @@ class Trainer:
 
         self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.defalut_lr * self.data_cnt_ema * (1 + self.steps * 1e-5)
+            param_group['lr'] = self.defalut_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
         self.model.cpu()
         self.model.eval()
         return copy.deepcopy(self.model)
@@ -422,7 +422,7 @@ class Learner:
     def __init__(self, args):
         self.args = args
         random.seed(args['seed'])
-        self.env = gym.make()
+        self.env = gym.make(args['env'])
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
@@ -608,7 +608,7 @@ class Learner:
 
 if __name__ == '__main__':
     with open('config.yaml') as f:
-        args = yaml.load(f)
+        args = yaml.safe_load(f)
     print(args)
 
     train_args = args['train_args']
