@@ -527,7 +527,7 @@ class Learner:
                         if args['role'] == 'g':
                             # genatation configuration
                             args['player'] = self.env.players()[self.num_episodes % len(self.env.players())]
-                            for p in range(2):
+                            for p in self.env.players():
                                 args['model_id'][p] = self.model_era
                             self.num_episodes += 1
                             if self.num_episodes % 100 == 0:
@@ -536,7 +536,7 @@ class Learner:
                         elif args['role'] == 'e':
                             # evaluation configuration
                             args['player'] = self.env.players()[self.num_results % len(self.env.players())]
-                            for p in range(2):
+                            for p in self.env.players():
                                 if p == args['player']:
                                     args['model_id'][p] = self.model_era
                                 else:
