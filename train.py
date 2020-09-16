@@ -276,27 +276,30 @@ class Batcher:
         self.gpu = gpu
         self.shutdown_flag = False
 
-        def selector():
-            while True:
-                yield self.select_episode()
+        # self.workers = MultiProcessWorkers(
+        #     self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+        #     buffer_length=self.args['batch_size'] * 3, num_receivers=2
+        # )
+        self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
 
-        def worker(conn, bid):
-            print('started batcher %d' % bid)
-            episodes = []
-            while not self.shutdown_flag:
-                ep = conn.recv()
-                episodes.append(ep)
-                if len(episodes) >= self.args['batch_size']:
-                    batch = make_batch(episodes, self.args)
-                    conn.send((batch, len(episodes)))
-                    episodes = []
-            print('finished batcher %d' % bid)
+    def _selector(self):
+        while True:
+            yield self.select_episode()
 
-        def postprocess(batch):
-            return to_gpu_or_not(batch, self.gpu)
+    def _worker(self, conn, bid):
+        print('started batcher %d' % bid)
+        episodes = []
+        while not self.shutdown_flag:
+            ep = conn.recv()
+            episodes.append(ep)
+            if len(episodes) >= self.args['batch_size']:
+                batch = make_batch(episodes, self.args)
+                conn.send((batch, len(episodes)))
+                episodes = []
+        print('finished batcher %d' % bid)
 
-        # self.workers = MultiProcessWorkers(worker, selector(), self.args['num_batchers'], postprocess, buffer_length=self.args['batch_size'] * 3, num_receivers=2)
-        self.workers = MultiThreadWorkers(worker, selector(), self.args['num_batchers'], postprocess)
+    def _postprocess(self, batch):
+        return to_gpu_or_not(batch, self.gpu)
 
     def run(self):
         self.workers.start()
