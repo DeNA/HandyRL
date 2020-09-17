@@ -97,7 +97,7 @@ class Environment(BaseEnvironment):
         return 3 * 3
 
     def players(self):
-        return ['Player1', 'Player2']
+        return [0, 1]
 
     def observation(self, player=None):
         # input feature for neural nets
