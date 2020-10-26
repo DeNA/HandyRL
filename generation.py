@@ -68,6 +68,7 @@ class Generator:
 
         if len(turns) < 1:
             return None
+
         rewards = self.env.reward()
         rewards = [rewards[player] for player in self.env.players()]
 
