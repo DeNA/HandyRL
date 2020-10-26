@@ -22,7 +22,7 @@ class Generator:
         # episode generation
         moments = []
         hidden = {}
-        for index, player in enumerate(self.env.players()):
+        for player in self.env.players():
             hidden[player] = models[player].init_hidden()
 
         err = self.env.reset()
@@ -37,6 +37,7 @@ class Generator:
                 break
 
             moment = {'observation': {}, 'value': {}}
+
             for index, player in enumerate(self.env.players()):
                 obs, v = None, None
                 if player == self.env.turn() or self.args['observation']:
