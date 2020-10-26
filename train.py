@@ -275,11 +275,13 @@ class Batcher:
         self.gpu = gpu
         self.shutdown_flag = False
 
-        # self.workers = MultiProcessWorkers(
-        #     self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
-        #     buffer_length=self.args['batch_size'] * 3, num_receivers=2
-        # )
-        self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
+        if self.args['use_batcher_process']:
+            self.workers = MultiProcessWorkers(
+                self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+                buffer_length=self.args['batch_size'] * 3, num_receivers=2
+            )
+        else:
+            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
 
     def _selector(self):
         while True:
