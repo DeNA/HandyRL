@@ -52,18 +52,12 @@ def make_batch(episodes, args):
 
     obss, datum = [], []
 
-    for ep_comp in episodes:
+    for ep in episodes:
         # target player and turn index
-        moment0 = pickle.loads(bz2.decompress(ep_comp['moment'][0]))
-        players = sorted([player for player in moment0['value'].keys() if player >= 0])
-        ep_train_length = len(ep_comp['moment'])
-        turn_candidates = 1 + max(0, ep_train_length - args['forward_steps'])  # change start turn by sequence length
-        st = random.randrange(turn_candidates)
-        ed = min(st + steps, len(ep_comp['moment']))
+        moments = [pickle.loads(bz2.decompress(m)) for m in ep['moment']]
+        players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
 
-        moments = [pickle.loads(bz2.decompress(ep_comp['moment'][t])) for t in range(st, ed)]
-
-        obs_zeros = map_r(moment0['observation'][moment0['turn']], lambda o: np.zeros_like(o))  # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
             obs = [[(lambda x : (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
@@ -84,10 +78,10 @@ def make_batch(episodes, args):
 
         act = np.array([m['action'] for m in moments]).reshape(-1, 1)
         p = np.array([m['policy'] for m in moments])
-        progress = np.arange(st, ed, dtype=np.float32) / len(ep_comp['moment'])
+        progress = np.arange(ep['start'], ep['end'], dtype=np.float32) / ep['total']
 
         traj_steps = len(tmsk)
-        ret = np.array(ep_comp['reward'], dtype=np.float32).reshape(1, -1)
+        ret = np.array(ep['reward'], dtype=np.float32).reshape(1, -1)
 
         # pad each array if step length is short
         if traj_steps < args['forward_steps']:
@@ -311,7 +305,16 @@ class Batcher:
             ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
-                return self.episodes[ep_idx]
+                ep = self.episodes[ep_idx]
+                turn_candidates = 1 + max(0, len(ep['moment']) - self.args['forward_steps'])  # change start turn by sequence length
+                st = random.randrange(turn_candidates)
+                ed = min(st + self.args['forward_steps'], len(ep['moment']))
+                ep_minimum = {
+                    'args': ep['args'], 'reward': ep['reward'],
+                    'moment': ep['moment'][st:ed],
+                    'start': st, 'end': ed, 'total': len(ep['moment'])
+                }
+                return ep_minimum
 
     def batch(self):
         return self.workers.recv()
