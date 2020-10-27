@@ -51,7 +51,6 @@ def make_batch(episodes, args):
     """
 
     obss, datum = [], []
-    steps = args['forward_steps']
 
     for ep in episodes:
         ep = pickle.loads(bz2.decompress(ep))
@@ -61,7 +60,7 @@ def make_batch(episodes, args):
         ep_train_length = len(ep['turn'])
         turn_candidates = 1 + max(0, ep_train_length - args['forward_steps'])  # change start turn by sequence length
         st = random.randrange(turn_candidates)
-        ed = min(st + steps, len(ep['turn']))
+        ed = min(st + args['forward_steps'], len(ep['turn']))
 
         obs_zeros = map_r(ep['observation'][ep['turn'][0]][0], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
@@ -90,8 +89,8 @@ def make_batch(episodes, args):
         ret = np.array(ep['reward'], dtype=np.float32).reshape(1, -1)
 
         # pad each array if step length is short
-        if traj_steps < steps:
-            pad_len = steps - traj_steps
+        if traj_steps < args['forward_steps']:
+            pad_len = args['forward_steps'] - traj_steps
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             v = np.concatenate([v, np.tile(ret, [pad_len, 1])])
             tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
@@ -276,11 +275,13 @@ class Batcher:
         self.gpu = gpu
         self.shutdown_flag = False
 
-        # self.workers = MultiProcessWorkers(
-        #     self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
-        #     buffer_length=self.args['batch_size'] * 3, num_receivers=2
-        # )
-        self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
+        if self.args['use_batcher_process']:
+            self.workers = MultiProcessWorkers(
+                self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+                buffer_length=self.args['batch_size'] * 3, num_receivers=2
+            )
+        else:
+            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
 
     def _selector(self):
         while True:
