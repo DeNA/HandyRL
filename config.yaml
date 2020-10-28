@@ -9,6 +9,7 @@ env_args:
 train_args:
     remote: False
     observation: False
+    gamma: 1.0
     forward_steps: 16
     entropy_regularization: 3.0e-1
     update_episodes: 2000
@@ -21,7 +22,7 @@ train_args:
     worker:
         num_gather: 2
         num_process: 6
-    return: 'TDLAMBDA' #'MC' 'TD0'
+    algorithm: 'VTRACE' # 'LAMBDA-TRACE' 'MC'
     seed: 0
 
 

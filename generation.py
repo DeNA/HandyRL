@@ -22,12 +22,14 @@ class Generator:
         # episode generation
         behaviors, pmasks = [], []
         turns, policies = [], []
+        rewards = {}
         observations, values = {}, {}
         hidden = {}
         for index, player in enumerate(self.env.players()):
             hidden[player] = models[player].init_hidden()
             observations[index] = []
             values[index] = []
+            rewards[index] = []
 
         err = self.env.reset()
         if err:
@@ -66,15 +68,25 @@ class Generator:
             if err:
                 return None
 
+            reward = self.env.reward()
+            for index, player in enumerate(self.env.players()):
+                rewards[index].append(reward[player])
+
         if len(turns) < 1:
             return None
 
-        rewards = self.env.reward()
-        rewards = [rewards[player] for player in self.env.players()]
+        returns = {}
+        for index, reward_list in rewards.items():
+            ret = 0
+            return_list = []
+            for reward in reversed(reward_list):
+                ret = ret * self.args['gamma'] + reward
+                return_list.append(ret)
+            returns[index] = list(reversed(return_list))
 
         episode = {
             'args': args, 'observation': observations, 'turn': turns, 'pmask': pmasks,
-            'action': behaviors, 'reward': rewards,
+            'action': behaviors, 'reward': rewards, 'return': returns,
             'policy': policies, 'value': values
         }
 

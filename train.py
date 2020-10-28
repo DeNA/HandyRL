@@ -77,6 +77,14 @@ def make_batch(episodes, args):
             [[ep['value'][player][t] or 0 for player in players] for t in range(st, ed)],
             dtype=np.float32
         ).reshape(-1, len(players))
+        rew = np.array(
+            [[ep['reward'][player][t] for player in players] for t in range(st, ed)],
+            dtype=np.float32
+        ).reshape(-1, len(players))
+        ret = np.array(
+            [[ep['return'][player][t] for player in players] for t in range(st, ed)],
+            dtype=np.float32
+        ).reshape(-1, len(players))
         tmsk = np.eye(len(players))[ep['turn'][st:ed]]
         pmsk = np.array(ep['pmask'][st:ed])
         vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
@@ -85,14 +93,13 @@ def make_batch(episodes, args):
         p = np.array(ep['policy'][st:ed])
         progress = np.arange(st, ed, dtype=np.float32) / len(ep['turn'])
 
-        traj_steps = len(tmsk)
-        ret = np.array(ep['reward'], dtype=np.float32).reshape(1, -1)
-
         # pad each array if step length is short
-        if traj_steps < args['forward_steps']:
-            pad_len = args['forward_steps'] - traj_steps
+        if len(tmsk) < args['forward_steps']:
+            pad_len = args['forward_steps'] - len(tmsk)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            v = np.concatenate([v, np.tile(ret, [pad_len, 1])])
+            v = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             pmsk = np.pad(pmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
             vmsk = np.pad(vmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
@@ -101,9 +108,9 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(0, pad_len)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((tmsk, pmsk, vmsk, act, p, v, ret, progress))
+        datum.append((tmsk, pmsk, vmsk, act, p, v, rew, ret, progress))
 
-    tmsk, pmsk, vmsk, act, p, v, ret, progress = zip(*datum)
+    tmsk, pmsk, vmsk, act, p, v, rew, ret, progress = zip(*datum)
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)), transpose=True)
     tmsk = to_torch(np.array(tmsk), transpose=True)
@@ -112,12 +119,15 @@ def make_batch(episodes, args):
     act = to_torch(np.array(act), transpose=True)
     p = to_torch(np.array(p), transpose=True)
     v = to_torch(np.array(v), transpose=True)
+    rew = to_torch(np.array(rew), transpose=True)
     ret = to_torch(np.array(ret), transpose=True)
     progress = to_torch(np.array(progress), transpose=True)
 
     return {
         'observation': obs, 'tmask': tmsk, 'pmask': pmsk, 'vmask': vmsk,
-        'action': act, 'policy': p, 'value': v, 'return': ret, 'progress': progress,
+        'action': act, 'policy': p, 'value': v,
+        'reward': rew, 'return': ret,
+        'progress': progress,
     }
 
 
@@ -219,48 +229,56 @@ def vtrace_base(batch, model, hidden, args):
             values_nograd = (values_nograd + values_nograd_opponent) / 2
         else:
             values_nograd = values_nograd + values_nograd_opponent
+            # Be careful, vmask in batch is changed here
+            batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
 
     values_nograd = values_nograd * gmasks + batch['return'] * (1 - gmasks)
 
-    return t_policies, t_values, log_selected_t_policies, values_nograd, clipped_rhos, cs
+    return batch, t_policies, t_values, log_selected_t_policies, values_nograd, clipped_rhos, cs
 
 
 def vtrace(batch, model, hidden, args):
     # IMPALA
     # https://github.com/deepmind/scalable_agent/blob/master/vtrace.py
 
-    t_policies, t_values, log_selected_t_policies, values_nograd, clipped_rhos, cs = vtrace_base(batch, model, hidden, args)
-    returns = batch['return']
+    batch, t_policies, t_values, log_selected_t_policies, values_nograd, clipped_rhos, cs = \
+        vtrace_base(batch, model, hidden, args)
+    returns, rewards = batch['return'], batch['reward']
     time_length = batch['vmask'].size(0)
 
-    if args['return'] == 'MC':
+    if args['algorithm'] == 'MC':
         # VTrace with naive advantage
         value_targets = returns
         advantages = clipped_rhos * (returns - values_nograd)
-    elif args['return'] == 'TD0':
-        values_t_plus_1 = torch.cat([values_nograd[1:], returns])
-        deltas = clipped_rhos * (values_t_plus_1 - values_nograd)
+
+    elif args['algorithm'] == 'VTRACE':
+        values_t_plus_1 = torch.cat([values_nograd[1:], returns[-1:]])
+        deltas = clipped_rhos * (rewards + args['gamma'] * values_t_plus_1 - values_nograd)
 
         # compute Vtrace value target recursively
         vs_minus_v_xs = deque([deltas[-1]])
         for i in range(time_length - 2, -1, -1):
-            vs_minus_v_xs.appendleft(deltas[i] + cs[i] * vs_minus_v_xs[0])
+            vs_minus_v_xs.appendleft(deltas[i] + args['gamma'] * cs[i] * vs_minus_v_xs[0])
         vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs))
         vs = vs_minus_v_xs + values_nograd
 
         # compute policy advantage
         value_targets = vs
-        vs_t_plus_1 = torch.cat([vs[1:], returns])
-        advantages = clipped_rhos * (vs_t_plus_1 - values_nograd)
-    elif args['return'] == 'TDLAMBDA':
+        vs_t_plus_1 = torch.cat([vs[1:], returns[-1:]])
+        advantages = clipped_rhos * (rewards + args['gamma'] * vs_t_plus_1 - values_nograd)
+
+    elif args['algorithm'] == 'LAMBDA-TRACE':
         lmb = 0.7
         lambda_returns = deque([returns[-1]])
-        for i in range(time_length - 1, 0, -1):
-            lambda_returns.appendleft((1 - lmb) * values_nograd[i] + lmb * lambda_returns[0])
+        for i in range(time_length - 2, -1, -1):
+            vmasks_t = batch['vmask'][i + 1]
+            mod_value = ((1 - lmb) * values_nograd[i + 1] + lmb * lambda_returns[0]) * vmasks_t + \
+                        returns[i] * (1 - vmasks_t)
+            lambda_returns.appendleft(mod_value)
         lambda_returns = torch.stack(tuple(lambda_returns))
 
         value_targets = lambda_returns
-        advantages = clipped_rhos * (value_targets - values_nograd)
+        advantages = clipped_rhos * (rewards + args['gamma'] * value_targets - values_nograd)
 
     return compose_losses(
         t_policies, t_values, log_selected_t_policies, advantages, value_targets,
