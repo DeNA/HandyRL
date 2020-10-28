@@ -141,7 +141,7 @@ def forward_prediction(model, hidden, batch, obs_mode):
         t_policies, t_values, _ = model(obs, None)
     else:
         # sequential computation with RNN
-        bmask = batch['tmask'] + batch['vmask']  # (T, B, P)
+        bmask = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (T, B, P)
         bmasks = map_r(hidden, lambda h: bmask.view(-1, 1, *bmask.size()[1:3], *([1] * (len(h.size()) - 3))))  # (..., T, L(1), B, P, ...)
         hidden_shape = map_r(hidden, lambda h: h.size())
 
