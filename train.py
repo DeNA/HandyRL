@@ -252,7 +252,8 @@ def vtrace(batch, model, hidden, args):
         advantages = clipped_rhos * (returns - values_nograd)
 
     elif args['algorithm'] == 'VTRACE':
-        values_t_plus_1 = torch.cat([values_nograd[1:], returns[-1:]])
+        next_values = returns[-1:] - rewards[-1:]
+        values_t_plus_1 = torch.cat([values_nograd[1:], next_values])
         deltas = clipped_rhos * (rewards + args['gamma'] * values_t_plus_1 - values_nograd)
 
         # compute Vtrace value target recursively
@@ -264,7 +265,7 @@ def vtrace(batch, model, hidden, args):
 
         # compute policy advantage
         value_targets = vs
-        vs_t_plus_1 = torch.cat([vs[1:], returns[-1:]])
+        vs_t_plus_1 = torch.cat([vs[1:], next_values])
         advantages = clipped_rhos * (rewards + args['gamma'] * vs_t_plus_1 - values_nograd)
 
     elif args['algorithm'] == 'LAMBDA-TRACE':
