@@ -346,7 +346,7 @@ class Environment(BaseEnvironment):
             1 if color == self.BLACK else 0,  # black is color to move
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
-            *[(1 if nbcolor == i else 0) for i in range(1, 5)],
+            *[(1 if nrcolor == i else 0) for i in range(1, 5)],
             *[(1 if nbopp   == i else 0) for i in range(1, 5)],
             *[(1 if nropp   == i else 0) for i in range(1, 5)],
         ]).astype(np.float32)
