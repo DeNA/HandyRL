@@ -179,9 +179,10 @@ def exec_match(env, agents, critic, show=False, game_args={}):
             return None
         if show:
             view_transition(env)
+    reward = env.reward()
     if show:
-        print('final reward = %s' % env.reward())
-    return env.reward()
+        print('final reward = %s' % reward)
+    return reward
 
 
 def exec_io_match(env, io_agents, critic, show=False, game_args={}):
