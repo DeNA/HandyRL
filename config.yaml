@@ -9,7 +9,7 @@ env_args:
 train_args:
     remote: False
     observation: False
-    gamma: 1.0
+    gamma: 0.8
     forward_steps: 16
     entropy_regularization: 3.0e-1
     update_episodes: 2000

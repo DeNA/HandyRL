@@ -252,7 +252,7 @@ class BaseModel(nn.Module):
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None
+        return np.zeros(self.action_length), np.zeros(1), None, None
 
 
 class DuelingNet(BaseModel):
@@ -268,11 +268,13 @@ class DuelingNet(BaseModel):
         self.body = WideResNet(layers, filters)
         self.head_p = Head(internal_size, 2, self.action_length)
         self.head_v = Head(internal_size, 1, 1)
+        self.head_r = Head(internal_size, 1, 1)
 
     def forward(self, x, hidden=None):
         h = self.encoder(x)
         h = self.body(h)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
+        h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), None
+        return h_p, torch.tanh(h_v), h_r, None

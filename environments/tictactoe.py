@@ -80,13 +80,30 @@ class Environment(BaseEnvironment):
         return self.win_color != 0 or len(self.record) == 3 * 3
 
     def reward(self):
-        # terminal reward
-        rewards = [0, 0]
-        if self.win_color > 0:
-            rewards = [1, -1]
-        if self.win_color < 0:
-            rewards = [-1, 1]
+        # immediate reward
+        if len(self.record) == 0:
+            rewards = [0, 0]
+        else:
+            action = self.record[-1]
+            x, y = action // 3, action % 3
+            if x == 1 and y == 1:
+                rewards = [0.1, 0]
+            elif (x == 0 or x == 2) and (y == 0 or y == 2):
+                rewards = [0.05, 0]
+            else:
+                rewards = [0, 0]
+        if self.color > 0:
+            rewards = list(reversed(rewards))
         return {p: rewards[idx] for idx, p in enumerate(self.players())}
+
+    def outcome(self):
+        # terminal outcome
+        outcomes = [0, 0]
+        if self.win_color > 0:
+            outcomes = [1, -1]
+        if self.win_color < 0:
+            outcomes = [-1, 1]
+        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self):
         # legal action list

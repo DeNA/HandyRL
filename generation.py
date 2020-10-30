@@ -47,7 +47,7 @@ class Generator:
                 if player == self.env.turn() or self.args['observation']:
                     observation = self.env.observation(player)
                     model = models[player]
-                    p, v, hidden[player] = model.inference(observation, hidden[player])
+                    p, v, _, hidden[player] = model.inference(observation, hidden[player])
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
                         pmask = np.ones_like(p) * 1e32
@@ -84,10 +84,13 @@ class Generator:
                 return_list.append(ret)
             returns[index] = list(reversed(return_list))
 
+        outcomes = self.env.outcome()
+        outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
+
         episode = {
             'args': args, 'observation': observations, 'turn': turns, 'pmask': pmasks,
-            'action': behaviors, 'reward': rewards, 'return': returns,
-            'policy': policies, 'value': values
+            'action': behaviors, 'reward': rewards, 'return': returns, 'outcome': outcomes,
+            'policy': policies, 'value': values,
         }
 
         return bz2.compress(pickle.dumps(episode))

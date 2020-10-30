@@ -81,7 +81,7 @@ class Agent:
         self.hidden = self.planner.init_hidden()
 
     def action(self, env, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+        p, v, _, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
         actions = env.legal_actions()
         if show:
             view(env, player=env.turn())
@@ -91,7 +91,7 @@ class Agent:
 
     def observe(self, env, player, show=False):
         if self.observation:
-            _, v, self.hidden = self.planner.inference(env.observation(player), self.hidden)
+            _, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
         if show:
             view(env, player=player)
             if self.observation:
@@ -100,7 +100,7 @@ class Agent:
 
 class SoftAgent(Agent):
     def action(self, env, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+        p, v, _, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
         actions = env.legal_actions()
         prob = softmax(p, actions)
         if show:
@@ -120,8 +120,8 @@ class IOAgentClient:
             command, args = self.conn.recv()
             if command == 'quit':
                 break
-            elif command == 'reward':
-                print('reward = %f' % args[0])
+            elif command == 'outcome':
+                print('outcome = %f' % args[0])
             elif hasattr(self.agent, command):
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
@@ -147,8 +147,8 @@ class IOAgent:
     def play(self, data):
         return send_recv(self.conn, ('play_info', [data]))
 
-    def reward(self, reward):
-        return send_recv(self.conn, ('reward', [reward]))
+    def outcome(self, outcome):
+        return send_recv(self.conn, ('outcome', [outcome]))
 
     def action(self):
         return send_recv(self.conn, ('action', []))
@@ -179,9 +179,10 @@ def exec_match(env, agents, critic, show=False, game_args={}):
             return None
         if show:
             view_transition(env)
+    outcome = env.outcome()
     if show:
-        print('final reward = %s' % env.reward())
-    return env.reward()
+        print('final outcome = %s' % outcome)
+    return outcome
 
 
 def exec_io_match(env, io_agents, critic, show=False, game_args={}):
@@ -212,10 +213,10 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
         info = env.diff_info()
         for agent in io_agents.values():
             agent.play(info)
-    reward = env.reward()
+    outcome = env.outcome()
     for p, agent in io_agents.items():
-        agent.reward(reward[p])
-    return reward
+        agent.outcome(outcome[p])
+    return outcome
 
 
 class Evaluator:
@@ -231,12 +232,12 @@ class Evaluator:
                 agents[p] = self.default_agent
             else:
                 agents[p] = Agent(model, self.args['observation'])
-        reward = exec_match(self.env, agents, None)
-        if reward is None:
+        outcome = exec_match(self.env, agents, None)
+        if outcome is None:
             print('None episode in evaluation!')
         else:
-            reward = reward[args['player']]
-        return reward
+            outcome = outcome[args['player']]
+        return outcome
 
 
 def wp_func(results):
@@ -258,10 +259,10 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         print('*** Game %d ***' % g)
         agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
         if isinstance(list(agent_map.values())[0], IOAgent):
-            reward = exec_io_match(env, agent_map, critic, show=show, game_args=game_args)
+            outcome = exec_io_match(env, agent_map, critic, show=show, game_args=game_args)
         else:
-            reward = exec_match(env, agent_map, critic, show=show, game_args=game_args)
-        out_queue.put((pat_idx, agent_ids, reward))
+            outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
+        out_queue.put((pat_idx, agent_ids, outcome))
     out_queue.put(None)
 
 
@@ -310,13 +311,13 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
         if ret is None:
             finished_cnt += 1
             continue
-        pat_idx, agent_ids, reward = ret
-        if reward is not None:
+        pat_idx, agent_ids, outcome = ret
+        if outcome is not None:
             for idx, p in enumerate(env.players()):
                 agent_id = agent_ids[idx]
-                r = reward[p]
-                result_map[agent_id][pat_idx][r] = result_map[agent_id][pat_idx].get(r, 0) + 1
-                total_results[agent_id][r] = total_results[agent_id].get(r, 0) + 1
+                oc = outcome[p]
+                result_map[agent_id][pat_idx][oc] = result_map[agent_id][pat_idx].get(oc, 0) + 1
+                total_results[agent_id][oc] = total_results[agent_id].get(oc, 0) + 1
 
     for p, r_map in enumerate(result_map):
         print('---agent %d---' % p)
