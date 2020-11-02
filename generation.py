@@ -20,16 +20,10 @@ class Generator:
 
     def generate(self, models, args):
         # episode generation
-        behaviors, pmasks = [], []
-        turns, policies = [], []
-        rewards = {}
-        observations, values = {}, {}
+        moments = []
         hidden = {}
-        for index, player in enumerate(self.env.players()):
+        for player in self.env.players():
             hidden[player] = models[player].init_hidden()
-            observations[index] = []
-            values[index] = []
-            rewards[index] = []
 
         err = self.env.reset()
         if err:
@@ -42,27 +36,30 @@ class Generator:
             if self.env.terminal():
                 break
 
+            moment = {'observation': {}, 'value': {}, 'reward': {}, 'return': {}}
+
             for index, player in enumerate(self.env.players()):
-                observation, v = None, None
+                obs, v = None, None
                 if player == self.env.turn() or self.args['observation']:
-                    observation = self.env.observation(player)
+                    obs = self.env.observation(player)
                     model = models[player]
-                    p, v, _, hidden[player] = model.inference(observation, hidden[player])
+                    p, v,  _, hidden[player] = model.inference(obs, hidden[player])
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
                         pmask = np.ones_like(p) * 1e32
                         pmask[legal_actions] = 0
                         p_turn = p - pmask
                         index_turn = index
-                observations[index].append(observation)
-                values[index].append(v)
+                moment['observation'][index] = obs
+                moment['value'][index] = v
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
-            policies.append(p_turn)
-            pmasks.append(pmask)
-            turns.append(index_turn)
-            behaviors.append(action)
+            moment['policy'] = p_turn
+            moment['pmask'] = pmask
+            moment['turn'] = index_turn
+            moment['action'] = action
+            moments.append(moment)
 
             err = self.env.play(action)
             if err:
@@ -70,30 +67,26 @@ class Generator:
 
             reward = self.env.reward()
             for index, player in enumerate(self.env.players()):
-                rewards[index].append(reward[player])
+                moment['reward'][index] = reward[player]
 
-        if len(turns) < 1:
+        if len(moments) < 1:
             return None
 
-        returns = {}
-        for index, reward_list in rewards.items():
+        for index, player in enumerate(self.env.players()):
             ret = 0
-            return_list = []
-            for reward in reversed(reward_list):
-                ret = ret * self.args['gamma'] + reward
-                return_list.append(ret)
-            returns[index] = list(reversed(return_list))
+            for i, m in reversed(list(enumerate(moments))):
+                ret = m['reward'][index] + self.args['gamma'] * ret
+                moments[i]['return'][index] = ret
 
         outcomes = self.env.outcome()
         outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
 
         episode = {
-            'args': args, 'observation': observations, 'turn': turns, 'pmask': pmasks,
-            'action': behaviors, 'reward': rewards, 'return': returns, 'outcome': outcomes,
-            'policy': policies, 'value': values,
+            'args': args, 'outcome': outcomes,
+            'moment': [bz2.compress(pickle.dumps(m)) for m in moments],
         }
 
-        return bz2.compress(pickle.dumps(episode))
+        return episode
 
     def execute(self, models, args):
         episode = self.generate(models, args)
