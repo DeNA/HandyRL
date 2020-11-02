@@ -67,7 +67,7 @@ class Generator:
 
             reward = self.env.reward()
             for index, player in enumerate(self.env.players()):
-                moment['reward'][index] = reward[player]
+                moment['reward'][index] = reward.get(player, None)
 
         if len(moments) < 1:
             return None
@@ -75,7 +75,7 @@ class Generator:
         for index, player in enumerate(self.env.players()):
             ret = 0
             for i, m in reversed(list(enumerate(moments))):
-                ret = m['reward'][index] + self.args['gamma'] * ret
+                ret = (m['reward'][index] or 0) + self.args['gamma'] * ret
                 moments[i]['return'][index] = ret
 
         outcomes = self.env.outcome()
