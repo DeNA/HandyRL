@@ -70,7 +70,7 @@ class Generator:
 
             reward = self.env.reward()
             for index, player in enumerate(self.env.players()):
-                rewards[index].append(reward[player])
+                rewards[index].append(reward.get(player, None))
 
         if len(turns) < 1:
             return None
@@ -80,7 +80,7 @@ class Generator:
             ret = 0
             return_list = []
             for reward in reversed(reward_list):
-                ret = ret * self.args['gamma'] + reward
+                ret = ret * self.args['gamma'] + (reward or 0)
                 return_list.append(ret)
             returns[index] = list(reversed(return_list))
 

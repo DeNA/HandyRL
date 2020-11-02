@@ -276,7 +276,7 @@ class Environment(BaseEnvironment):
 
     def reward(self):
         # return immediate rewards
-        return {p: 0 for idx, p in enumerate(self.players())}
+        return {p: -0.01 for p in self.players()}
 
     def outcome(self):
         # return terminal outcomes

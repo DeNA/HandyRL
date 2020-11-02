@@ -245,7 +245,7 @@ class BaseModel(nn.Module):
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
-            [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
+            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] + \
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(1)) if outputs[-1] is not None else None]
         )
 
@@ -268,13 +268,11 @@ class DuelingNet(BaseModel):
         self.body = WideResNet(layers, filters)
         self.head_p = Head(internal_size, 2, self.action_length)
         self.head_v = Head(internal_size, 1, 1)
-        self.head_r = Head(internal_size, 1, 1)
 
     def forward(self, x, hidden=None):
         h = self.encoder(x)
         h = self.body(h)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
-        h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), h_r, None
+        return h_p, torch.tanh(h_v), None, None
