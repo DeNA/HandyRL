@@ -1,7 +1,7 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
 
-# implementation of Tic-Tac-Toe
+# implementation of Parallel Tic-Tac-Toe
 
 import copy
 import random
@@ -22,9 +22,8 @@ class Environment(BaseEnvironment):
 
     def reset(self, args=None):
         self.board = np.zeros((3, 3))  # (x, y)
-        self.color = self.BLACK
         self.win_color = 0
-        self.record = []
+        self.turn_count = 0
 
     def action2str(self, a):
         return self.X[a // 3] + self.Y[a % 3]
@@ -32,52 +31,41 @@ class Environment(BaseEnvironment):
     def str2action(self, s):
         return self.X.find(s[0]) * 3 + self.Y.find(s[1])
 
-    def record_string(self):
-        return ' '.join([self.action2str(a) for a in self.record])
-
     def __str__(self):
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(3):
             s += self.X[i] + ' ' + ' '.join([self.C[self.board[i, j]] for j in range(3)]) + '\n'
-        s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action, _=None):
+    def plays(self, actions):
         # state transition function
         # action is integer (0 ~ 8) or string (sequence)
-        if isinstance(action, str):
-            for astr in action.split():
-                self.play(self.str2action(astr))
-            return
+
+        selected_player = random.choice(list(actions.keys()))
+        selected_color = [self.BLACK, self.WHITE][selected_player]
+        action = actions[selected_player]
 
         x, y = action // 3, action % 3
-        self.board[x, y] = self.color
+        self.board[x, y] = selected_color
 
         # check winning condition
-        if self.board[x, :].sum() == 3 * self.color \
-          or self.board[:, y].sum() == 3 * self.color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color):
-            self.win_color = self.color
+        if self.board[x, :].sum() == 3 * selected_color \
+          or self.board[:, y].sum() == 3 * selected_color \
+          or (x == y and np.diag(self.board, k=0).sum() == 3 * selected_color) \
+          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * selected_color):
+            self.win_color = selected_color
 
-        self.color = -self.color
-        self.record.append(action)
-
-    def diff_info(self):
-        if len(self.record) == 0:
-            return ""
-        return self.action2str(self.record[-1])
-
-    def play_info(self, info):
-        if info != "":
-            self.play(info)
+        self.turn_count += 1
 
     def turn(self):
-        return self.players()[len(self.record) % 2]
+        return NotImplementedError()
+
+    def turns(self):
+        return self.players()
 
     def terminal(self):
         # check whether the state is terminal
-        return self.win_color != 0 or len(self.record) == 3 * 3
+        return self.win_color != 0 or self.turn_count == 3 * 3
 
     def reward(self):
         # terminal reward
@@ -88,7 +76,7 @@ class Environment(BaseEnvironment):
             rewards = [-1, 1]
         return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
-    def legal_actions(self, _=None):
+    def legal_actions(self, player):
         # legal action list
         return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
@@ -101,10 +89,9 @@ class Environment(BaseEnvironment):
 
     def observation(self, player=None):
         # input feature for neural nets
-        turn_view = player is None or player == self.turn()
-        color = self.color if turn_view else -self.color
+        player = player if player is not None else 0
+        color = [self.BLACK, self.WHITE][player]
         a = np.stack([
-            np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
             self.board == color,
             self.board == -color
         ]).astype(np.float32)
@@ -117,8 +104,11 @@ if __name__ == '__main__':
         e.reset()
         while not e.terminal():
             print(e)
-            actions = e.legal_actions()
-            print([e.action2str(a) for a in actions])
-            e.play(random.choice(actions))
+            action_map = {}
+            for p in e.turns():
+                actions = e.legal_actions(p)
+                print([e.action2str(a) for a in actions])
+                action_map[p] = random.choice(actions)
+            e.plays(action_map)
         print(e)
         print(e.reward())

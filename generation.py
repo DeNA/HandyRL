@@ -36,32 +36,31 @@ class Generator:
             if self.env.terminal():
                 break
 
-            moment = {'observation': {}, 'value': {}}
+            moment = {'observation': {}, 'policy': {}, 'value': {}, 'pmask': {}, 'action': {}}
 
+            turn_players = self.env.turns()
             for index, player in enumerate(self.env.players()):
-                obs, v = None, None
-                if player == self.env.turn() or self.args['observation']:
+                obs, p, v, pmask, action = None, None, None, None, None
+                if player in turn_players or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p, v, hidden[player] = model.inference(obs, hidden[player])
-                    if player == self.env.turn():
-                        legal_actions = self.env.legal_actions()
-                        pmask = np.ones_like(p) * 1e32
+                    p_, v, hidden[player] = model.inference(obs, hidden[player])
+                    if player in turn_players:
+                        legal_actions = self.env.legal_actions(player)
+                        pmask = np.ones_like(p_) * 1e32
                         pmask[legal_actions] = 0
-                        p_turn = p - pmask
-                        index_turn = index
+                        p = p_ - pmask
+                        action = random.choices(legal_actions, weights=softmax(p[legal_actions]))[0]
+
                 moment['observation'][index] = obs
                 moment['value'][index] = v
+                moment['policy'][index] = p
+                moment['pmask'][index] = pmask
+                moment['action'][index] = action
 
-            action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
-
-            moment['policy'] = p_turn
-            moment['pmask'] = pmask
-            moment['turn'] = index_turn
-            moment['action'] = action
             moments.append(bz2.compress(pickle.dumps(moment)))
 
-            err = self.env.play(action)
+            err = self.env.plays(moment['action'])
             if err:
                 return None
 

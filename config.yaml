@@ -1,9 +1,11 @@
 
 env_args:
-    env: 'TicTacToe'
-    source: 'environments.tictactoe'
+    #env: 'TicTacToe'
+    #source: 'environments.tictactoe'
     #env: 'Geister'
     #source: 'environments.geister'
+    env: 'ParallelTicTacToe'
+    source: 'environments.parallel_tictactoe'
 
 
 train_args:
