@@ -53,37 +53,32 @@ def make_batch(episodes, args):
     obss, datum = [], []
 
     for ep in episodes:
-        ep = pickle.loads(bz2.decompress(ep))
-
         # target player and turn index
-        players = sorted([player for player in ep['value'].keys() if player >= 0])
-        ep_train_length = len(ep['turn'])
-        turn_candidates = 1 + max(0, ep_train_length - args['forward_steps'])  # change start turn by sequence length
-        st = random.randrange(turn_candidates)
-        ed = min(st + args['forward_steps'], len(ep['turn']))
+        moments = [pickle.loads(bz2.decompress(m)) for m in ep['moment']]
+        players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
 
-        obs_zeros = map_r(ep['observation'][ep['turn'][0]][0], lambda o: np.zeros_like(o))  # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
-            obs = [[(lambda x : (x if x is not None else obs_zeros))(ep['observation'][pl][t]) for pl in players] for t in range(st, ed)]
+            obs = [[(lambda x : (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
         else:
-            obs = [[ep['observation'][ep['turn'][t]][t]] for t in range(st, ed)]
+            obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
         obs = rotate(obs)  # (T, ..., P, ...) -> (..., P, T, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
         v = np.array(
-            [[ep['value'][player][t] or 0 for player in players] for t in range(st, ed)],
+            [[m['value'][player] or 0 for player in players] for m in moments],
             dtype=np.float32
         ).reshape(-1, len(players))
-        tmsk = np.eye(len(players))[ep['turn'][st:ed]]
-        pmsk = np.array(ep['pmask'][st:ed])
+        tmsk = np.eye(len(players))[[m['turn'] for m in moments]]
+        pmsk = np.array([m['pmask'] for m in moments])
         vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
 
-        act = np.array(ep['action'][st:ed]).reshape(-1, 1)
-        p = np.array(ep['policy'][st:ed])
-        progress = np.arange(st, ed, dtype=np.float32) / len(ep['turn'])
+        act = np.array([m['action'] for m in moments]).reshape(-1, 1)
+        p = np.array([m['policy'] for m in moments])
+        progress = np.arange(ep['start'], ep['end'], dtype=np.float32) / ep['total']
 
         traj_steps = len(tmsk)
         ret = np.array(ep['reward'], dtype=np.float32).reshape(1, -1)
@@ -310,7 +305,16 @@ class Batcher:
             ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
-                return self.episodes[ep_idx]
+                ep = self.episodes[ep_idx]
+                turn_candidates = 1 + max(0, len(ep['moment']) - self.args['forward_steps'])  # change start turn by sequence length
+                st = random.randrange(turn_candidates)
+                ed = min(st + self.args['forward_steps'], len(ep['moment']))
+                ep_minimum = {
+                    'args': ep['args'], 'reward': ep['reward'],
+                    'moment': ep['moment'][st:ed],
+                    'start': st, 'end': ed, 'total': len(ep['moment'])
+                }
+                return ep_minimum
 
     def batch(self):
         return self.workers.recv()
