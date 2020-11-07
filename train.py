@@ -98,7 +98,7 @@ def make_batch(episodes, args):
         if len(tmsk) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmsk)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            v = np.pad(v, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            v = np.concatenate([v, np.tile(oc, [pad_len, 1])])
             rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
