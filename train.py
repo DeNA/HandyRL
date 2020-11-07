@@ -241,7 +241,7 @@ def vtrace_base(batch, model, hidden, args):
             # Be careful, vmask in batch is changed here
             batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
 
-    values_nograd = values_nograd * gmasks + batch['return'] * (1 - gmasks)
+    values_nograd = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
     return batch, t_policies, t_values, t_returns, log_selected_t_policies, \
         values_nograd, returns_nograd, clipped_rhos, cs
@@ -303,10 +303,7 @@ def vtrace(batch, model, hidden, args):
         lambda_values = deque([outcomes[-1]])
 
         for i in range(time_length - 2, -1, -1):
-            vmasks_t = batch['vmask'][i + 1]
-            mod_value = ((1 - lmb) * values_nograd[i + 1] + lmb * lambda_values[0]) * vmasks_t + \
-                        outcomes[-1] * (1 - vmasks_t)
-            lambda_values.appendleft(mod_value)
+            lambda_values.appendleft((1 - lmb) * values_nograd[i + 1] + lmb * lambda_values[0])
 
         lambda_values = torch.stack(tuple(lambda_values))
         value_targets = lambda_values
