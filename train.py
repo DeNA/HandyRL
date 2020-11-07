@@ -98,7 +98,7 @@ def make_batch(episodes, args):
         if len(tmsk) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmsk)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            v = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            v = np.pad(v, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
@@ -305,12 +305,12 @@ def vtrace(batch, model, hidden, args):
 
     elif args['algorithm'] == 'LAMBDA-TRACE':
         lmb = 0.7
-        lambda_values = deque([outcomes])
+        lambda_values = deque([outcomes[-1]])
 
         for i in range(time_length - 2, -1, -1):
             vmasks_t = batch['vmask'][i + 1]
             mod_value = ((1 - lmb) * values_nograd[i + 1] + lmb * lambda_values[0]) * vmasks_t + \
-                        outcomes * (1 - vmasks_t)
+                        outcomes[-1] * (1 - vmasks_t)
             lambda_values.appendleft(mod_value)
 
         lambda_values = torch.stack(tuple(lambda_values))
