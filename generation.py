@@ -10,7 +10,6 @@ import pickle
 import numpy as np
 
 from model import softmax
-from connection import send_recv
 
 
 class Generator:
