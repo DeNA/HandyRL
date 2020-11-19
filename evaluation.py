@@ -193,7 +193,6 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
     for agent in io_agents.values():
         agent.reset(info)
     while not env.terminal():
-        agent = io_agents[env.turn()]
         if env.chance():
             return None
         info = env.diff_info()

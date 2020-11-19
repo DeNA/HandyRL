@@ -10,7 +10,6 @@ import pickle
 import numpy as np
 
 from model import softmax
-from connection import send_recv
 
 
 class Generator:
@@ -43,7 +42,7 @@ class Generator:
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p, v,  _, hidden[player] = model.inference(obs, hidden[player])
+                    p, v, _, hidden[player] = model.inference(obs, hidden[player])
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
                         pmask = np.ones_like(p) * 1e32
