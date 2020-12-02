@@ -23,6 +23,7 @@ train_args:
         num_process: 6
     return: 'TDLAMBDA' #'MC' 'TD0'
     seed: 0
+    restart_epoch: 0
 
 
 entry_args:

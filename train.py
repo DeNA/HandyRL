@@ -436,10 +436,14 @@ class Learner:
         self.shutdown_flag = False
 
         # trained datum
-        self.model_era = 0
+        self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        self.model = RandomModel(self.env)
         train_model = self.model_class(self.env, args)
+        if self.model_era == 0:
+            self.model = RandomModel(self.env)
+        else:
+            self.model = train_model
+            self.model.load_state_dict(torch.load(self.model_path(self.model_era)))
 
         # generated datum
         self.num_episodes = 0
