@@ -28,7 +28,7 @@ import torch.optim as optim
 
 import environment as gym
 from util import map_r, bimap_r, trimap_r, rotate, type_r
-from model import to_torch, to_gpu_or_not, RandomModel
+from model import load_model, to_torch, to_gpu_or_not, RandomModel
 from model import DuelingNet as Model
 from connection import MultiProcessWorkers, MultiThreadWorkers
 from connection import accept_socket_connections
@@ -570,7 +570,7 @@ class Learner:
                         else:
                             try:
                                 model = self.model_class(self.env, self.args)
-                                model.load_state_dict(torch.load(self.model_path(model_id)))
+                                model = load_model(model, self.model_path(model_id))
                             except:
                                 # return latest model if failed to load specified model
                                 pass

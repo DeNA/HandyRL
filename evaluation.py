@@ -348,10 +348,10 @@ def io_match_acception(n, env_args, num_agents, port):
 
 
 def get_model(env, model_path):
-    import torch
     from model import DuelingNet as Model
+    from model import load_model
     model = env.net()(env) if hasattr(env, 'net') else Model(env)
-    model.load_state_dict(torch.load(model_path))
+    model = load_model(model, model_path)
     model.eval()
     return model
 
