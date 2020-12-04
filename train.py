@@ -248,7 +248,7 @@ def vtrace(batch, model, hidden, args):
         vs_t_plus_1 = torch.cat([vs[1:], returns])
         advantages = clipped_rhos * (vs_t_plus_1 - values_nograd)
     elif args['return'] == 'TDLAMBDA':
-        lmb = 0.7
+        lmb = args['lambda']
         lambda_returns = deque([returns[-1]])
         for i in range(time_length - 1, 0, -1):
             lambda_returns.appendleft((1 - lmb) * values_nograd[i] + lmb * lambda_returns[0])
