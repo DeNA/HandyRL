@@ -300,8 +300,8 @@ def vtrace(batch, model, hidden, args):
 
     elif args['algorithm'] == 'LAMBDA-TRACE':
         lmb = 0.7
-        lambda_values = deque([outcomes[-1]])
 
+        lambda_values = deque([outcomes[-1]])
         for i in range(time_length - 2, -1, -1):
             lambda_values.appendleft((1 - lmb) * values_nograd[i + 1] + lmb * lambda_values[0])
 
@@ -311,7 +311,6 @@ def vtrace(batch, model, hidden, args):
 
         if t_returns is not None:
             lambda_returns = deque([returns[-1]])
-
             for i in range(time_length - 2, -1, -1):
                 lambda_returns.appendleft(rewards[i] + args['gamma'] * ((1 - lmb) * returns_nograd[i + 1] + lmb * lambda_returns[0]))
 
