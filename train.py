@@ -280,7 +280,7 @@ def vtrace(batch, model, hidden, args):
         value_advantages = vs_t_plus_1 - values_nograd
 
         if t_returns is not None:
-            next_returns = returns[-1:] - rewards[-1:]
+            next_returns = (returns[-1:] - rewards[-1:]) / args['gamma']
             returns_t_plus_1 = torch.cat([returns_nograd[1:], next_returns])
             deltas_r = clipped_rhos * (rewards + args['gamma'] * returns_t_plus_1 - returns_nograd)
 
@@ -311,15 +311,13 @@ def vtrace(batch, model, hidden, args):
 
         if t_returns is not None:
             lambda_returns = deque([returns[-1]])
+
             for i in range(time_length - 2, -1, -1):
-                vmasks_t = batch['vmask'][i + 1]
-                mod_return = ((1 - lmb) * returns_nograd[i + 1] + lmb * lambda_returns[0]) * vmasks_t + \
-                             returns[i] * (1 - vmasks_t)
-                lambda_returns.appendleft(mod_return)
+                lambda_returns.appendleft(rewards[i] + args['gamma'] * ((1 - lmb) * returns_nograd[i + 1] + lmb * lambda_returns[0]))
 
             lambda_returns = torch.stack(tuple(lambda_returns))
             return_targets = lambda_returns
-            return_advantages = rewards + args['gamma'] * lambda_returns - returns_nograd
+            return_advantages = lambda_returns - returns_nograd
         else:
             return_targets = None
             return_advantages = 0
