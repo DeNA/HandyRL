@@ -264,19 +264,18 @@ def vtrace(batch, model, hidden, args):
 
 
 class Batcher:
-    def __init__(self, args, episodes, gpu):
+    def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.gpu = gpu
         self.shutdown_flag = False
 
         if self.args['use_batcher_process']:
             self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+                self._worker, self._selector(), self.args['num_batchers'],
                 buffer_length=self.args['batch_size'] * 3, num_receivers=2
             )
         else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
+            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
@@ -293,9 +292,6 @@ class Batcher:
                 conn.send((batch, len(episodes)))
                 episodes = []
         print('finished batcher %d' % bid)
-
-    def _postprocess(self, batch):
-        return to_gpu_or_not(batch, self.gpu)
 
     def run(self):
         self.workers.start()
@@ -337,7 +333,7 @@ class Trainer:
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
-        self.batcher = Batcher(self.args, self.episodes, self.gpu)
+        self.batcher = Batcher(self.args, self.episodes)
         self.updated_model = None, 0
         self.update_flag = False
         self.shutdown_flag = False
@@ -384,7 +380,7 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
-            batch = self.batcher.batch()
+            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
             batch_size = batch['value'].size(1)
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
