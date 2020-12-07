@@ -14,11 +14,7 @@ from util import map_r
 
 
 def load_model(model, model_path):
-    loaded_dict_ = torch.load(model_path)
-    model_dict = model.state_dict()
-    loaded_dict = {k: v for k, v in loaded_dict_.items() if k in model_dict}
-    model_dict.update(loaded_dict)
-    model.load_state_dict(model_dict)
+    model.load_state_dict(torch.load(model_path), strict=False)
     return model
 
 
