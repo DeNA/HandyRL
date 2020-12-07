@@ -439,7 +439,7 @@ class Learner:
             self.model = RandomModel(self.env)
         else:
             self.model = train_model
-            self.model.load_state_dict(torch.load(self.model_path(self.model_era)))
+            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
 
         # generated datum
         self.num_episodes = 0
@@ -570,7 +570,7 @@ class Learner:
                         else:
                             try:
                                 model = self.model_class(self.env, self.args)
-                                model.load_state_dict(torch.load(self.model_path(model_id)))
+                                model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
                                 pass
