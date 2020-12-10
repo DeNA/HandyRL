@@ -1,8 +1,8 @@
-# HandyDistributedRL
+# HandyRL
 
-![](https://github.com/DeNA/HandyDistributedRL/workflows/pytest/badge.svg?branch=master)
+![](https://github.com/DeNA/HandyRL/workflows/pytest/badge.svg?branch=master)
 
-**HandyDistributedRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
+**HandyRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
 
 Note: Python2 is not supported.
 

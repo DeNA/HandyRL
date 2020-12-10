@@ -10,6 +10,7 @@ train_args:
     remote: False
     observation: False
     forward_steps: 16
+    lambda: 0.7
     entropy_regularization: 3.0e-1
     update_episodes: 2000
     batch_size: 128
@@ -23,6 +24,7 @@ train_args:
         num_process: 6
     return: 'TDLAMBDA' #'MC' 'TD0'
     seed: 0
+    restart_epoch: 0
 
 
 entry_args:

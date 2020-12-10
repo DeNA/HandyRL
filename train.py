@@ -247,7 +247,7 @@ def vtrace(batch, model, hidden, args):
         vs_t_plus_1 = torch.cat([vs[:, 1:], returns[:, -1:]], dim=1)
         advantages = clipped_rhos * (vs_t_plus_1 - values_nograd)
     elif args['return'] == 'TDLAMBDA':
-        lmb = 0.7
+        lmb = args['lambda']
         lambda_returns = deque([returns[:, -1]])
         for i in range(time_length - 2, -1, -1):
             lambda_returns.appendleft((1 - lmb) * values_nograd[:, i + 1] + lmb * lambda_returns[0])
@@ -263,19 +263,18 @@ def vtrace(batch, model, hidden, args):
 
 
 class Batcher:
-    def __init__(self, args, episodes, gpu):
+    def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.gpu = gpu
         self.shutdown_flag = False
 
         if self.args['use_batcher_process']:
             self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+                self._worker, self._selector(), self.args['num_batchers'],
                 buffer_length=self.args['batch_size'] * 3, num_receivers=2
             )
         else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
+            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
@@ -292,9 +291,6 @@ class Batcher:
                 conn.send((batch, len(episodes)))
                 episodes = []
         print('finished batcher %d' % bid)
-
-    def _postprocess(self, batch):
-        return to_gpu_or_not(batch, self.gpu)
 
     def run(self):
         self.workers.start()
@@ -336,7 +332,7 @@ class Trainer:
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
-        self.batcher = Batcher(self.args, self.episodes, self.gpu)
+        self.batcher = Batcher(self.args, self.episodes)
         self.updated_model = None, 0
         self.update_flag = False
         self.shutdown_flag = False
@@ -383,7 +379,7 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
-            batch = self.batcher.batch()
+            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
@@ -435,10 +431,14 @@ class Learner:
         self.shutdown_flag = False
 
         # trained datum
-        self.model_era = 0
+        self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        self.model = RandomModel(self.env)
         train_model = self.model_class(self.env, args)
+        if self.model_era == 0:
+            self.model = RandomModel(self.env)
+        else:
+            self.model = train_model
+            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
 
         # generated datum
         self.num_episodes = 0
@@ -569,7 +569,7 @@ class Learner:
                         else:
                             try:
                                 model = self.model_class(self.env, self.args)
-                                model.load_state_dict(torch.load(self.model_path(model_id)))
+                                model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
                                 pass

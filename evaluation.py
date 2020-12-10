@@ -351,7 +351,7 @@ def get_model(env, model_path):
     import torch
     from model import DuelingNet as Model
     model = env.net()(env) if hasattr(env, 'net') else Model(env)
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path), strict=False)
     model.eval()
     return model
 
