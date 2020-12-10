@@ -54,7 +54,8 @@ def make_batch(episodes, args):
 
     for ep in episodes:
         # target player and turn index
-        moments = [pickle.loads(bz2.decompress(m)) for m in ep['moment']]
+        moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
+        moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
@@ -302,13 +303,16 @@ class Batcher:
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
                 ep = self.episodes[ep_idx]
-                turn_candidates = 1 + max(0, len(ep['moment']) - self.args['forward_steps'])  # change start turn by sequence length
+                turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
                 st = random.randrange(turn_candidates)
-                ed = min(st + self.args['forward_steps'], len(ep['moment']))
+                ed = min(st + self.args['forward_steps'], ep['steps'])
+                st_block = (st // self.args['compress_steps'])
+                ed_block = ((ed - 1) // self.args['compress_steps']) + 1
                 ep_minimum = {
                     'args': ep['args'], 'reward': ep['reward'],
-                    'moment': ep['moment'][st:ed],
-                    'start': st, 'end': ed, 'total': len(ep['moment'])
+                    'moment': ep['moment'][st_block:ed_block],
+                    'base': st_block * self.args['compress_steps'],
+                    'start': st, 'end': ed, 'total': ep['steps'],
                 }
                 return ep_minimum
 
