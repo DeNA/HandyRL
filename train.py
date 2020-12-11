@@ -143,11 +143,11 @@ def forward_prediction(model, hidden, batch, obs_mode):
             obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
             bmask_ = bmasks[:, t]
             bmask = map_r(hidden, lambda h: bmask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
-            hidden = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
+            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
-                hid = map_r(hidden, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
+                hid = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
-                hid = map_r(hidden, lambda h: h.sum(1))  # (..., B * 1, ...)
+                hid = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             t_policy, t_value, next_hidden = model(obs, hid)
             t_policies.append(t_policy)
             t_values.append(t_value)
