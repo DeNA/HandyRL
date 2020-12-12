@@ -142,6 +142,9 @@ class Environment(BaseEnvironment):
     def piece2type(self, p):
         return -1 if p == -1 else p % 2
 
+    def rotate(self, pos):
+        return np.array((5 - pos[0], 5 - pos[1]), dtype=np.int32)
+
     def str2piece(self, s):
         return self._P[s]
 
@@ -159,12 +162,16 @@ class Environment(BaseEnvironment):
 
     def fromdirection2action(self, pos_from, d, c):
         if c == self.WHITE:
+            pos_from = self.rotate(pos_from)
             d = 3 - d
         return d * 36 + pos_from[0] * 6 + pos_from[1]
 
-    def action2from(self, a):
+    def action2from(self, a, c):
         pos1d = a % 36
-        return np.array((pos1d / 6, pos1d % 6), dtype=np.int32)
+        pos = np.array((pos1d / 6, pos1d % 6), dtype=np.int32)
+        if c == self.WHITE:
+            pos = self.rotate(pos)
+        return pos
 
     def action2direction(self, a, c):
         d = a // 36
@@ -173,11 +180,12 @@ class Environment(BaseEnvironment):
         return d
 
     def action2to(self, a, c):
-        return self.action2from(a) + self.D[self.action2direction(a, c)]
+        return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
-        pos_from = self.action2from(a)
-        pos_to = self.action2to(a, self.COLORS.get(player))
+        c = self.COLORS.get(player)
+        pos_from = self.action2from(a, c)
+        pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
@@ -230,7 +238,7 @@ class Environment(BaseEnvironment):
             self.color = self.opponent(self.color)
             self.turn_count += 1
 
-        ox, oy = self.action2from(action)
+        ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
         piece = self.board[ox, oy]
 
@@ -292,17 +300,18 @@ class Environment(BaseEnvironment):
             rewards = [-1, 1]
         return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
-    def legal(self, action, c):
+    def legal(self, action):
         if self.turn_count < 0:
             return 0 <= action and action < 70
-        pos_from = self.action2from(action)
+        pos_from = self.action2from(action, self.color)
+        pos_to = self.action2to(action, self.color)
+
         piece = self.board[pos_from[0], pos_from[1]]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
             # no piece on destination position
             return False
 
-        pos_to = self.action2to(action, c)
         return self._legal(c, t, pos_from, pos_to)
 
     def _legal(self, c, t, pos_from, pos_to):
