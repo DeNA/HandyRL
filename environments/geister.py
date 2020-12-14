@@ -333,11 +333,35 @@ class Environment(BaseEnvironment):
     def players(self):
         return [0, 1]
 
+    def _count_neighbor(self, pos, color):
+        n = 0
+        for d in range(4):
+            npos = pos[0] + self.D[d][0], pos[1] + self.D[d][1]
+            if self.onboard(npos):
+                pc = self.piece2color(self.board[npos[0], npos[1]])
+                if pc == color:
+                    n += 1
+        return n
+
     def rule_based_action(self):
         actions = self.legal_actions()
+        opponent = self.opponent(self.color)
+
+        # seach checkmate actions
         mates = [a for a in actions if not self.onboard(self.action2to(a))]
         if len(mates) > 0:
             return random.choice(mates)
+
+        # escape blue piece
+        mbp = self.colortype2piece(self.color, self.BLUE)
+        if self.piece_cnt[mbp] == 1:
+            mbpos = [(x, y) for x in range(6) for y in range(6) if self.board[x, y] == mbp][0]
+            if self._count_neighbor(mbpos, opponent) > 0:
+                escapes_ = [a for a in actions if np.array_equal(self.action2from(a), mbpos)]
+                escapes = [a for a in escapes_ if self._count_neighbor(self.action2to(a), opponent) == 0]
+                if len(escapes) > 0:
+                    return random.choice(escapes)
+
         return random.choice(actions)
 
     def observation(self, player=None):
