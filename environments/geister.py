@@ -333,6 +333,13 @@ class Environment(BaseEnvironment):
     def players(self):
         return [0, 1]
 
+    def rule_based_action(self):
+        actions = self.legal_actions()
+        mates = [a for a in actions if not self.onboard(self.action2to(a))]
+        if len(mates) > 0:
+            return random.choice(mates)
+        return random.choice(actions)
+
     def observation(self, player=None):
         # state representation to be fed into neural networks
         if self.turn_count < 0:
