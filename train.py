@@ -119,7 +119,7 @@ def make_batch(episodes, args):
     }
 
 
-def forward_prediction(model, hidden, batch, obs_mode):
+def forward_prediction(model, hidden, batch):
     """Forward calculation via neural network
 
     Args:
@@ -193,7 +193,7 @@ def compose_losses(policies, values, log_selected_policies, advantages, value_ta
 
 
 def vtrace_base(batch, model, hidden, args):
-    t_policies, t_values = forward_prediction(model, hidden, batch, args['observation'])
+    t_policies, t_values = forward_prediction(model, hidden, batch)
     actions = batch['action']
     gmasks = torch.clamp(batch['tmask'].sum(dim=2, keepdim=True), 0, 1)
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
