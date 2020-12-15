@@ -10,7 +10,6 @@ import pickle
 import numpy as np
 
 from model import softmax
-from connection import send_recv
 
 
 class Generator:
@@ -58,7 +57,7 @@ class Generator:
                 moment['pmask'][index] = pmask
                 moment['action'][index] = action
 
-            moments.append(bz2.compress(pickle.dumps(moment)))
+            moments.append(moment)
 
             err = self.env.plays(moment['action'])
             if err:
@@ -70,7 +69,13 @@ class Generator:
         rewards = self.env.reward()
         rewards = [rewards[player] for player in self.env.players()]
 
-        episode = {'args': args, 'moment': moments, 'reward': rewards}
+        episode = {
+            'args': args, 'steps': len(moments), 'reward': rewards,
+            'moment': [
+                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']])) \
+                    for i in range(0, len(moments), self.args['compress_steps'])
+            ],
+        }
 
         return episode
 

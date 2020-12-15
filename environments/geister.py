@@ -8,24 +8,27 @@ import itertools
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from environment import BaseEnvironment
-from model import BaseModel, Encoder, Head, DRC
+from model import BaseModel, Encoder, Head, DRC, Conv
 
 
 class GeisterNet(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
-        layers, filters = 3, 32
+        layers, filters, p_filters = 3, 32, 8
         o = env.observation()
         input_channels = o['scalar'].shape[-1] + o['board'].shape[-3]
         self.input_size = (input_channels, 6, 6)
 
         self.encoder = Encoder(self.input_size, filters)
         self.body = DRC(layers, filters, filters)
-        self.head_p = Head((filters, 6, 6), 2, 6 * 6 * 4)
-        self.head_v = Head((filters, 6, 6), 1, 1)
+        self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
+        self.activation_p = nn.LeakyReLU(0.1)
+        self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
+        self.head_v = Head((filters * 2, 6, 6), 1, 1)
 
     def init_hidden(self, batch_size=None):
         return self.body.init_hidden(self.input_size[1:], batch_size)
@@ -34,9 +37,12 @@ class GeisterNet(BaseModel):
         s = x['scalar'].reshape(*x['scalar'].size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([s, x['board']], -3)
 
-        h = self.encoder(h)
-        h, hidden = self.body(h, hidden, num_repeats=3)
-        h_p = self.head_p(h)
+        h_e = self.encoder(h)
+        h, hidden = self.body(h_e, hidden, num_repeats=3)
+
+        h = torch.cat([h_e, h], -3)
+        h_p = self.activation_p(self.head_p1(h))
+        h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
         h_v = self.head_v(h)
 
         return h_p, torch.tanh(h_v), hidden
@@ -357,6 +363,8 @@ class Environment(BaseEnvironment):
         red_o  = self.board == self.colortype2piece(opponent, self.RED)
 
         b = np.stack([
+            # board zone
+            np.ones_like(self.board),
             # my/opponent's all pieces
             blue_c + red_c,
             blue_o + red_o,
