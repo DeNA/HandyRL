@@ -61,12 +61,9 @@ class Environment(BaseEnvironment):
         ['E5', 'D5', 'C5', 'B5', 'E6', 'D6', 'C6', 'B6'],
     ]
     # goal positions
-    GPOS = np.array([
-        [(-1, 5), (6, 5)],
-        [(-1, 0), (6, 0)]
-    ], dtype=np.int32)
+    GPOS = [['A6', 'F6'], ['A1', 'F1']]
 
-    D = np.array([(-1, 0), (0, -1), (0, 1), (1, 0)], dtype=np.int32)
+    D = [-6, -1, 1, 6]
     OSEQ = list(itertools.combinations([i for i in range(8)], 4))
 
     def __init__(self, args=None):
@@ -76,13 +73,13 @@ class Environment(BaseEnvironment):
     def reset(self, args=None):
         self.args = args if args is not None else {'B': -1, 'W': -1}
 
-        self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
+        self.board = -np.ones(6 * 6, dtype=np.int32)  # -1 is empty
         self.color = self.BLACK
         self.turn_count = 0  # -2 before setting original positions
         self.win_color = None
         self.piece_cnt = np.zeros(4, dtype=np.int32)
-        self.board_index = -np.ones((6, 6), dtype=np.int32)
-        self.piece_position = np.zeros((2 * 8, 2), dtype=np.int32)
+        self.board_index = -np.ones(6 * 6, dtype=np.int32)
+        self.piece_position = np.zeros(2 * 8, dtype=np.int32)
         self.record = []
 
         b_pos, w_pos = self.args.get('B', -1), self.args.get('W', -1)
@@ -90,24 +87,24 @@ class Environment(BaseEnvironment):
         self.set_pieces(self.WHITE, w_pos if w_pos >= 0 else random.randrange(70))
 
     def put_piece(self, piece, pos, piece_idx):
-        self.board[pos[0], pos[1]] = piece
+        self.board[pos] = piece
         self.piece_position[piece_idx] = pos
-        self.board_index[pos[0], pos[1]] = piece_idx
+        self.board_index[pos] = piece_idx
         self.piece_cnt[piece] += 1
 
     def remove_piece(self, piece, pos):
-        self.board[pos[0], pos[1]] = -1
-        piece_idx = self.board_index[pos[0], pos[1]]
-        self.board_index[pos[0], pos[1]] = -1
-        self.piece_position[piece_idx] = np.array((-1, -1))
+        self.board[pos] = -1
+        piece_idx = self.board_index[pos]
+        self.board_index[pos] = -1
+        self.piece_position[piece_idx] = -1
         self.piece_cnt[piece] -= 1
 
     def move_piece(self, piece, pos_from, pos_to):
-        self.board[pos_from[0], pos_from[1]] = -1
-        self.board[pos_to[0], pos_to[1]] = piece
-        piece_idx = self.board_index[pos_from[0], pos_from[1]]
-        self.board_index[pos_from[0], pos_from[1]] = -1
-        self.board_index[pos_to[0], pos_to[1]] = piece_idx
+        self.board[pos_from] = -1
+        self.board[pos_to] = piece
+        piece_idx = self.board_index[pos_from]
+        self.board_index[pos_from] = -1
+        self.board_index[pos_to] = piece_idx
         self.piece_position[piece_idx] = pos_to
 
     def set_pieces(self, c, seq_idx):
@@ -122,15 +119,31 @@ class Environment(BaseEnvironment):
     def opponent(self, color):
         return self.BLACK + self.WHITE - color
 
-    def onboard(self, pos):
-        return 0 <= pos[0] and pos[0] < 6 and 0 <= pos[1] and pos[1] < 6
+    def xy2pos(self, x, y):
+        return x * 6 + y
 
-    def goal(self, c, pos):
-        # check whether pos is goal position for c
-        for g in self.GPOS[c]:
-            if g[0] == pos[0] and g[1] == pos[1]:
-                return True
-        return False
+    def pos2x(self, pos):
+        return np.sign(pos) * (abs(pos) // 6)
+
+    def pos2y(self, pos):
+        return np.sign(pos) * (abs(pos) % 6)
+
+    def onboard(self, pos):
+        return 0 <= pos < 6 * 6
+
+    def onboard_xy(self, x, y):
+        return 0 <= x < 6 and 0 <= y < 6
+
+    def onboard_to(self, pos, d):
+        return self.onboard_xy(
+            self.pos2x(pos) + self.pos2x(self.D[d]),
+            self.pos2y(pos) + self.pos2y(self.D[d])
+        )
+
+    def is_goal_action(self, c, pos_from, d):
+        return self.position2str(pos_from) in self.GPOS[c] \
+            and not self.onboard_to(pos_from, d) \
+            and (d == 0 or d == 3)
 
     def colortype2piece(self, c, t):
         return c * 2 + t
@@ -145,29 +158,31 @@ class Environment(BaseEnvironment):
         return self._P[s]
 
     def position2str(self, pos):
-        if self.onboard(pos):
-            return self.X[pos[0]] + self.Y[pos[1]]
-        else:
+        if pos == -1:
             return '**'
+        return self.X[self.pos2x(pos)] + self.Y[self.pos2y(pos)]
 
     def str2position(self, s):
-        if s != '**':
-            return np.array((self.X.find(s[0]), self.Y.find(s[1])), dtype=np.int32)
-        else:
-            return None
+        if s == '**':
+            return -1
+        return self.xy2pos(self.X.find(s[0]), self.Y.find(s[1]))
 
     def fromdirection2action(self, pos_from, d):
-        return d * 36 + pos_from[0] * 6 + pos_from[1]
+        return d * 36 + pos_from
 
     def action2from(self, a):
-        pos1d = a % 36
-        return np.array((pos1d / 6, pos1d % 6), dtype=np.int32)
+        return a % 36
 
     def action2direction(self, a):
         return a // 36
 
     def action2to(self, a):
-        return self.action2from(a) + self.D[self.action2direction(a)]
+        pos_from = self.action2from(a)
+        d = self.action2direction(a)
+        if self.onboard_to(pos_from, d):
+            return pos_from + self.D[d]
+        else:
+            return -1
 
     def action2str(self, a):
         pos_from = self.action2from(a)
@@ -178,21 +193,15 @@ class Environment(BaseEnvironment):
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
 
-        if pos_to is None:
+        if pos_to == -1:
             # it should arrive at a goal
-            for gs in self.GPOS:
-                for g in gs:
-                    if ((pos_from - g) ** 2).sum() == 1:
-                        diff = g - pos_from
-                        for d, dd in enumerate(self.D):
-                            if np.array_equal(dd, diff):
-                                break
-                        break
+            for d in [0, 3]:
+                if not self.onboard_to(pos_from, d):
+                    break
         else:
             # check action direction
-            diff = pos_to - pos_from
             for d, dd in enumerate(self.D):
-                if np.array_equal(dd, diff):
+                if pos_to == pos_from + dd:
                     break
 
         return self.fromdirection2action(pos_from, d)
@@ -208,7 +217,7 @@ class Environment(BaseEnvironment):
         # output state
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[self.board[i, j]] for j in range(6)]) + '\n'
+            s += self.X[i] + ' ' + ' '.join([self.P[self.board[self.xy2pos(i, j)]] for j in range(6)]) + '\n'
         s += 'color = ' + self.C[self.color] + '\n'
         s += 'record = ' + self.record_string()
         return s
@@ -225,19 +234,19 @@ class Environment(BaseEnvironment):
             self.color = self.opponent(self.color)
             self.turn_count += 1
 
-        ox, oy = self.action2from(action)
-        nx, ny = self.action2to(action)
-        piece = self.board[ox, oy]
+        opos = self.action2from(action)
+        npos = self.action2to(action)
+        piece = self.board[opos]
 
-        if not self.onboard((nx, ny)):
+        if npos == -1:
             # finish by goal
-            self.remove_piece(piece, (ox, oy))
+            self.remove_piece(piece, opos)
             self.win_color = self.color
         else:
-            piece_cap = self.board[nx, ny]
+            piece_cap = self.board[npos]
             if piece_cap != -1:
                 # captupe opponent piece
-                self.remove_piece(piece_cap, (nx, ny))
+                self.remove_piece(piece_cap, npos)
                 if self.piece_cnt[piece_cap] == 0:
                     if self.piece2type(piece_cap) == self.BLUE:
                         # win by capturing all opponent blue pieces
@@ -247,7 +256,7 @@ class Environment(BaseEnvironment):
                         self.win_color = self.opponent(self.color)
 
             # move piece
-            self.move_piece(piece, (ox, oy), (nx, ny))
+            self.move_piece(piece, opos, npos)
 
         self.color = self.opponent(self.color)
         self.turn_count += 1
@@ -291,24 +300,23 @@ class Environment(BaseEnvironment):
         if self.turn_count < 0:
             return 0 <= action and action < 70
         pos_from = self.action2from(action)
-        pos_to = self.action2to(action)
-
-        piece = self.board[pos_from[0], pos_from[1]]
+        piece = self.board[pos_from]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
             # no piece on destination position
             return False
 
-        return self._legal(c, t, pos_from, pos_to)
+        return self._legal(c, t, pos_from, d)
 
-    def _legal(self, c, t, pos_from, pos_to):
-        if self.onboard(pos_to):
+    def _legal(self, c, t, pos_from, d):
+        if self.onboard_to(pos_from, d):
+            pos_to = pos_from + self.D[d]
             # can move to cell if there isn't my piece
-            piece_cap = self.board[pos_to[0], pos_to[1]]
+            piece_cap = self.board[pos_to]
             return self.piece2color(piece_cap) != c
         else:
             # can move to my goal
-            return t == self.BLUE and self.goal(c, pos_to)
+            return t == self.BLUE and self.is_goal_action(c, pos_from, d)
 
     def legal_actions(self):
         # return legal action list
@@ -316,12 +324,12 @@ class Environment(BaseEnvironment):
             return [i for i in range(70)]
         actions = []
         for pos in self.piece_position[self.color*8:(self.color+1)*8]:
-            if pos[0] == -1:
+            if pos == -1:
                 continue
-            t = self.piece2type(self.board[pos[0], pos[1]])
-            for i in range(4):
-                if self._legal(self.color, t, pos, pos + self.D[i]):
-                    action = self.fromdirection2action(pos, i)
+            t = self.piece2type(self.board[pos])
+            for d in range(4):
+                if self._legal(self.color, t, pos, d):
+                    action = self.fromdirection2action(pos, d)
                     actions.append(action)
 
         return actions
@@ -374,7 +382,7 @@ class Environment(BaseEnvironment):
             # opponent's blue/red pieces
             blue_o if player is None else np.zeros_like(self.board),
             red_o  if player is None else np.zeros_like(self.board),
-        ]).astype(np.float32)
+        ]).reshape(-1, 6, 6).astype(np.float32)
 
         return {'scalar': s, 'board': b}
 
