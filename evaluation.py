@@ -372,7 +372,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         if sys.argv[1] == 's':
             print('io-match server mode')
-            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 8, 1000)
+            evaluate_mp(env_args, [None] * len(env.players()), None, {'default': {}}, 1, 1000)
         elif sys.argv[1] == 'c':
             print('io-match client mode')
             while True:
@@ -392,4 +392,4 @@ if __name__ == '__main__':
 
         agents = [agent1, RandomAgent()]
 
-        evaluate_mp(env_args, agents, critic, {'detault': {}}, 1, 1000)
+        evaluate_mp(env_args, agents, critic, {'default': {}}, 1, 1000)
