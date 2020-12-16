@@ -81,8 +81,11 @@ class Generator:
         outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
 
         episode = {
-            'args': args, 'outcome': outcomes,
-            'moment': [bz2.compress(pickle.dumps(m)) for m in moments],
+            'args': args, 'steps': len(moments), 'outcome': outcomes,
+            'moment': [
+                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']])) \
+                    for i in range(0, len(moments), self.args['compress_steps'])
+            ],
         }
 
         return episode

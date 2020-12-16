@@ -11,6 +11,8 @@ train_args:
     observation: False
     gamma: 0.8
     forward_steps: 16
+    compress_steps: 4
+    lambda: 0.7
     entropy_regularization: 3.0e-1
     update_episodes: 2000
     batch_size: 128
@@ -24,6 +26,7 @@ train_args:
         num_process: 6
     algorithm: 'VTRACE' # 'LAMBDA-TRACE' 'MC'
     seed: 0
+    restart_epoch: 0
 
 
 entry_args:

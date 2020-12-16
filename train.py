@@ -54,7 +54,8 @@ def make_batch(episodes, args):
 
     for ep in episodes:
         # target player and turn index
-        moments = [pickle.loads(bz2.decompress(m)) for m in ep['moment']]
+        moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
+        moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
@@ -149,23 +150,22 @@ def forward_prediction(model, hidden, batch, obs_mode):
     else:
         # sequential computation with RNN
         bmask = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (T, B, P)
-        bmasks = map_r(hidden, lambda h: bmask.view(-1, 1, *bmask.size()[1:3], *([1] * (len(h.size()) - 3))))  # (..., T, L(1), B, P, ...)
-        hidden_shape = map_r(hidden, lambda h: h.size())
+        bmasks = map_r(hidden, lambda h: bmask.view(*bmask.size()[:3], *([1] * (len(h.size()) - 2))))  # (..., T, B, P, ...)
 
         t_policies, t_values, t_returns = [], [], []
         for t in range(batch['tmask'].size(0)):
             bmask = map_r(bmasks, lambda m: m[t])
             obs = map_r(observations, lambda o: o[t].view(-1, *o.size()[3:]))  # (..., B * P, ...)
-            hidden = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., L, B, P, ...)
+            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
-                hid = map_r(hidden, lambda h: h.view(h.size(0), -1, *h.size()[3:]))  # (..., L, B * P, ...)
+                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
-                hid = map_r(hidden, lambda h: h.sum(2))  # (..., L, B * 1, ...)
-            t_policy, t_value, t_return, next_hidden = model(obs, hid)
+                hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
+            t_policy, t_value, t_return, next_hidden = model(obs, hidden_)
             t_policies.append(t_policy)
             t_values.append(t_value)
             t_returns.append(t_return)
-            next_hidden = bimap_r(next_hidden, hidden_shape, lambda h, s: h.view(*s[:2], -1, *s[3:]))  # (..., L, B, P or 1, ...)
+            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
         t_policies = torch.stack(t_policies)
         t_values = torch.stack(t_values) if t_values[0] is not None else None
@@ -307,7 +307,7 @@ def vtrace(batch, model, hidden, args):
             return_advantages = 0
 
     elif args['algorithm'] == 'LAMBDA-TRACE':
-        lmb = 0.7
+        lmb = args['lambda']
 
         if t_values is not None:
             lambda_values = deque([outcomes[-1]])
@@ -343,19 +343,18 @@ def vtrace(batch, model, hidden, args):
 
 
 class Batcher:
-    def __init__(self, args, episodes, gpu):
+    def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.gpu = gpu
         self.shutdown_flag = False
 
         if self.args['use_batcher_process']:
             self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'], self._postprocess,
+                self._worker, self._selector(), self.args['num_batchers'],
                 buffer_length=self.args['batch_size'] * 3, num_receivers=2
             )
         else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'], self._postprocess)
+            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
@@ -373,9 +372,6 @@ class Batcher:
                 episodes = []
         print('finished batcher %d' % bid)
 
-    def _postprocess(self, batch):
-        return to_gpu_or_not(batch, self.gpu)
-
     def run(self):
         self.workers.start()
 
@@ -385,13 +381,16 @@ class Batcher:
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
                 ep = self.episodes[ep_idx]
-                turn_candidates = 1 + max(0, len(ep['moment']) - self.args['forward_steps'])  # change start turn by sequence length
+                turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
                 st = random.randrange(turn_candidates)
-                ed = min(st + self.args['forward_steps'], len(ep['moment']))
+                ed = min(st + self.args['forward_steps'], ep['steps'])
+                st_block = (st // self.args['compress_steps'])
+                ed_block = ((ed - 1) // self.args['compress_steps']) + 1
                 ep_minimum = {
                     'args': ep['args'], 'outcome': ep['outcome'],
-                    'moment': ep['moment'][st:ed],
-                    'start': st, 'end': ed, 'total': len(ep['moment'])
+                    'moment': ep['moment'][st_block:ed_block],
+                    'base': st_block * self.args['compress_steps'],
+                    'start': st, 'end': ed, 'total': ep['steps'],
                 }
                 return ep_minimum
 
@@ -416,7 +415,7 @@ class Trainer:
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
-        self.batcher = Batcher(self.args, self.episodes, self.gpu)
+        self.batcher = Batcher(self.args, self.episodes)
         self.updated_model = None, 0
         self.update_flag = False
         self.shutdown_flag = False
@@ -463,7 +462,7 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
-            batch = self.batcher.batch()
+            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
             batch_size = batch['value'].size(1)
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
@@ -515,10 +514,14 @@ class Learner:
         self.shutdown_flag = False
 
         # trained datum
-        self.model_era = 0
+        self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        self.model = RandomModel(self.env)
         train_model = self.model_class(self.env, args)
+        if self.model_era == 0:
+            self.model = RandomModel(self.env)
+        else:
+            self.model = train_model
+            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
 
         # generated datum
         self.num_episodes = 0
@@ -649,7 +652,7 @@ class Learner:
                         else:
                             try:
                                 model = self.model_class(self.env, self.args)
-                                model.load_state_dict(torch.load(self.model_path(model_id)))
+                                model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
                                 pass
