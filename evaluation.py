@@ -22,7 +22,7 @@ class RandomAgent:
     def reset(self, env, show=False):
         pass
 
-    def action(self, env, show=False):
+    def action(self, env, player, show=False):
         actions = env.legal_actions()
         return random.choice(actions)
 
@@ -31,7 +31,7 @@ class RandomAgent:
 
 
 class RuleBasedAgent(RandomAgent):
-    def action(self, env, show=False):
+    def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
             return env.rule_based_action()
         else:
@@ -80,11 +80,11 @@ class Agent:
     def reset(self, env, show=False):
         self.hidden = self.planner.init_hidden()
 
-    def action(self, env, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+    def action(self, env, player, show=False):
+        p, v, self.hidden = self.planner.inference(env.observation(player), self.hidden)
         actions = env.legal_actions()
         if show:
-            view(env, player=env.turn())
+            view(env, player=player)
             print_outputs(env, softmax(p, actions), v)
         ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
         return ap_list[0][0]
@@ -99,12 +99,12 @@ class Agent:
 
 
 class SoftAgent(Agent):
-    def action(self, env, show=False):
+    def action(self, env, player, show=False):
         p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
         actions = env.legal_actions()
         prob = softmax(p, actions)
         if show:
-            view(env, player=env.turn())
+            view(env, player=player)
             print_outputs(env, prob, v)
         return random.choices(np.arange(len(p)), weights=prob)[0]
 
@@ -150,8 +150,8 @@ class IOAgent:
     def reward(self, reward):
         return send_recv(self.conn, ('reward', [reward]))
 
-    def action(self):
-        return send_recv(self.conn, ('action', []))
+    def action(self, player):
+        return send_recv(self.conn, ('action', [player]))
 
     def observe(self, player):
         return send_recv(self.conn, ('observe', [player]))
@@ -172,7 +172,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
             print('cv = ', critic.observe(env, None, show=False)[0])
         for p, agent in agents.items():
             if p == env.turn():
-                action = agent.action(env, show=show)
+                action = agent.action(env, p, show=show)
             else:
                 agent.observe(env, p, show=show)
         if env.play(action):
@@ -203,7 +203,7 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
             print('cv = ', critic.observe(env, None, show=False)[0])
         for p, agent in io_agents.items():
             if p == env.turn():
-                action = agent.action()
+                action = agent.action(p)
             else:
                 agent.observe(p)
         if env.play(action):
@@ -372,7 +372,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         if sys.argv[1] == 's':
             print('io-match server mode')
-            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 1, 1000)
+            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 8, 1000)
         elif sys.argv[1] == 'c':
             print('io-match client mode')
             while True:
