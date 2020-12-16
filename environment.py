@@ -105,6 +105,18 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
+    # Should be defined if you encode action as special string
+    #
+    def action2str(self, a, player=None):
+        return str(a)
+
+    #
+    # Should be defined if you encode action as special string
+    #
+    def str2action(self, s, player=None):
+        return int(s)
+
+    #
     # Should be defined if you use network battle mode
     #
     def diff_info(self):

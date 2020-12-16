@@ -52,7 +52,6 @@ class Environment(BaseEnvironment):
     X, Y = 'ABCDEF', '123456'
     BLACK, WHITE = 0, 1
     BLUE, RED = 0, 1
-    COLORS = [BLACK, WHITE]
     C = 'BW'
     P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
     _P = {'_': -1, 'B': 0, 'R': 1, 'b': 2, 'r': 3}
@@ -183,12 +182,13 @@ class Environment(BaseEnvironment):
         return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
-        c = self.COLORS.get(player)
+        c = player
         pos_from = self.action2from(a, c)
         pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
+        c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
 
@@ -208,10 +208,10 @@ class Environment(BaseEnvironment):
                 if np.array_equal(dd, diff):
                     break
 
-        return self.fromdirection2action(pos_from, d, self.COLORS.get(player))
+        return self.fromdirection2action(pos_from, d, c)
 
     def record_string(self):
-        return ' '.join([self.action2str(a, self.COLORS[p % 2]) for p, a in enumerate(self.record)])
+        return ' '.join([self.action2str(a, i % 2) for i, a in enumerate(self.record)])
 
     def position_string(self):
         poss = [self.position2str(pos) for pos in self.piece_position]
@@ -272,7 +272,7 @@ class Environment(BaseEnvironment):
     def diff_info(self):
         if len(self.record) == 0:
             return self.args
-        return self.action2str(self.record[-1])
+        return self.action2str(self.record[-1], (self.turn_count - 1) % 2)
 
     def reset_info(self, info):
         self.reset(info)
@@ -405,7 +405,7 @@ if __name__ == '__main__':
         while not e.terminal():
             print(e)
             actions = e.legal_actions()
-            print([e.action2str(a) for a in actions])
+            print([e.action2str(a, e.turn()) for a in actions])
             e.play(random.choice(actions))
         print(e)
         print(e.reward())
