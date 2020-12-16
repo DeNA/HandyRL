@@ -100,7 +100,7 @@ class Agent:
 
 class SoftAgent(Agent):
     def action(self, env, player, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+        p, v, self.hidden = self.planner.inference(env.observation(player), self.hidden)
         actions = env.legal_actions()
         prob = softmax(p, actions)
         if show:
