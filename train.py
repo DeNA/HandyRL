@@ -138,22 +138,21 @@ def forward_prediction(model, hidden, batch, obs_mode):
     else:
         # sequential computation with RNN
         bmask = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (T, B, P)
-        bmasks = map_r(hidden, lambda h: bmask.view(-1, 1, *bmask.size()[1:3], *([1] * (len(h.size()) - 3))))  # (..., T, L(1), B, P, ...)
-        hidden_shape = map_r(hidden, lambda h: h.size())
+        bmasks = map_r(hidden, lambda h: bmask.view(*bmask.size()[:3], *([1] * (len(h.size()) - 2))))  # (..., T, B, P, ...)
 
         t_policies, t_values = [], []
         for t in range(batch['tmask'].size(0)):
             bmask = map_r(bmasks, lambda m: m[t])
             obs = map_r(observations, lambda o: o[t].view(-1, *o.size()[3:]))  # (..., B * P, ...)
-            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., L, B, P, ...)
+            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
-                hidden_ = map_r(hidden_, lambda h: h.view(h.size(0), -1, *h.size()[3:]))  # (..., L, B * P, ...)
+                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
-                hidden_ = map_r(hidden_, lambda h: h.sum(2))  # (..., L, B * 1, ...)
+                hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             t_policy, t_value, next_hidden = model(obs, hidden_)
             t_policies.append(t_policy)
             t_values.append(t_value)
-            next_hidden = bimap_r(next_hidden, hidden_shape, lambda h, s: h.view(*s[:2], -1, *s[3:]))  # (..., L, B, P or 1, ...)
+            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
         t_policies = torch.stack(t_policies)
         t_values = torch.stack(t_values)

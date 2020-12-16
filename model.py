@@ -211,19 +211,18 @@ class DRC(nn.Module):
                 hs.append(h)
                 cs.append(c)
 
-            return torch.stack(hs), torch.stack(cs)
+            return hs, cs
 
     def forward(self, x, hidden, num_repeats):
         if hidden is None:
             hidden = self.init_hidden(x.shape[-2:], x.shape[:-3])
 
-        hs = [hidden[0][i] for i in range(self.num_layers)]
-        cs = [hidden[1][i] for i in range(self.num_layers)]
+        hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
                 hs[i], cs[i] = block(x, (hs[i], cs[i]))
 
-        return hs[-1], (torch.stack(hs), torch.stack(cs))
+        return hs[-1], (hs, cs)
 
 
 # simple model
@@ -241,12 +240,12 @@ class BaseModel(nn.Module):
         self.eval()
         with torch.no_grad():
             xt = to_torch(x, unsqueeze=0)
-            ht = to_torch(hidden, unsqueeze=1)
+            ht = to_torch(hidden, unsqueeze=0)
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
             [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
-            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(1)) if outputs[-1] is not None else None]
+            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
 
