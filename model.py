@@ -217,8 +217,7 @@ class DRC(nn.Module):
         if hidden is None:
             hidden = self.init_hidden(x.shape[-2:], x.shape[:-3])
 
-        hs = [hidden[0][i] for i in range(self.num_layers)]
-        cs = [hidden[1][i] for i in range(self.num_layers)]
+        hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
                 hs[i], cs[i] = block(x, (hs[i], cs[i]))
