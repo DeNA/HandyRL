@@ -361,7 +361,7 @@ class Environment(BaseEnvironment):
         opponent = self.opponent(self.color)
 
         # seach checkmate actions
-        mates = [a for a in actions if not self.onboard(self.action2to(a))]
+        mates = [a for a in actions if not self.onboard(self.action2to(a, self.color))]
         if len(mates) > 0:
             return random.choice(mates)
 
@@ -370,8 +370,8 @@ class Environment(BaseEnvironment):
         if self.piece_cnt[mbp] == 1:
             mbpos = [(x, y) for x in range(6) for y in range(6) if self.board[x, y] == mbp][0]
             if self._count_neighbor(mbpos, opponent) > 0:
-                escapes_ = [a for a in actions if np.array_equal(self.action2from(a), mbpos)]
-                escapes = [a for a in escapes_ if self._count_neighbor(self.action2to(a), opponent) == 0]
+                escapes_ = [a for a in actions if np.array_equal(self.action2from(a, self.color), mbpos)]
+                escapes = [a for a in escapes_ if self._count_neighbor(self.action2to(a, self.color), opponent) == 0]
                 if len(escapes) > 0:
                     return random.choice(escapes)
 
