@@ -10,8 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from environment import BaseEnvironment
-from model import BaseModel, Encoder, Head, DRC, Conv
+from ..environment import BaseEnvironment
+from ..model import BaseModel, Encoder, Head, DRC, Conv
 
 
 class GeisterNet(BaseModel):
@@ -167,29 +167,40 @@ class Environment(BaseEnvironment):
             return -1
         return self.xy2pos(self.X.find(s[0]), self.Y.find(s[1]))
 
-    def fromdirection2action(self, pos_from, d):
+    def fromdirection2action(self, pos_from, d, c):
+        if c == self.WHITE:
+            pos_from = 35 - pos_from
+            d = 3 - d
         return d * 36 + pos_from
 
-    def action2from(self, a):
-        return a % 36
+    def action2from(self, a, c):
+        pos = a % 36
+        if c == self.WHITE:
+            pos = 35 - pos
+        return pos
 
-    def action2direction(self, a):
-        return a // 36
+    def action2direction(self, a, c):
+        d = a // 36
+        if c == self.WHITE:
+            d = 3 - d
+        return d
 
-    def action2to(self, a):
-        pos_from = self.action2from(a)
-        d = self.action2direction(a)
+    def action2to(self, a, c):
+        pos_from = self.action2from(a, c)
+        d = self.action2direction(a, c)
         if self.onboard_to(pos_from, d):
             return pos_from + self.D[d]
         else:
             return -1
 
-    def action2str(self, a):
-        pos_from = self.action2from(a)
-        pos_to = self.action2to(a)
+    def action2str(self, a, player):
+        c = player
+        pos_from = self.action2from(a, c)
+        pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
-    def str2action(self, s):
+    def str2action(self, s, player):
+        c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
 
@@ -204,10 +215,10 @@ class Environment(BaseEnvironment):
                 if pos_to == pos_from + dd:
                     break
 
-        return self.fromdirection2action(pos_from, d)
+        return self.fromdirection2action(pos_from, d, c)
 
     def record_string(self):
-        return ' '.join([self.action2str(a) for a in self.record])
+        return ' '.join([self.action2str(a, i % 2) for i, a in enumerate(self.record)])
 
     def position_string(self):
         poss = [self.position2str(pos) for pos in self.piece_position]
@@ -226,7 +237,7 @@ class Environment(BaseEnvironment):
         # state transition
         if isinstance(action, str):
             for astr in action.split():
-                self.play(self.str2action(astr))
+                self.play(self.str2action(astr, self.turn()))
             return
 
         if self.turn_count < 0:
@@ -234,8 +245,8 @@ class Environment(BaseEnvironment):
             self.color = self.opponent(self.color)
             self.turn_count += 1
 
-        opos = self.action2from(action)
-        npos = self.action2to(action)
+        opos = self.action2from(action, self.color)
+        npos = self.action2to(action, self.color)
         piece = self.board[opos]
 
         if npos == -1:
@@ -268,7 +279,7 @@ class Environment(BaseEnvironment):
     def diff_info(self):
         if len(self.record) == 0:
             return self.args
-        return self.action2str(self.record[-1])
+        return self.action2str(self.record[-1], (self.turn_count - 1) % 2)
 
     def reset_info(self, info):
         self.reset(info)
@@ -299,7 +310,7 @@ class Environment(BaseEnvironment):
     def legal(self, action):
         if self.turn_count < 0:
             return 0 <= action and action < 70
-        pos_from = self.action2from(action)
+        pos_from = self.action2from(action, self.color)
         piece = self.board[pos_from]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
@@ -329,7 +340,7 @@ class Environment(BaseEnvironment):
             t = self.piece2type(self.board[pos])
             for d in range(4):
                 if self._legal(self.color, t, pos, d):
-                    action = self.fromdirection2action(pos, d)
+                    action = self.fromdirection2action(pos, d, self.color)
                     actions.append(action)
 
         return actions
@@ -357,7 +368,7 @@ class Environment(BaseEnvironment):
 
         s = np.array([
             1 if turn_view           else 0,  # view point is turn player
-            1 if color == self.BLACK else 0,  # black is color to move
+            1 if color == self.BLACK else 0,  # my color is black
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],
@@ -384,6 +395,9 @@ class Environment(BaseEnvironment):
             red_o  if player is None else np.zeros_like(self.board),
         ]).reshape(-1, 6, 6).astype(np.float32)
 
+        if color == self.WHITE:
+            b = np.rot90(b, k=2, axes=(1, 2))
+
         return {'scalar': s, 'board': b}
 
     def net(self):
@@ -397,7 +411,7 @@ if __name__ == '__main__':
         while not e.terminal():
             print(e)
             actions = e.legal_actions()
-            print([e.action2str(a) for a in actions])
+            print([e.action2str(a, e.turn()) for a in actions])
             e.play(random.choice(actions))
         print(e)
         print(e.reward())
