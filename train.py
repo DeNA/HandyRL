@@ -272,25 +272,21 @@ class Batcher:
         if self.args['use_batcher_process']:
             self.workers = MultiProcessWorkers(
                 self._worker, self._selector(), self.args['num_batchers'],
-                buffer_length=self.args['batch_size'] * 3, num_receivers=2
+                buffer_length=3, num_receivers=2
             )
         else:
             self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
-            yield self.select_episode()
+            yield [self.select_episode() for _ in range(self.args['batch_size'])]
 
     def _worker(self, conn, bid):
         print('started batcher %d' % bid)
-        episodes = []
         while not self.shutdown_flag:
-            ep = conn.recv()
-            episodes.append(ep)
-            if len(episodes) >= self.args['batch_size']:
-                batch = make_batch(episodes, self.args)
-                conn.send((batch, len(episodes)))
-                episodes = []
+            episodes = conn.recv()
+            batch = make_batch(episodes, self.args)
+            conn.send((batch, 1))
         print('finished batcher %d' % bid)
 
     def run(self):
@@ -301,19 +297,20 @@ class Batcher:
             ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
-                ep = self.episodes[ep_idx]
-                turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
-                st = random.randrange(turn_candidates)
-                ed = min(st + self.args['forward_steps'], ep['steps'])
-                st_block = (st // self.args['compress_steps'])
-                ed_block = ((ed - 1) // self.args['compress_steps']) + 1
-                ep_minimum = {
-                    'args': ep['args'], 'reward': ep['reward'],
-                    'moment': ep['moment'][st_block:ed_block],
-                    'base': st_block * self.args['compress_steps'],
-                    'start': st, 'end': ed, 'total': ep['steps'],
-                }
-                return ep_minimum
+                break
+        ep = self.episodes[ep_idx]
+        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        st = random.randrange(turn_candidates)
+        ed = min(st + self.args['forward_steps'], ep['steps'])
+        st_block = st // self.args['compress_steps']
+        ed_block = (ed - 1) // self.args['compress_steps'] + 1
+        ep_minimum = {
+            'args': ep['args'], 'reward': ep['reward'],
+            'moment': ep['moment'][st_block:ed_block],
+            'base': st_block * self.args['compress_steps'],
+            'start': st, 'end': ed, 'total': ep['steps'],
+        }
+        return ep_minimum
 
     def batch(self):
         return self.workers.recv()
