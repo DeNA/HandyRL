@@ -1,13 +1,12 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'environments.tictactoe'
+    source: 'handyrl.environments.tictactoe'
     #env: 'Geister'
-    #source: 'environments.geister'
+    #source: 'handyrl.environments.geister'
 
 
 train_args:
-    remote: False
     observation: False
     forward_steps: 16
     compress_steps: 4
