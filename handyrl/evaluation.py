@@ -123,7 +123,8 @@ class IOAgentClient:
             elif hasattr(self.agent, command):
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
-                    ret = self.env.action2str(ret)
+                    player = args[0]
+                    ret = self.env.action2str(ret, player)
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'play_info':
@@ -201,7 +202,8 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
             print('cv = ', critic.observe(env, None, show=False)[0])
         for p, agent in io_agents.items():
             if p == env.turn():
-                action = agent.action(p)
+                action_ = agent.action(p)
+                action = env.str2action(action_, p)
             else:
                 agent.observe(p)
         if env.play(action):
