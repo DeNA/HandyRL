@@ -55,9 +55,9 @@ class Environment(BaseEnvironment):
 
         # check winning condition
         if self.board[x, :].sum() == 3 * self.color \
-          or self.board[:, y].sum() == 3 * self.color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color):
+            or self.board[:, y].sum() == 3 * self.color \
+            or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
+                or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color):
             self.win_color = self.color
 
         self.color = -self.color
