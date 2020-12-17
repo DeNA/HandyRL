@@ -3,16 +3,14 @@
 
 # evaluation of policies or planning algorithms
 
-import sys
 import random
 import time
-import yaml
 import multiprocessing as mp
 
 import numpy as np
 
-from connection import send_recv, accept_socket_connections, connect_socket_connection
-import environment as gym
+from .environment import prepare_env, make_env
+from .connection import send_recv, accept_socket_connections, connect_socket_connection
 
 
 io_match_port = 9876
@@ -125,7 +123,8 @@ class IOAgentClient:
             elif hasattr(self.agent, command):
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
-                    ret = self.env.action2str(ret)
+                    player = args[0]
+                    ret = self.env.action2str(ret, player)
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'play_info':
@@ -207,7 +206,8 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
         actions = {}
         for p, agent in io_agents.items():
             if p in turn_players:
-                actions[p] = agent.action(p)
+                action = agent.action(p)
+                actions[p] = env.str2action(action, p)
             else:
                 agent.observe(p)
         if env.plays(actions):
@@ -252,7 +252,7 @@ def wp_func(results):
 
 def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, seed, show=False):
     random.seed(seed + index)
-    env = gym.make({**env_args, 'id': index})
+    env = make_env({**env_args, 'id': index})
     while True:
         args = in_queue.get()
         if args is None:
@@ -268,9 +268,7 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
     out_queue.put(None)
 
 
-def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games):
-    seed = random.randrange(1e8)
-    print('seed = %d' % seed)
+def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_games, seed):
     in_queue, out_queue = mp.Queue(), mp.Queue()
     args_cnt = 0
     total_results, result_map = [{} for _ in agents], [{} for _ in agents]
@@ -353,7 +351,7 @@ def io_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    from model import DuelingNet as Model
+    from .model import DuelingNet as Model
     model = env.net()(env) if hasattr(env, 'net') else Model(env)
     model.load_state_dict(torch.load(model_path), strict=False)
     model.eval()
@@ -361,39 +359,60 @@ def get_model(env, model_path):
 
 
 def client_mp_child(env_args, model_path, conn):
-    env = gym.make(env_args)
+    env = make_env(env_args)
     model = get_model(env, model_path)
     IOAgentClient(Agent(model), env, conn).run()
 
 
-if __name__ == '__main__':
-    with open('config.yaml') as f:
-        env_args = yaml.safe_load(f)['env_args']
+def eval_main(args, argv):
+    env_args = args['env_args']
+    prepare_env(env_args)
+    env = make_env(env_args)
 
-    gym.prepare(env_args)
-    env = gym.make(env_args)
+    model_path = argv[0]
+    agent1 = Agent(get_model(env, model_path))
+    critic = None
 
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 's':
-            print('io-match server mode')
-            evaluate_mp(env_args, [None] * len(env.players()), None, {'detault': {}}, 1, 1000)
-        elif sys.argv[1] == 'c':
-            print('io-match client mode')
-            while True:
-                try:
-                    conn = connect_socket_connection('', io_match_port)
-                    env_args = conn.recv()
-                except EOFError:
-                    break
+    num_games = int(argv[1]) if len(argv) >= 2 else 100
+    num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-                mp.Process(target=client_mp_child, args=(env_args, sys.argv[2], conn)).start()
-                conn.close()
-        else:
-            print('unknown mode')
-    else:
-        agent1 = Agent(get_model(env, 'models/1.pth'))
-        critic = None
+    print('%d process, %d games' % (num_process, num_games))
 
-        agents = [agent1, RandomAgent()]
+    seed = random.randrange(1e8)
+    print('seed = %d' % seed)
 
-        evaluate_mp(env_args, agents, critic, {'detault': {}}, 1, 1000)
+    agents = [agent1, RandomAgent()]
+
+    evaluate_mp(env, agents, critic, env_args, {'default': {}}, num_process, num_games, seed)
+
+
+def eval_server_main(args, argv):
+    print('network match server mode')
+    env_args = args['env_args']
+    prepare_env(env_args)
+    env = make_env(env_args)
+
+    num_games = int(argv[0]) if len(argv) >= 1 else 100
+    num_process = int(argv[1]) if len(argv) >= 2 else 1
+
+    print('%d process, %d games' % (num_process, num_games))
+
+    seed = random.randrange(1e8)
+    print('seed = %d' % seed)
+
+    evaluate_mp(env, [None] * len(env.players()), None, env_args, {'default': {}}, num_process, num_games, seed)
+
+
+def eval_client_main(args, argv):
+    print('network match client mode')
+    while True:
+        try:
+            host = argv[1] if len(argv) >= 2 else 'localhost'
+            conn = connect_socket_connection(host, io_match_port)
+            env_args = conn.recv()
+        except EOFError:
+            break
+
+        model_path = argv[0]
+        mp.Process(target=client_mp_child, args=(env_args, model_path, conn)).start()
+        conn.close()

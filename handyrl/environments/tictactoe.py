@@ -8,7 +8,7 @@ import random
 
 import numpy as np
 
-from environment import BaseEnvironment
+from ..environment import BaseEnvironment
 
 
 class Environment(BaseEnvironment):
@@ -26,10 +26,10 @@ class Environment(BaseEnvironment):
         self.win_color = 0
         self.record = []
 
-    def action2str(self, a):
+    def action2str(self, a, _=None):
         return self.X[a // 3] + self.Y[a % 3]
 
-    def str2action(self, s):
+    def str2action(self, s, _=None):
         return self.X.find(s[0]) * 3 + self.Y.find(s[1])
 
     def record_string(self):

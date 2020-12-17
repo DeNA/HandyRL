@@ -3,15 +3,10 @@
 
 # game environment
 
-import os
-import sys
 import importlib
 
 
-sys.path.append(os.path.dirname(__file__))
-
-
-def prepare(env_args):
+def prepare_env(env_args):
     env_name = env_args['env']
     env_source = env_args['source']
 
@@ -23,7 +18,7 @@ def prepare(env_args):
         env_module.prepare()
 
 
-def make(env_args):
+def make_env(env_args):
     env_name = env_args['env']
     env_source = env_args['source']
 
@@ -117,6 +112,18 @@ class BaseEnvironment:
     #
     def observation(self, player=None):
         raise NotImplementedError()
+
+    #
+    # Should be defined if you encode action as special string
+    #
+    def action2str(self, a, player=None):
+        return str(a)
+
+    #
+    # Should be defined if you encode action as special string
+    #
+    def str2action(self, s, player=None):
+        return int(s)
 
     #
     # Should be defined if you use network battle mode

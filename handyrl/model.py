@@ -10,7 +10,7 @@ torch.set_num_threads(1)
 import torch.nn as nn
 import torch.nn.functional as F
 
-from util import map_r
+from .util import map_r
 
 
 def to_torch(x, transpose=False, unsqueeze=None):
