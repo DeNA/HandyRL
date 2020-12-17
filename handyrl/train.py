@@ -13,10 +13,8 @@ import time
 import copy
 import threading
 import random
-import signal
 import bz2
 import pickle
-import yaml
 from collections import deque
 
 import numpy as np
@@ -26,13 +24,13 @@ import torch.nn.functional as F
 import torch.distributions as dist
 import torch.optim as optim
 
-import environment as gym
-from util import map_r, bimap_r, trimap_r, rotate, type_r
-from model import to_torch, to_gpu_or_not, RandomModel
-from model import DuelingNet as Model
-from connection import MultiProcessWorkers, MultiThreadWorkers
-from connection import accept_socket_connections
-from worker import Workers
+from .environment import prepare_env, make_env
+from .util import map_r, bimap_r, trimap_r, rotate, type_r
+from .model import to_torch, to_gpu_or_not, RandomModel
+from .model import DuelingNet as Model
+from .connection import MultiProcessWorkers, MultiThreadWorkers
+from .connection import accept_socket_connections
+from .worker import Workers
 
 
 def make_batch(episodes, args):
@@ -426,7 +424,8 @@ class Learner:
     def __init__(self, args):
         self.args = args
         random.seed(args['seed'])
-        self.env = gym.make(args['env'])
+
+        self.env = make_env(args['env'])
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
@@ -614,15 +613,24 @@ class Learner:
             self.shutdown()
 
 
-if __name__ == '__main__':
-    with open('config.yaml') as f:
-        args = yaml.safe_load(f)
-    print(args)
-
+def train_main(args):
     train_args = args['train_args']
+    train_args['remote'] = False
+
     env_args = args['env_args']
     train_args['env'] = env_args
 
-    gym.prepare(env_args)
+    prepare_env(env_args)  # preparing environment is needed in stand-alone mode
+    learner = Learner(train_args)
+    learner.run()
+
+
+def train_server_main(args):
+    train_args = args['train_args']
+    train_args['remote'] = True
+
+    env_args = args['env_args']
+    train_args['env'] = env_args
+
     learner = Learner(train_args)
     learner.run()

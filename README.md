@@ -20,27 +20,26 @@ Set `config.yaml` for your own configuration.
 ### Training
 
 ```shell
-python train.py
+python main.py --train
 ```
 
 ### Evaluation
 
 ```shell
-python evaluation.py
+python main.py --eval
 ```
 
 ## How to use (for large scale training)
 
-Set `'remote'` as `True` in `config.yaml`.
 If you use remote machines as worker clients, you can set worker configuation in each client.
 
 ```shell
-python train.py
+python main.py --train-server
 ```
 
 In another window,
 ```shell
-python worker.py
+python main.py --worker
 ```
 
 ## Using your own environments
