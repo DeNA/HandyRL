@@ -463,6 +463,9 @@ class Learner:
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
 
+    def latest_model_path(self):
+        return os.path.join('models', 'latest.pth')
+
     def update_model(self, model, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
@@ -470,6 +473,7 @@ class Learner:
         self.model = model
         os.makedirs('models', exist_ok=True)
         torch.save(model.state_dict(), self.model_path(self.model_era))
+        torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
         # store generated episodes
