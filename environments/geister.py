@@ -194,7 +194,7 @@ class Environment(BaseEnvironment):
 
         if pos_to is None:
             # it should arrive at a goal
-            for g in self.GPOS[player]:
+            for g in self.GPOS[c]:
                 if ((pos_from - g) ** 2).sum() == 1:
                     diff = g - pos_from
                     for d, dd in enumerate(self.D):
