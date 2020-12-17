@@ -3,22 +3,20 @@
 
 # worker and gather
 
-import os
 import random
 import threading
 import time
-import yaml
 import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
 
-from connection import QueueCommunicator
-from connection import send_recv, open_multiprocessing_connections
-from connection import connect_socket_connection, accept_socket_connections
-from evaluation import Evaluator
-from generation import Generator
-import environment as gym
+from .environment import prepare_env, make_env
+from .connection import QueueCommunicator
+from .connection import send_recv, open_multiprocessing_connections
+from .connection import connect_socket_connection, accept_socket_connections
+from .evaluation import Evaluator
+from .generation import Generator
 
 
 class Worker:
@@ -29,7 +27,7 @@ class Worker:
         self.conn = conn
         self.latest_model = -1, None
 
-        env = gym.make({**args['env'], 'id': wid})
+        env = make_env({**args['env'], 'id': wid})
         self.generator = Generator(env, self.args)
         self.evaluator = Evaluator(env, self.args)
 
@@ -198,15 +196,14 @@ def entry(entry_args):
     return args
 
 
-if __name__ == '__main__':
+def worker_main(args):
     # offline generation worker
-    with open('config.yaml') as f:
-        entry_args = yaml.safe_load(f)['entry_args']
+    entry_args = args['entry_args']
     entry_args['host'] = gethostname()
 
     args = entry(entry_args)
     print(args)
-    gym.prepare(args['env'])
+    prepare_env(args['env'])
 
     # open workers
     process = []

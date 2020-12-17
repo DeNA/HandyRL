@@ -13,10 +13,8 @@ import time
 import copy
 import threading
 import random
-import signal
 import bz2
 import pickle
-import yaml
 from collections import deque
 
 import numpy as np
@@ -26,13 +24,13 @@ import torch.nn.functional as F
 import torch.distributions as dist
 import torch.optim as optim
 
-import environment as gym
-from util import map_r, bimap_r, trimap_r, rotate, type_r
-from model import to_torch, to_gpu_or_not, RandomModel
-from model import DuelingNet as Model
-from connection import MultiProcessWorkers, MultiThreadWorkers
-from connection import accept_socket_connections
-from worker import Workers
+from .environment import prepare_env, make_env
+from .util import map_r, bimap_r, trimap_r, rotate, type_r
+from .model import to_torch, to_gpu_or_not, RandomModel
+from .model import DuelingNet as Model
+from .connection import MultiProcessWorkers, MultiThreadWorkers
+from .connection import accept_socket_connections
+from .worker import Workers
 
 
 def make_batch(episodes, args):
@@ -138,22 +136,21 @@ def forward_prediction(model, hidden, batch, obs_mode):
     else:
         # sequential computation with RNN
         bmask = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (T, B, P)
-        bmasks = map_r(hidden, lambda h: bmask.view(-1, 1, *bmask.size()[1:3], *([1] * (len(h.size()) - 3))))  # (..., T, L(1), B, P, ...)
-        hidden_shape = map_r(hidden, lambda h: h.size())
+        bmasks = map_r(hidden, lambda h: bmask.view(*bmask.size()[:3], *([1] * (len(h.size()) - 2))))  # (..., T, B, P, ...)
 
         t_policies, t_values = [], []
         for t in range(batch['tmask'].size(0)):
             bmask = map_r(bmasks, lambda m: m[t])
             obs = map_r(observations, lambda o: o[t].view(-1, *o.size()[3:]))  # (..., B * P, ...)
-            hidden = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., L, B, P, ...)
+            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
-                hid = map_r(hidden, lambda h: h.view(h.size(0), -1, *h.size()[3:]))  # (..., L, B * P, ...)
+                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
-                hid = map_r(hidden, lambda h: h.sum(2))  # (..., L, B * 1, ...)
-            t_policy, t_value, next_hidden = model(obs, hid)
+                hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
+            t_policy, t_value, next_hidden = model(obs, hidden_)
             t_policies.append(t_policy)
             t_values.append(t_value)
-            next_hidden = bimap_r(next_hidden, hidden_shape, lambda h, s: h.view(*s[:2], -1, *s[3:]))  # (..., L, B, P or 1, ...)
+            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
         t_policies = torch.stack(t_policies)
         t_values = torch.stack(t_values)
@@ -273,25 +270,21 @@ class Batcher:
         if self.args['use_batcher_process']:
             self.workers = MultiProcessWorkers(
                 self._worker, self._selector(), self.args['num_batchers'],
-                buffer_length=self.args['batch_size'] * 3, num_receivers=2
+                buffer_length=3, num_receivers=2
             )
         else:
             self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
-            yield self.select_episode()
+            yield [self.select_episode() for _ in range(self.args['batch_size'])]
 
     def _worker(self, conn, bid):
         print('started batcher %d' % bid)
-        episodes = []
         while not self.shutdown_flag:
-            ep = conn.recv()
-            episodes.append(ep)
-            if len(episodes) >= self.args['batch_size']:
-                batch = make_batch(episodes, self.args)
-                conn.send((batch, len(episodes)))
-                episodes = []
+            episodes = conn.recv()
+            batch = make_batch(episodes, self.args)
+            conn.send((batch, 1))
         print('finished batcher %d' % bid)
 
     def run(self):
@@ -302,19 +295,20 @@ class Batcher:
             ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
             accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
             if random.random() < accept_rate:
-                ep = self.episodes[ep_idx]
-                turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
-                st = random.randrange(turn_candidates)
-                ed = min(st + self.args['forward_steps'], ep['steps'])
-                st_block = (st // self.args['compress_steps'])
-                ed_block = ((ed - 1) // self.args['compress_steps']) + 1
-                ep_minimum = {
-                    'args': ep['args'], 'reward': ep['reward'],
-                    'moment': ep['moment'][st_block:ed_block],
-                    'base': st_block * self.args['compress_steps'],
-                    'start': st, 'end': ed, 'total': ep['steps'],
-                }
-                return ep_minimum
+                break
+        ep = self.episodes[ep_idx]
+        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        st = random.randrange(turn_candidates)
+        ed = min(st + self.args['forward_steps'], ep['steps'])
+        st_block = st // self.args['compress_steps']
+        ed_block = (ed - 1) // self.args['compress_steps'] + 1
+        ep_minimum = {
+            'args': ep['args'], 'reward': ep['reward'],
+            'moment': ep['moment'][st_block:ed_block],
+            'base': st_block * self.args['compress_steps'],
+            'start': st, 'end': ed, 'total': ep['steps'],
+        }
+        return ep_minimum
 
     def batch(self):
         return self.workers.recv()
@@ -430,7 +424,8 @@ class Learner:
     def __init__(self, args):
         self.args = args
         random.seed(args['seed'])
-        self.env = gym.make(args['env'])
+
+        self.env = make_env(args['env'])
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
@@ -618,15 +613,24 @@ class Learner:
             self.shutdown()
 
 
-if __name__ == '__main__':
-    with open('config.yaml') as f:
-        args = yaml.safe_load(f)
-    print(args)
-
+def train_main(args):
     train_args = args['train_args']
+    train_args['remote'] = False
+
     env_args = args['env_args']
     train_args['env'] = env_args
 
-    gym.prepare(env_args)
+    prepare_env(env_args)  # preparing environment is needed in stand-alone mode
+    learner = Learner(train_args)
+    learner.run()
+
+
+def train_server_main(args):
+    train_args = args['train_args']
+    train_args['remote'] = True
+
+    env_args = args['env_args']
+    train_args['env'] = env_args
+
     learner = Learner(train_args)
     learner.run()
