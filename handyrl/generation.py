@@ -9,7 +9,7 @@ import pickle
 
 import numpy as np
 
-from model import softmax
+from .model import softmax
 
 
 class Generator:

@@ -10,8 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from environment import BaseEnvironment
-from model import BaseModel, Encoder, Head, DRC, Conv
+from ..environment import BaseEnvironment
+from ..model import BaseModel, Encoder, Head, DRC, Conv
 
 
 class GeisterNet(BaseModel):

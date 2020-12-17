@@ -8,7 +8,7 @@ import random
 
 import numpy as np
 
-from environment import BaseEnvironment
+from ..environment import BaseEnvironment
 
 
 class Environment(BaseEnvironment):
