@@ -12,14 +12,6 @@ import select
 import multiprocessing as mp
 
 
-debug = False
-
-
-def debug_print(*args):
-    if debug:
-        print(*args)
-
-
 def send_recv(conn, sdata):
     conn.send(sdata)
     rdata = conn.recv()
@@ -172,7 +164,6 @@ class MultiProcessWorkers:
         for i in range(self.num_receivers):
             self.threads.append(threading.Thread(target=self._receiver, args=(i,)))
         for thread in self.threads:
-            thread.daemon = True
             thread.start()
 
     def _sender(self):
@@ -257,7 +248,6 @@ class MultiThreadWorkers:
         for i in range(self.num):
             conn = LocalConnection(self)
             self.threads.append(threading.Thread(target=self.func, args=(conn, i)))
-            self.threads[-1].daemon = True
             self.threads[-1].start()
 
 
@@ -274,7 +264,6 @@ class QueueCommunicator:
             threading.Thread(target=self._recv_thread),
         ]
         for thread in self.threads:
-            thread.daemon = True
             thread.start()
 
     def shutdown(self):

@@ -3,45 +3,87 @@
 
 # worker and gather
 
-import os
 import random
-import queue
 import threading
 import time
-import yaml
+import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
 
-from connection import QueueCommunicator
-from connection import open_multiprocessing_connections
-from connection import connect_socket_connection, accept_socket_connections
-from evaluation import Evaluator
-from generation import Generator
-from model import ModelCongress
-import environment as gym
+from .environment import prepare_env, make_env
+from .connection import QueueCommunicator
+from .connection import send_recv, open_multiprocessing_connections
+from .connection import connect_socket_connection, accept_socket_connections
+from .model import reload_model
+from .evaluation import Evaluator
+from .generation import Generator
 
 
 class Worker:
     def __init__(self, args, conn, wid):
         print('opened worker %d' % wid)
         self.worker_id = wid
-        env = gym.make({'id': wid})
+        self.args = args
+        self.conn = conn
+        self.latest_model = -1, None
+
+        env = make_env({**args['env'], 'id': wid})
+        self.generator = Generator(env, self.args)
+        self.evaluator = Evaluator(env, self.args)
+
         random.seed(args['seed'] + wid)
-        self.continue_flag = True
-        if wid in args['gids']:
-            print('I\'m a generator wid:%d pid:%d' % (wid, os.getpid()))
-            self.work_instance = Generator(env, args, conn)
-        else:
-            print('I\'m an evaluator wid:%d pid:%d' % (wid, os.getpid()))
-            self.work_instance = Evaluator(env, args, conn)
 
     def __del__(self):
         print('closed worker %d' % self.worker_id)
 
+    def _gather_models(self, model_ids):
+        model_pool = {}
+        for model_id in model_ids:
+            if model_id not in model_pool:
+                if model_id < 0:
+                    model_pool[model_id] = None
+                elif model_id == self.latest_model[0]:
+                    # use latest model
+                    model_pool[model_id] = self.latest_model[1]
+                else:
+                    # get model from server
+                    model_pool[model_id] = reload_model(send_recv(self.conn, ('model', model_id)))
+                    # update latest model
+                    if model_id > self.latest_model[0]:
+                        self.latest_model = model_id, model_pool[model_id]
+        return model_pool
+
     def run(self):
-        while self.continue_flag:
-            self.continue_flag = self.work_instance.execute()
+        while True:
+            args = send_recv(self.conn, ('args', None))
+            role = args['role']
+
+            models = {}
+            if 'model_id' in args:
+                model_ids = list(args['model_id'].values())
+                model_pool = self._gather_models(model_ids)
+
+                # make dict of models
+                for p, model_id in args['model_id'].items():
+                    models[p] = model_pool[model_id]
+
+            if role == 'g':
+                episode = self.generator.execute(models, args)
+                send_recv(self.conn, ('episode', episode))
+            elif role == 'e':
+                result = self.evaluator.execute(models, args)
+                player_model_id = args['model_id'][args['player']]
+                send_recv(self.conn, ('result', (player_model_id, result)))
+
+
+def make_worker_args(args, n_ga, gaid, wid, conn):
+    return args, conn, wid * n_ga + gaid
+
+
+def open_worker(args, conn, wid):
+    worker = Worker(args, conn, wid)
+    worker.run()
 
 
 class Gather(QueueCommunicator):
@@ -50,27 +92,18 @@ class Gather(QueueCommunicator):
         super().__init__()
         self.gather_id = gaid
         self.server_conn = conn
-        self.args_queue = {}
+        self.args_queue = deque([])
         self.data_map = {'model': {}}
         self.result_send_map = {}
         self.result_send_cnt = 0
-        self.continue_flag = True
-
-        def worker(args, conn, wid):
-            worker = Worker(args, conn, wid)
-            worker.run()
 
         n_pro, n_ga = args['worker']['num_process'], args['worker']['num_gather']
-
-        def worker_args(wid, conn):
-            twid = wid * n_ga + gaid
-            return args, conn, (args['gids'] + args['eids'])[twid]
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
             num_workers_per_gather,
-            worker,
-            worker_args
+            open_worker,
+            functools.partial(make_worker_args, args, n_ga, gaid)
         )
 
         for conn in worker_conns:
@@ -85,17 +118,14 @@ class Gather(QueueCommunicator):
     def run(self):
         while True:
             conn, (command, args) = self.recv()
-            if 'args' in command:
+            if command == 'args':
                 # When requested argsments, return buffered outputs
-                if command not in self.args_queue:
-                    self.args_queue[command] = deque([])
-
-                if len(self.args_queue[command]) == 0:
+                if len(self.args_queue) == 0:
                     # get muptilple arguments from server and store them
                     self.server_conn.send((command, [None] * self.args_buf_len))
-                    self.args_queue[command] += self.server_conn.recv()
+                    self.args_queue += self.server_conn.recv()
 
-                next_args = self.args_queue[command].popleft()
+                next_args = self.args_queue.popleft()
                 self.send(conn, next_args)
 
             elif command in self.data_map:
@@ -107,8 +137,8 @@ class Gather(QueueCommunicator):
                 self.send(conn, self.data_map[command][data_id])
 
             else:
-                # return continue flag and first and store data temporalily
-                self.send(conn, self.continue_flag)
+                # return flag first and store data
+                self.send(conn, None)
                 if command not in self.result_send_map:
                     self.result_send_map[command] = []
                 self.result_send_map[command].append(args)
@@ -118,14 +148,17 @@ class Gather(QueueCommunicator):
                     # send datum to server after buffering certain number of datum
                     for command, args_list in self.result_send_map.items():
                         self.server_conn.send((command, args_list))
-                        self.continue_flag = self.server_conn.recv()
+                        self.server_conn.recv()
                     self.result_send_map = {}
                     self.result_send_cnt = 0
 
 
 def gather_loop(args, conn, gaid):
-    gather = Gather(args, conn, gaid)
-    gather.run()
+    try:
+        gather = Gather(args, conn, gaid)
+        gather.run()
+    finally:
+        gather.shutdown()
 
 
 class Workers(QueueCommunicator):
@@ -146,13 +179,9 @@ class Workers(QueueCommunicator):
                 print('finished worker server')
             # use super class's thread list
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-            self.threads[-1].daemon = True
             self.threads[-1].start()
         else:
             # open local connections
-            eids = [0, 1]
-            gids = [i for i in range(len(eids), self.args['worker']['num_process'])]
-            self.args['eids'], self.args['gids'] = eids, gids
             for i in range(self.args['worker']['num_gather']):
                 conn0, conn1 = mp.connection.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
@@ -168,15 +197,14 @@ def entry(entry_args):
     return args
 
 
-if __name__ == '__main__':
+def worker_main(args):
     # offline generation worker
-    with open('config.yaml') as f:
-        entry_args = yaml.load(f)['entry_args']
+    entry_args = args['entry_args']
     entry_args['host'] = gethostname()
 
     args = entry(entry_args)
     print(args)
-    gym.prepare(args['env'])
+    prepare_env(args['env'])
 
     # open workers
     process = []

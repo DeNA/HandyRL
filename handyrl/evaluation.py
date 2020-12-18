@@ -3,18 +3,14 @@
 
 # evaluation of policies or planning algorithms
 
-import sys
 import random
 import time
-import yaml
 import multiprocessing as mp
 
 import numpy as np
 
-from model import DuelingNet as Model
-from model import reload_model
-from connection import send_recv, accept_socket_connections, connect_socket_connection
-import environment as gym
+from .environment import prepare_env, make_env
+from .connection import send_recv, accept_socket_connections, connect_socket_connection
 
 
 io_match_port = 9876
@@ -24,7 +20,7 @@ class RandomAgent:
     def reset(self, env, show=False):
         pass
 
-    def action(self, env, show=False):
+    def action(self, env, player, show=False):
         actions = env.legal_actions()
         return random.choice(actions)
 
@@ -33,7 +29,7 @@ class RandomAgent:
 
 
 class RuleBasedAgent(RandomAgent):
-    def action(self, env, show=False):
+    def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
             return env.rule_based_action()
         else:
@@ -50,7 +46,7 @@ def softmax(p, actions):
     return p
 
 
-def view(env, player=-1):
+def view(env, player=None):
     if hasattr(env, 'view'):
         env.view(player=player)
     else:
@@ -82,11 +78,11 @@ class Agent:
     def reset(self, env, show=False):
         self.hidden = self.planner.init_hidden()
 
-    def action(self, env, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+    def action(self, env, player, show=False):
+        p, v, self.hidden = self.planner.inference(env.observation(player), self.hidden)
         actions = env.legal_actions()
         if show:
-            view(env, player=env.turn())
+            view(env, player=player)
             print_outputs(env, softmax(p, actions), v)
         ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
         return ap_list[0][0]
@@ -101,21 +97,21 @@ class Agent:
 
 
 class SoftAgent(Agent):
-    def action(self, env, show=False):
-        p, v, self.hidden = self.planner.inference(env.observation(env.turn()), self.hidden)
+    def action(self, env, player, show=False):
+        p, v, self.hidden = self.planner.inference(env.observation(player), self.hidden)
         actions = env.legal_actions()
         prob = softmax(p, actions)
         if show:
-            view(env, player=env.turn())
+            view(env, player=player)
             print_outputs(env, prob, v)
         return random.choices(np.arange(len(p)), weights=prob)[0]
 
 
 class IOAgentClient:
-    def __init__(self, agent, conn):
+    def __init__(self, agent, env, conn):
         self.conn = conn
         self.agent = agent
-        self.env = gym.make()
+        self.env = env
 
     def run(self):
         while True:
@@ -127,7 +123,8 @@ class IOAgentClient:
             elif hasattr(self.agent, command):
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
-                    ret = self.env.action2str(ret)
+                    player = args[0]
+                    ret = self.env.action2str(ret, player)
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'play_info':
@@ -152,18 +149,18 @@ class IOAgent:
     def reward(self, reward):
         return send_recv(self.conn, ('reward', [reward]))
 
-    def action(self):
-        return send_recv(self.conn, ('action', []))
+    def action(self, player):
+        return send_recv(self.conn, ('action', [player]))
 
-    def observe(self, player_id):
-        return send_recv(self.conn, ('observe', [player_id]))
+    def observe(self, player):
+        return send_recv(self.conn, ('observe', [player]))
 
 
-def exec_match(env, agents, critic, show=False, game_args=None):
+def exec_match(env, agents, critic, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
-    for agent in agents:
+    for agent in agents.values():
         agent.reset(env, show=show)
     while not env.terminal():
         if env.chance():
@@ -171,10 +168,10 @@ def exec_match(env, agents, critic, show=False, game_args=None):
         if env.terminal():
             break
         if show and critic is not None:
-            print('cv = ', critic.observe(env, -1, show=False)[0])
-        for p, agent in enumerate(agents):
+            print('cv = ', critic.observe(env, None, show=False)[0])
+        for p, agent in agents.items():
             if p == env.turn():
-                action = agent.action(env, show=show)
+                action = agent.action(env, p, show=show)
             else:
                 agent.observe(env, p, show=show)
         if env.play(action):
@@ -186,62 +183,59 @@ def exec_match(env, agents, critic, show=False, game_args=None):
     return env.reward()
 
 
-def exec_io_match(env, io_agents, critic, show=False, game_args=None):
+def exec_io_match(env, io_agents, critic, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
     info = env.diff_info()
-    for agent in io_agents:
+    for agent in io_agents.values():
         agent.reset(info)
     while not env.terminal():
-        agent = io_agents[env.turn()]
         if env.chance():
             return None
         info = env.diff_info()
-        for agent in io_agents:
+        for agent in io_agents.values():
             agent.chance(info)
         if env.terminal():
             break
         if show and critic is not None:
-            print('cv = ', critic.observe(env, -1, show=False)[0])
-        for p, agent in enumerate(io_agents):
+            print('cv = ', critic.observe(env, None, show=False)[0])
+        for p, agent in io_agents.items():
             if p == env.turn():
-                action = agent.action()
+                action_ = agent.action(p)
+                action = env.str2action(action_, p)
             else:
                 agent.observe(p)
         if env.play(action):
             return None
         info = env.diff_info()
-        for agent in io_agents:
+        for agent in io_agents.values():
             agent.play(info)
     reward = env.reward()
-    for p, agent in enumerate(io_agents):
+    for p, agent in io_agents.items():
         agent.reward(reward[p])
     return reward
 
 
 class Evaluator:
-    def __init__(self, env, args, conn):
+    def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.conn = conn
-        self.opp_agent = None, RuleBasedAgent()
-        self.agent = -1, None
+        self.default_agent = RuleBasedAgent()
 
-    def execute(self):
-        args = send_recv(self.conn, ('eargs', None))
-        model_id = args['model_id']
-        if model_id != self.agent[0]:
-            model = reload_model(send_recv(self.conn, ('model', model_id)))
-            self.agent = model_id, Agent(model, self.args['observation'])
-        agents = [(self.agent[1] if p == args['player'] else self.opp_agent[1]) for p in range(2)]
+    def execute(self, models, args):
+        agents = {}
+        for p, model in models.items():
+            if model is None:
+                agents[p] = self.default_agent
+            else:
+                agents[p] = Agent(model, self.args['observation'])
         reward = exec_match(self.env, agents, None)
         if reward is None:
             print('None episode in evaluation!')
         else:
             reward = reward[args['player']]
-        continue_flag = send_recv(self.conn, ('result', (model_id, reward)))
-        return continue_flag
+        return reward
 
 
 def wp_func(results):
@@ -252,27 +246,25 @@ def wp_func(results):
     return win / games
 
 
-def eval_process_mp_child(env_args, agents, critic, index, in_queue, out_queue, seed, show=False):
+def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, seed, show=False):
     random.seed(seed + index)
-    env = gym.make({'id': index})
+    env = make_env({**env_args, 'id': index})
     while True:
         args = in_queue.get()
         if args is None:
             break
         g, agent_ids, pat_idx, game_args = args
         print('*** Game %d ***' % g)
-        agent_list = [agents[ai] for p, ai in enumerate(agent_ids)]
-        if isinstance(agent_list[0], IOAgent):
-            reward = exec_io_match(env, agent_list, critic, show=show, game_args=game_args)
+        agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
+        if isinstance(list(agent_map.values())[0], IOAgent):
+            reward = exec_io_match(env, agent_map, critic, show=show, game_args=game_args)
         else:
-            reward = exec_match(env, agent_list, critic, show=show, game_args=game_args)
+            reward = exec_match(env, agent_map, critic, show=show, game_args=game_args)
         out_queue.put((pat_idx, agent_ids, reward))
     out_queue.put(None)
 
 
-def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games):
-    seed = random.randrange(1e8)
-    print('seed = %d' % seed)
+def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_games, seed):
     in_queue, out_queue = mp.Queue(), mp.Queue()
     args_cnt = 0
     total_results, result_map = [{} for _ in agents], [{} for _ in agents]
@@ -281,8 +273,10 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
     for pat_idx, args in args_patterns.items():
         for i in range(num_games):
             if len(agents) == 2:
+                # When playing two player game,
+                # the number of games with first or second player is equalized.
                 first_agent = 0 if i < (num_games // 2) else 1
-                tmp_pat_idx, agent_ids = (pat_idx + '-先', [0, 1]) if first_agent == 0 else (pat_idx + '-後', [1, 0])
+                tmp_pat_idx, agent_ids = (pat_idx + '-F', [0, 1]) if first_agent == 0 else (pat_idx + '-S', [1, 0])
             else:
                 tmp_pat_idx, agent_ids = pat_idx, random.sample(list(range(len(agents))), len(agents))
             in_queue.put((args_cnt, agent_ids, tmp_pat_idx, args))
@@ -292,13 +286,13 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
 
     io_mode = agents[0] is None
     if io_mode:  # network battle mode
-        agents = io_match_acception(num_process, io_match_port)
+        agents = io_match_acception(num_process, env_args, len(agents), io_match_port)
     else:
         agents = [agents] * num_process
 
     for i in range(num_process):
         in_queue.put(None)
-        args = env_args, agents[i], critic, i, in_queue, out_queue, seed
+        args = agents[i], critic, env_args, i, in_queue, out_queue, seed
         if num_process > 1:
             mp.Process(target=eval_process_mp_child, args=args).start()
             if io_mode:
@@ -315,8 +309,9 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
             continue
         pat_idx, agent_ids, reward = ret
         if reward is not None:
-            for p, r in enumerate(reward):
-                agent_id = agent_ids[p]
+            for idx, p in enumerate(env.players()):
+                agent_id = agent_ids[idx]
+                r = reward[p]
                 result_map[agent_id][pat_idx][r] = result_map[agent_id][pat_idx].get(r, 0) + 1
                 total_results[agent_id][r] = total_results[agent_id].get(r, 0) + 1
 
@@ -327,61 +322,93 @@ def evaluate_mp(env_args, agents, critic, args_patterns, num_process, num_games)
         print('total', {k: total_results[p][k] for k in sorted(total_results[p].keys(), reverse=True)}, wp_func(total_results[p]))
 
 
-def io_match_acception(n, port):
+def io_match_acception(n, env_args, num_agents, port):
     waiting_conns = []
     accepted_conns = []
 
     for conn in accept_socket_connections(port):
-        if len(accepted_conns) >= n * 2:
+        if len(accepted_conns) >= n * num_agents:
             break
         waiting_conns.append(conn)
 
-        if len(waiting_conns) == 2:
+        if len(waiting_conns) == num_agents:
             conn = waiting_conns[0]
             accepted_conns.append(conn)
             waiting_conns = waiting_conns[1:]
-            conn.send((env_args, None))  # send accpept with environment arguments
+            conn.send(env_args)  # send accpept with environment arguments
 
-    return [[IOAgent(accepted_conns[i*2]), IOAgent(accepted_conns[i*2+1])] for i in range(n)]
+    agents_list = [
+        [IOAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
+        for i in range(n)
+    ]
+
+    return agents_list
 
 
-if __name__ == '__main__':
-    with open('config.yaml') as f:
-        env_args = yaml.load(f)['env_args']
+def get_model(env, model_path):
+    import torch
+    from .model import DuelingNet as Model
+    model = env.net()(env) if hasattr(env, 'net') else Model(env)
+    model.load_state_dict(torch.load(model_path), strict=False)
+    model.eval()
+    return model
 
-    gym.prepare(env_args)
-    env = gym.make()
 
-    def get_model(model_path):
-        import torch
-        model = env.net()(env) if hasattr(env, 'net') else Model(env)
-        model.load_state_dict(torch.load(model_path))
-        model.eval()
-        return model
+def client_mp_child(env_args, model_path, conn):
+    env = make_env(env_args)
+    model = get_model(env, model_path)
+    IOAgentClient(Agent(model), env, conn).run()
 
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 's':
-            print('io-match server mode')
-            evaluate_mp(env_args, [None] * 2, None, {'detault': {}}, 1, 100)
-        elif sys.argv[1] == 'c':
-            print('io-match client mode')
-            while True:
-                try:
-                    conn = connect_socket_connection('', io_match_port)
-                    env_args, _ = conn.recv()
-                except EOFError:
-                    break
 
-                def client_mp_child(env_args, model_path, conn):
-                    IOAgentClient(Agent(get_model(model_path)), conn).run()
-                mp.Process(target=client_mp_child, args=(env_args, sys.argv[2], conn)).start()
-                conn.close()
-        else:
-            print('unknown mode')
-    else:
-        agent1 = Agent(get_model('models/1.pth'))
-        critic = None
+def eval_main(args, argv):
+    env_args = args['env_args']
+    prepare_env(env_args)
+    env = make_env(env_args)
 
-        agents = [agent1, RandomAgent()]
+    model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
+    num_games = int(argv[1]) if len(argv) >= 2 else 100
+    num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-        evaluate_mp(env_args, agents, critic, {'detault': {}}, 1, 100)
+    agent1 = Agent(get_model(env, model_path))
+    critic = None
+
+    print('%d process, %d games' % (num_process, num_games))
+
+    seed = random.randrange(1e8)
+    print('seed = %d' % seed)
+
+    agents = [agent1, RandomAgent()]
+
+    evaluate_mp(env, agents, critic, env_args, {'default': {}}, num_process, num_games, seed)
+
+
+def eval_server_main(args, argv):
+    print('network match server mode')
+    env_args = args['env_args']
+    prepare_env(env_args)
+    env = make_env(env_args)
+
+    num_games = int(argv[0]) if len(argv) >= 1 else 100
+    num_process = int(argv[1]) if len(argv) >= 2 else 1
+
+    print('%d process, %d games' % (num_process, num_games))
+
+    seed = random.randrange(1e8)
+    print('seed = %d' % seed)
+
+    evaluate_mp(env, [None] * len(env.players()), None, env_args, {'default': {}}, num_process, num_games, seed)
+
+
+def eval_client_main(args, argv):
+    print('network match client mode')
+    while True:
+        try:
+            host = argv[1] if len(argv) >= 2 else 'localhost'
+            conn = connect_socket_connection(host, io_match_port)
+            env_args = conn.recv()
+        except EOFError:
+            break
+
+        model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
+        mp.Process(target=client_mp_child, args=(env_args, model_path, conn)).start()
+        conn.close()

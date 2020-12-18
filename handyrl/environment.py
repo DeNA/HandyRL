@@ -3,50 +3,31 @@
 
 # game environment
 
-import os
-import sys
-import copy
 import importlib
 
-import numpy as np
 
-sys.path.append(os.path.dirname(__file__))
-
-_envname = None
-_env_module = None
-
-
-def prepare(env_args):
-    envname = env_args['env']
+def prepare_env(env_args):
+    env_name = env_args['env']
     env_source = env_args['source']
 
-    global _envname
-    global _env_module
+    env_module = importlib.import_module(env_source)
 
-    _envname = envname
-    _env_module = importlib.import_module(env_source)
-
-    if _env_module is None:
-        print("No environment %s" % envname)
-    elif hasattr(_env_module, 'prepare'):
-        _env_module.prepare()
+    if env_module is None:
+        print("No environment %s" % env_name)
+    elif hasattr(env_module, 'prepare'):
+        env_module.prepare()
 
 
-def make(args=None):
-    global _envname
-    global _env_module
+def make_env(env_args):
+    env_name = env_args['env']
+    env_source = env_args['source']
 
-    if _env_module is None:
-        print("No environment %s" % _envname)
+    env_module = importlib.import_module(env_source)
+
+    if env_module is None:
+        print("No environment %s" % env_name)
     else:
-        if hasattr(_env_module, 'default_env_args'):
-            env_args = copy.deepcopy(_env_module.default_env_args)
-        else:
-            env_args = {}
-
-        if args is not None and 'id' in args:
-            env_args['id'] = args['id']
-        return _env_module.Environment(env_args)
+        return env_module.Environment(env_args)
 
 
 # base class of Environment
@@ -91,7 +72,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def reward(self, player=-1):
+    def reward(self):
         raise NotImplementedError()
 
     #
@@ -107,10 +88,28 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
+    # Should be defined if you use multiplayer game or add name to each player
+    #
+    def players(self):
+        return [0]
+
+    #
     # Should be defined in all games
     #
-    def observation(self, player=-1):
+    def observation(self, player=None):
         raise NotImplementedError()
+
+    #
+    # Should be defined if you encode action as special string
+    #
+    def action2str(self, a, player=None):
+        return str(a)
+
+    #
+    # Should be defined if you encode action as special string
+    #
+    def str2action(self, s, player=None):
+        return int(s)
 
     #
     # Should be defined if you use network battle mode

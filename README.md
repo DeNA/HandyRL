@@ -1,6 +1,8 @@
-# HandyDistributedRL
+# HandyRL
 
-**HandyDistributedRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
+![](https://github.com/DeNA/HandyRL/workflows/pytest/badge.svg?branch=master)
+
+**HandyRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
 
 Note: Python2 is not supported.
 
@@ -18,27 +20,26 @@ Set `config.yaml` for your own configuration.
 ### Training
 
 ```shell
-python train.py
+python main.py --train
 ```
 
 ### Evaluation
 
 ```shell
-python evaluation.py
+python main.py --eval
 ```
 
 ## How to use (for large scale training)
 
-Set `'remote'` as `True` in `config.yaml`.
 If you use remote machines as worker clients, you can set worker configuation in each client.
 
 ```shell
-python train.py
+python main.py --train-server
 ```
 
 In another window,
 ```shell
-python worker.py
+python main.py --worker
 ```
 
 ## Using your own environments
@@ -55,13 +56,13 @@ class Environment(BaseEnvironment):
         ...
     def terminal(self):
         ...
-    def reward(self, player=-1):
+    def reward(self):
         ...
     def legal_actions(self):
         ...
     def action_length(self):
         ...
-    def observation(self, player=-1):
+    def observation(self, player=None):
         ...
 ```
 

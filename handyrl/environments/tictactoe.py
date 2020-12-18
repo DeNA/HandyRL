@@ -8,10 +8,7 @@ import random
 
 import numpy as np
 
-import torch
-import torch.nn as nn
-
-from environment import BaseEnvironment
+from ..environment import BaseEnvironment
 
 
 class Environment(BaseEnvironment):
@@ -29,10 +26,10 @@ class Environment(BaseEnvironment):
         self.win_color = 0
         self.record = []
 
-    def action2str(self, a):
+    def action2str(self, a, _=None):
         return self.X[a // 3] + self.Y[a % 3]
 
-    def str2action(self, s):
+    def str2action(self, s, _=None):
         return self.X.find(s[0]) * 3 + self.Y.find(s[1])
 
     def record_string(self):
@@ -57,10 +54,12 @@ class Environment(BaseEnvironment):
         self.board[x, y] = self.color
 
         # check winning condition
-        if self.board[x, :].sum() == 3 * self.color \
-          or self.board[:, y].sum() == 3 * self.color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color):
+        win = self.board[x, :].sum() == 3 * self.color \
+            or self.board[:, y].sum() == 3 * self.color \
+            or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
+            or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color)
+
+        if win:
             self.win_color = self.color
 
         self.color = -self.color
@@ -76,7 +75,7 @@ class Environment(BaseEnvironment):
             self.play(info)
 
     def turn(self):
-        return len(self.record) % 2
+        return self.players()[len(self.record) % 2]
 
     def terminal(self):
         # check whether the state is terminal
@@ -89,26 +88,29 @@ class Environment(BaseEnvironment):
             rewards = [1, -1]
         if self.win_color < 0:
             rewards = [-1, 1]
-        return rewards
+        return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self):
         # legal action list
         return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
     def action_length(self):
-        # maximum size of policy (policyの出力サイズを決める)
+        # maximum size of policy (it determines output size of policy function)
         return 3 * 3
 
-    def observation(self, player=-1):
+    def players(self):
+        return [0, 1]
+
+    def observation(self, player=None):
         # input feature for neural nets
-        turn_view = player < 0 or player == self.turn()
+        turn_view = player is None or player == self.turn()
         color = self.color if turn_view else -self.color
         a = np.stack([
             np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
             self.board == color,
             self.board == -color
         ]).astype(np.float32)
-        return (a,)
+        return a
 
 
 if __name__ == '__main__':
@@ -121,4 +123,4 @@ if __name__ == '__main__':
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward(0))
+        print(e.reward())
