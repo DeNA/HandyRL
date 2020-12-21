@@ -365,12 +365,12 @@ def eval_main(args, argv):
     prepare_env(env_args)
     env = make_env(env_args)
 
-    model_path = argv[0]
-    agent1 = Agent(get_model(env, model_path))
-    critic = None
-
+    model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
+
+    agent1 = Agent(get_model(env, model_path))
+    critic = None
 
     print('%d process, %d games' % (num_process, num_games))
 
@@ -409,6 +409,6 @@ def eval_client_main(args, argv):
         except EOFError:
             break
 
-        model_path = argv[0]
+        model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
         mp.Process(target=client_mp_child, args=(env_args, model_path, conn)).start()
         conn.close()
