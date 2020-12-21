@@ -494,6 +494,8 @@ class Learner:
 
     def update(self):
         # call update to every component
+        print()
+        print('epoch %d' % self.model_era)
         if self.model_era not in self.results:
             print('win rate = Nan (0)')
         else:
