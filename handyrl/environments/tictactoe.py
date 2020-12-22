@@ -81,14 +81,14 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return self.win_color != 0 or len(self.record) == 3 * 3
 
-    def reward(self):
-        # terminal reward
-        rewards = [0, 0]
+    def outcome(self):
+        # terminal outcome
+        outcomes = [0, 0]
         if self.win_color > 0:
-            rewards = [1, -1]
+            outcomes = [1, -1]
         if self.win_color < 0:
-            rewards = [-1, 1]
-        return {p: rewards[idx] for idx, p in enumerate(self.players())}
+            outcomes = [-1, 1]
+        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self):
         # legal action list
