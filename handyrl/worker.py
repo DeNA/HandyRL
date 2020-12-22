@@ -27,9 +27,9 @@ class Worker:
         self.conn = conn
         self.latest_model = -1, None
 
-        env = make_env({**args['env'], 'id': wid})
-        self.generator = Generator(env, self.args)
-        self.evaluator = Evaluator(env, self.args)
+        self.env = make_env({**args['env'], 'id': wid})
+        self.generator = Generator(self.env, self.args)
+        self.evaluator = Evaluator(self.env, self.args)
 
         random.seed(args['seed'] + wid)
 
@@ -58,15 +58,28 @@ class Worker:
             args = send_recv(self.conn, ('args', None))
             role = args['role']
 
+            model_ids = {}
+            if args['role'] == 'g':
+                # genatation configuration
+                args['player'] = self.env.players()
+            elif args['role'] == 'e':
+                # evaluation configuration
+                args['player'] = [self.env.players()[args['game_id'] % len(self.env.players())]]
+
+            for p in self.env.players():
+                if p in args['player']:
+                    model_ids[p] = args['epoch']
+                else:
+                    model_ids[p] = -1
+
+            # make dict of models
             models = {}
-            if 'model_id' in args:
-                model_ids = list(args['model_id'].values())
-                model_pool = self._gather_models(model_ids)
+            model_id_list = list(model_ids.values())
+            model_pool = self._gather_models(model_id_list)
+            for p, model_id in model_ids.items():
+                models[p] = model_pool[model_id]
 
-                # make dict of models
-                for p, model_id in args['model_id'].items():
-                    models[p] = model_pool[model_id]
-
+            # execute job
             if role == 'g':
                 episode = self.generator.execute(models, args)
                 send_recv(self.conn, ('episode', episode))

@@ -567,13 +567,13 @@ class Learner:
             if result is None:
                 continue
             for p in result['args']['player']:
-                model_id = result['args']['model_id'][p]
-                if model_id not in self.results:
-                    self.results[model_id] = {}
+                model_epoch = result['args']['epoch']
+                if model_epoch not in self.results:
+                    self.results[model_epoch] = {}
                 r = result['result'][p]
-                if r not in self.results[model_id]:
-                    self.results[model_id][r] = 0
-                self.results[model_id][r] += 1
+                if r not in self.results[model_epoch]:
+                    self.results[model_epoch][r] = 0
+                self.results[model_epoch][r] += 1
 
     def update(self):
         # call update to every component
@@ -612,7 +612,7 @@ class Learner:
 
                 if req == 'args':
                     for _ in data:
-                        args = {'model_id': {}}
+                        args = {'epoch': self.model_era}
 
                         # decide role
                         if self.num_results < self.eval_rate * self.num_episodes:
@@ -621,25 +621,15 @@ class Learner:
                             args['role'] = 'g'
 
                         if args['role'] == 'g':
-                            # genatation configuration
-                            args['player'] = self.env.players()
-                            for p in self.env.players():
-                                if p in args['player']:
-                                    args['model_id'][p] = self.model_era
-                                else:
-                                    args['model_id'][p] = -1
+                            # episode generation
+                            args['game_id'] = self.num_episodes
                             self.num_episodes += 1
                             if self.num_episodes % 100 == 0:
                                 print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
-                            # evaluation configuration
-                            args['player'] = [self.env.players()[self.num_results % len(self.env.players())]]
-                            for p in self.env.players():
-                                if p in args['player']:
-                                    args['model_id'][p] = self.model_era
-                                else:
-                                    args['model_id'][p] = -1
+                            # evaluation
+                            args['game_id'] = self.num_results
                             self.num_results += 1
 
                         send_data.append(args)
