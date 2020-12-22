@@ -54,10 +54,12 @@ class Environment(BaseEnvironment):
         self.board[x, y] = self.color
 
         # check winning condition
-        if self.board[x, :].sum() == 3 * self.color \
-          or self.board[:, y].sum() == 3 * self.color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color):
+        win = self.board[x, :].sum() == 3 * self.color \
+            or self.board[:, y].sum() == 3 * self.color \
+            or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
+            or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color)
+
+        if win:
             self.win_color = self.color
 
         self.color = -self.color
@@ -79,14 +81,14 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return self.win_color != 0 or len(self.record) == 3 * 3
 
-    def reward(self):
-        # terminal reward
-        rewards = [0, 0]
+    def outcome(self):
+        # terminal outcome
+        outcomes = [0, 0]
         if self.win_color > 0:
-            rewards = [1, -1]
+            outcomes = [1, -1]
         if self.win_color < 0:
-            rewards = [-1, 1]
-        return {p: rewards[idx] for idx, p in enumerate(self.players())}
+            outcomes = [-1, 1]
+        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self):
         # legal action list
