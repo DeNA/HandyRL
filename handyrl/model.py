@@ -244,7 +244,7 @@ class BaseModel(nn.Module):
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
-            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] + \
+            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
