@@ -28,6 +28,7 @@ from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import DuelingNet as Model
+from .losses import compute_target
 from .connection import MultiProcessWorkers, MultiThreadWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
@@ -257,80 +258,16 @@ def vtrace(batch, model, hidden, args):
         values_nograd, returns_nograd, clipped_rhos, cs = \
         vtrace_base(batch, model, hidden, args)
     outcomes, returns, rewards = batch['outcome'], batch['return'], batch['reward']
-    time_length = batch['vmask'].size(1)
 
-    if args['algorithm'] == 'MC':
-        # IS with naive advantage
-        value_targets, return_targets = outcomes, returns
-        value_advantages = (outcomes - values_nograd) if t_values is not None else 0
-        return_advantages = (returns - returns_nograd) if t_returns is not None else 0
+    value_args = values_nograd, outcomes, None, args['lambda'], 1, clipped_rhos, cs
+    return_args = returns_nograd, returns, rewards, args['lambda'], args['gamma'], clipped_rhos, cs
 
-    elif args['algorithm'] == 'VTRACE':
-        if t_values is not None:
-            values_t_plus_1 = torch.cat([values_nograd[:, 1:], outcomes], dim=1)
-            deltas_v = clipped_rhos * (values_t_plus_1 - values_nograd)
+    value_targets, value_advantages = compute_target(args['value_target'], *value_args)
+    return_targets, return_advantages = compute_target(args['value_target'], *return_args)
 
-            # compute Vtrace value target recursively
-            vs_minus_v_xs = deque([deltas_v[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                vs_minus_v_xs.appendleft(deltas_v[:, i] + cs[:, i] * vs_minus_v_xs[0])
-
-            vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs), dim=1)
-            vs = vs_minus_v_xs + values_nograd
-            vs_t_plus_1 = torch.cat([vs[:, 1:], outcomes], dim=1)
-
-            value_targets = vs
-            value_advantages = vs_t_plus_1 - values_nograd
-        else:
-            value_targets = None
-            value_advantages = 0
-
-        if t_returns is not None:
-            next_returns = (returns[:, -1:] - rewards[:, -1:]) / args['gamma']
-            returns_t_plus_1 = torch.cat([returns_nograd[:, 1:], next_returns], dim=1)
-            deltas_r = clipped_rhos * (rewards + args['gamma'] * returns_t_plus_1 - returns_nograd)
-
-            # compute Vtrace return target recursively
-            rs_minus_r_xs = deque([deltas_r[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                rs_minus_r_xs.appendleft(deltas_r[:, i] + args['gamma'] * cs[:, i] * rs_minus_r_xs[0])
-
-            rs_minus_r_xs = torch.stack(tuple(rs_minus_r_xs), dim=1)
-            rs = rs_minus_r_xs + returns_nograd
-            rs_t_plus_1 = torch.cat([rs[:, 1:], next_returns], dim=1)
-
-            return_targets = rs
-            return_advantages = rewards + args['gamma'] * rs_t_plus_1 - returns_nograd
-        else:
-            return_targets = None
-            return_advantages = 0
-
-    elif args['algorithm'] == 'TDLAMBDA':
-        lmb = args['lambda']
-
-        if t_values is not None:
-            lambda_values = deque([outcomes[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                lambda_values.appendleft((1 - lmb) * values_nograd[:, i + 1] + lmb * lambda_values[0])
-
-            lambda_values = torch.stack(tuple(lambda_values), dim=1)
-            value_targets = lambda_values
-            value_advantages = lambda_values - values_nograd
-        else:
-            return_targets = None
-            return_advantages = 0
-
-        if t_returns is not None:
-            lambda_returns = deque([returns[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                lambda_returns.appendleft(rewards[:, i] + args['gamma'] * ((1 - lmb) * returns_nograd[:, i + 1] + lmb * lambda_returns[0]))
-
-            lambda_returns = torch.stack(tuple(lambda_returns), dim=1)
-            return_targets = lambda_returns
-            return_advantages = lambda_returns - returns_nograd
-        else:
-            return_targets = None
-            return_advantages = 0
+    if args['policy_target'] != args['value_target']:
+        _, value_advantages = compute_target(args['policy_target'], *value_args)
+        _, return_advantages = compute_target(args['policy_target'], *return_args)
 
     # compute policy advantage
     advantages = clipped_rhos * (value_advantages + return_advantages)
