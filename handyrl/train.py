@@ -483,14 +483,17 @@ class Learner:
 
     def feed_results(self, results):
         # store evaluation results
-        for model_id, reward in results:
-            if reward is None:
+        for result in results:
+            if result is None:
                 continue
-            if model_id not in self.results:
-                self.results[model_id] = {}
-            if reward not in self.results[model_id]:
-                self.results[model_id][reward] = 0
-            self.results[model_id][reward] += 1
+            for p in result['args']['player']:
+                model_id = result['args']['model_id'][p]
+                if model_id not in self.results:
+                    self.results[model_id] = {}
+                r = result['result'][p]
+                if r not in self.results[model_id]:
+                    self.results[model_id][r] = 0
+                self.results[model_id][r] += 1
 
     def update(self):
         # call update to every component
@@ -539,18 +542,21 @@ class Learner:
 
                         if args['role'] == 'g':
                             # genatation configuration
-                            args['player'] = self.env.players()[self.num_episodes % len(self.env.players())]
+                            args['player'] = self.env.players()
                             for p in self.env.players():
-                                args['model_id'][p] = self.model_era
+                                if p in args['player']:
+                                    args['model_id'][p] = self.model_era
+                                else:
+                                    args['model_id'][p] = -1
                             self.num_episodes += 1
                             if self.num_episodes % 100 == 0:
                                 print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
-                            args['player'] = self.env.players()[self.num_results % len(self.env.players())]
+                            args['player'] = [self.env.players()[self.num_results % len(self.env.players())]]
                             for p in self.env.players():
-                                if p == args['player']:
+                                if p in args['player']:
                                     args['model_id'][p] = self.model_era
                                 else:
                                     args['model_id'][p] = -1

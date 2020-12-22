@@ -230,12 +230,11 @@ class Evaluator:
                 agents[p] = self.default_agent
             else:
                 agents[p] = Agent(model, self.args['observation'])
-        reward = exec_match(self.env, agents, None)
-        if reward is None:
+        result = exec_match(self.env, agents, None)
+        if result is None:
             print('None episode in evaluation!')
-        else:
-            reward = reward[args['player']]
-        return reward
+            return None
+        return {'args': args, 'result': result}
 
 
 def wp_func(results):
