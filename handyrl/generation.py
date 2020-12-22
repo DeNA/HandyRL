@@ -83,9 +83,9 @@ class Generator:
         episode = {
             'args': args, 'steps': len(moments), 'outcome': outcomes,
             'moment': [
-                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']])) \
-                    for i in range(0, len(moments), self.args['compress_steps'])
-            ],
+                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']]))
+                for i in range(0, len(moments), self.args['compress_steps'])
+            ]
         }
 
         return episode

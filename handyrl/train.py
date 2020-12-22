@@ -59,7 +59,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
-            obs = [[(lambda x : (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
+            obs = [[(lambda x: (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
@@ -107,17 +107,17 @@ def make_batch(episodes, args):
 
     tmsk, pmsk, vmsk, act, p, v, rew, ret, oc, progress = zip(*datum)
 
-    obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)), transpose=True)
-    tmsk = to_torch(np.array(tmsk), transpose=True)
-    pmsk = to_torch(np.array(pmsk), transpose=True)
-    vmsk = to_torch(np.array(vmsk), transpose=True)
-    act = to_torch(np.array(act), transpose=True)
-    p = to_torch(np.array(p), transpose=True)
-    v = to_torch(np.array(v), transpose=True)
-    rew = to_torch(np.array(rew), transpose=True)
-    ret = to_torch(np.array(ret), transpose=True)
-    oc = to_torch(np.array(oc), transpose=True)
-    progress = to_torch(np.array(progress), transpose=True)
+    obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
+    tmsk = to_torch(np.array(tmsk))
+    pmsk = to_torch(np.array(pmsk))
+    vmsk = to_torch(np.array(vmsk))
+    act = to_torch(np.array(act))
+    p = to_torch(np.array(p))
+    v = to_torch(np.array(v))
+    rew = to_torch(np.array(rew))
+    ret = to_torch(np.array(ret))
+    oc = to_torch(np.array(oc))
+    progress = to_torch(np.array(progress))
 
     return {
         'observation': obs, 'tmask': tmsk, 'pmask': pmsk, 'vmask': vmsk,
@@ -132,14 +132,14 @@ def forward_prediction(model, hidden, batch, obs_mode):
 
     Args:
         model (torch.nn.Module): neural network
-        hidden: initial hidden state (..., L, B, P, ...)
+        hidden: initial hidden state (..., B, P, ...)
         batch (dict): training batch (output of make_batch() function)
 
     Returns:
         tuple: calculated policy and value
     """
 
-    observations = batch['observation']  # (T, B, P, ...)
+    observations = batch['observation']  # (B, T, P, ...)
 
     if hidden is None:
         # feed-forward neural network
@@ -147,13 +147,13 @@ def forward_prediction(model, hidden, batch, obs_mode):
         t_policies, t_values, t_returns, _ = model(obs, None)
     else:
         # sequential computation with RNN
-        bmask = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (T, B, P)
-        bmasks = map_r(hidden, lambda h: bmask.view(*bmask.size()[:3], *([1] * (len(h.size()) - 2))))  # (..., T, B, P, ...)
+        bmasks = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (B, T, P)
 
         t_policies, t_values, t_returns = [], [], []
-        for t in range(batch['tmask'].size(0)):
-            bmask = map_r(bmasks, lambda m: m[t])
-            obs = map_r(observations, lambda o: o[t].view(-1, *o.size()[3:]))  # (..., B * P, ...)
+        for t in range(batch['tmask'].size(1)):
+            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
+            bmask_ = bmasks[:, t]
+            bmask = map_r(hidden, lambda h: bmask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
@@ -165,9 +165,9 @@ def forward_prediction(model, hidden, batch, obs_mode):
             t_returns.append(t_return)
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
-        t_policies = torch.stack(t_policies)
-        t_values = torch.stack(t_values) if t_values[0] is not None else None
-        t_returns = torch.stack(t_returns) if t_returns[0] is not None else None
+        t_policies = torch.stack(t_policies, dim=1)
+        t_values = torch.stack(t_values, dim=1) if t_values[0] is not None else None
+        t_returns = torch.stack(t_returns, dim=1) if t_returns[0] is not None else None
 
     # gather turn player's policies
     t_policies = t_policies.view(*batch['tmask'].size()[:2], -1, t_policies.size(-1))
@@ -256,7 +256,7 @@ def vtrace(batch, model, hidden, args):
         values_nograd, returns_nograd, clipped_rhos, cs = \
         vtrace_base(batch, model, hidden, args)
     outcomes, returns, rewards = batch['outcome'], batch['return'], batch['reward']
-    time_length = batch['vmask'].size(0)
+    time_length = batch['vmask'].size(1)
 
     if args['algorithm'] == 'MC':
         # IS with naive advantage
@@ -266,17 +266,17 @@ def vtrace(batch, model, hidden, args):
 
     elif args['algorithm'] == 'VTRACE':
         if t_values is not None:
-            values_t_plus_1 = torch.cat([values_nograd[1:], outcomes])
+            values_t_plus_1 = torch.cat([values_nograd[:, 1:], outcomes], dim=1)
             deltas_v = clipped_rhos * (values_t_plus_1 - values_nograd)
 
             # compute Vtrace value target recursively
-            vs_minus_v_xs = deque([deltas_v[-1]])
+            vs_minus_v_xs = deque([deltas_v[:, -1]])
             for i in range(time_length - 2, -1, -1):
-                vs_minus_v_xs.appendleft(deltas_v[i] + cs[i] * vs_minus_v_xs[0])
+                vs_minus_v_xs.appendleft(deltas_v[:, i] + cs[:, i] * vs_minus_v_xs[0])
 
-            vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs))
+            vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs), dim=1)
             vs = vs_minus_v_xs + values_nograd
-            vs_t_plus_1 = torch.cat([vs[1:], outcomes])
+            vs_t_plus_1 = torch.cat([vs[:, 1:], outcomes], dim=1)
 
             value_targets = vs
             value_advantages = vs_t_plus_1 - values_nograd
@@ -285,18 +285,18 @@ def vtrace(batch, model, hidden, args):
             value_advantages = 0
 
         if t_returns is not None:
-            next_returns = (returns[-1:] - rewards[-1:]) / args['gamma']
-            returns_t_plus_1 = torch.cat([returns_nograd[1:], next_returns])
+            next_returns = (returns[:, -1:] - rewards[:, -1:]) / args['gamma']
+            returns_t_plus_1 = torch.cat([returns_nograd[:, 1:], next_returns], dim=1)
             deltas_r = clipped_rhos * (rewards + args['gamma'] * returns_t_plus_1 - returns_nograd)
 
             # compute Vtrace return target recursively
-            rs_minus_r_xs = deque([deltas_r[-1]])
+            rs_minus_r_xs = deque([deltas_r[:, -1]])
             for i in range(time_length - 2, -1, -1):
-                rs_minus_r_xs.appendleft(deltas_r[i] + args['gamma'] * cs[i] * rs_minus_r_xs[0])
+                rs_minus_r_xs.appendleft(deltas_r[:, i] + args['gamma'] * cs[:, i] * rs_minus_r_xs[0])
 
-            rs_minus_r_xs = torch.stack(tuple(rs_minus_r_xs))
+            rs_minus_r_xs = torch.stack(tuple(rs_minus_r_xs), dim=1)
             rs = rs_minus_r_xs + returns_nograd
-            rs_t_plus_1 = torch.cat([rs[1:], next_returns])
+            rs_t_plus_1 = torch.cat([rs[:, 1:], next_returns], dim=1)
 
             return_targets = rs
             return_advantages = rewards + args['gamma'] * rs_t_plus_1 - returns_nograd
@@ -308,11 +308,11 @@ def vtrace(batch, model, hidden, args):
         lmb = args['lambda']
 
         if t_values is not None:
-            lambda_values = deque([outcomes[-1]])
+            lambda_values = deque([outcomes[:, -1]])
             for i in range(time_length - 2, -1, -1):
-                lambda_values.appendleft((1 - lmb) * values_nograd[i + 1] + lmb * lambda_values[0])
+                lambda_values.appendleft((1 - lmb) * values_nograd[:, i + 1] + lmb * lambda_values[0])
 
-            lambda_values = torch.stack(tuple(lambda_values))
+            lambda_values = torch.stack(tuple(lambda_values), dim=1)
             value_targets = lambda_values
             value_advantages = lambda_values - values_nograd
         else:
@@ -320,11 +320,11 @@ def vtrace(batch, model, hidden, args):
             return_advantages = 0
 
         if t_returns is not None:
-            lambda_returns = deque([returns[-1]])
+            lambda_returns = deque([returns[:, -1]])
             for i in range(time_length - 2, -1, -1):
-                lambda_returns.appendleft(rewards[i] + args['gamma'] * ((1 - lmb) * returns_nograd[i + 1] + lmb * lambda_returns[0]))
+                lambda_returns.appendleft(rewards[:, i] + args['gamma'] * ((1 - lmb) * returns_nograd[:, i + 1] + lmb * lambda_returns[0]))
 
-            lambda_returns = torch.stack(tuple(lambda_returns))
+            lambda_returns = torch.stack(tuple(lambda_returns), dim=1)
             return_targets = lambda_returns
             return_advantages = lambda_returns - returns_nograd
         else:
@@ -385,7 +385,7 @@ class Batcher:
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps'],
+            'start': st, 'end': ed, 'total': ep['steps']
         }
         return ep_minimum
 
@@ -458,7 +458,7 @@ class Trainer:
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
             batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
-            batch_size = batch['value'].size(1)
+            batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
 
@@ -542,6 +542,9 @@ class Learner:
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
 
+    def latest_model_path(self):
+        return os.path.join('models', 'latest.pth')
+
     def update_model(self, model, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
@@ -549,6 +552,7 @@ class Learner:
         self.model = model
         os.makedirs('models', exist_ok=True)
         torch.save(model.state_dict(), self.model_path(self.model_era))
+        torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
         # store generated episodes
@@ -558,17 +562,22 @@ class Learner:
 
     def feed_results(self, results):
         # store evaluation results
-        for model_id, reward in results:
-            if reward is None:
+        for result in results:
+            if result is None:
                 continue
-            if model_id not in self.results:
-                self.results[model_id] = {}
-            if reward not in self.results[model_id]:
-                self.results[model_id][reward] = 0
-            self.results[model_id][reward] += 1
+            for p in result['args']['player']:
+                model_id = result['args']['model_id'][p]
+                if model_id not in self.results:
+                    self.results[model_id] = {}
+                r = result['result'][p]
+                if r not in self.results[model_id]:
+                    self.results[model_id][r] = 0
+                self.results[model_id][r] += 1
 
     def update(self):
         # call update to every component
+        print()
+        print('epoch %d' % self.model_era)
         if self.model_era not in self.results:
             print('win rate = Nan (0)')
         else:
@@ -612,18 +621,21 @@ class Learner:
 
                         if args['role'] == 'g':
                             # genatation configuration
-                            args['player'] = self.env.players()[self.num_episodes % len(self.env.players())]
+                            args['player'] = self.env.players()
                             for p in self.env.players():
-                                args['model_id'][p] = self.model_era
+                                if p in args['player']:
+                                    args['model_id'][p] = self.model_era
+                                else:
+                                    args['model_id'][p] = -1
                             self.num_episodes += 1
                             if self.num_episodes % 100 == 0:
                                 print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
-                            args['player'] = self.env.players()[self.num_results % len(self.env.players())]
+                            args['player'] = [self.env.players()[self.num_results % len(self.env.players())]]
                             for p in self.env.players():
-                                if p == args['player']:
+                                if p in args['player']:
                                     args['model_id'][p] = self.model_era
                                 else:
                                     args['model_id'][p] = -1

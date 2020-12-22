@@ -164,7 +164,7 @@ class ConvLSTMCell(nn.Module):
     def init_hidden(self, input_size, batch_size):
         return tuple([
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
-            torch.zeros(*batch_size, self.hidden_dim, *input_size),
+            torch.zeros(*batch_size, self.hidden_dim, *input_size)
         ])
 
     def forward(self, input_tensor, cur_state):
@@ -196,8 +196,8 @@ class DRC(nn.Module):
                 input_dim=input_dim,
                 hidden_dim=hidden_dim,
                 kernel_size=(kernel_size, kernel_size),
-                bias=bias)
-            )
+                bias=bias
+            ))
         self.blocks = nn.ModuleList(blocks)
 
     def init_hidden(self, input_size, batch_size):

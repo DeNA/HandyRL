@@ -373,7 +373,7 @@ class Environment(BaseEnvironment):
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],
             *[(1 if nbopp   == i else 0) for i in range(1, 5)],
-            *[(1 if nropp   == i else 0) for i in range(1, 5)],
+            *[(1 if nropp   == i else 0) for i in range(1, 5)]
         ]).astype(np.float32)
 
         blue_c = self.board == self.colortype2piece(color,    self.BLUE)
@@ -392,7 +392,7 @@ class Environment(BaseEnvironment):
             red_c,
             # opponent's blue/red pieces
             blue_o if player is None else np.zeros_like(self.board),
-            red_o  if player is None else np.zeros_like(self.board),
+            red_o  if player is None else np.zeros_like(self.board)
         ]).astype(np.float32)
 
         if color == self.WHITE:
