@@ -304,7 +304,7 @@ def vtrace(batch, model, hidden, args):
             return_targets = None
             return_advantages = 0
 
-    elif args['algorithm'] == 'LAMBDA-TRACE':
+    elif args['algorithm'] == 'TDLAMBDA':
         lmb = args['lambda']
 
         if t_values is not None:

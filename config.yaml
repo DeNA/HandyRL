@@ -23,7 +23,7 @@ train_args:
     worker:
         num_gather: 2
         num_process: 6
-    algorithm: 'VTRACE' # 'LAMBDA-TRACE' 'MC'
+    algorithm: 'TDLAMBDA' # 'VTRACE' 'MC'
     seed: 0
     restart_epoch: 0
 
