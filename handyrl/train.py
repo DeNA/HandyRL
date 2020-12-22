@@ -1,10 +1,5 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
-#
-# Paper that proposed VTrace algorithm
-# https://arxiv.org/abs/1802.01561
-# Official code
-# https://github.com/deepmind/scalable_agent/blob/6c0c8a701990fab9053fb338ede9c915c18fa2b1/vtrace.py
 
 # training
 
