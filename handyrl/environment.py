@@ -70,9 +70,15 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
-    # Should be defined in all games
+    # Should be defined if you use immediate reward
     #
     def reward(self):
+        return {}
+
+    #
+    # Should be defined in all games
+    #
+    def outcome(self):
         raise NotImplementedError()
 
     #
