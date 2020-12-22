@@ -188,7 +188,7 @@ def forward_prediction(model, hidden, batch, obs_mode):
 
 def compose_losses(policies, values, returns, log_selected_policies, \
                    advantages, value_targets, return_targets, \
-                   tmasks, vmasks, progress, entropy_regularization):
+                   tmasks, vmasks, progress, args):
     """Caluculate loss value
 
     Returns:
@@ -209,8 +209,9 @@ def compose_losses(policies, values, returns, log_selected_policies, \
     entropy = dist.Categorical(logits=policies).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
-    loss_base = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
-    losses['total'] = loss_base + entropy.mul(1 - progress * 0.9).sum() * -entropy_regularization
+    base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
+    entropy_loss = entropy.mul(1 - progress * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
+    losses['total'] = base_loss + entropy_loss
 
     return losses, dcnt
 
@@ -336,7 +337,7 @@ def vtrace(batch, model, hidden, args):
 
     return compose_losses(
         t_policies, t_values, t_returns, log_selected_t_policies, advantages, value_targets, return_targets,
-        batch['tmask'], batch['vmask'], batch['progress'], args['entropy_regularization'],
+        batch['tmask'], batch['vmask'], batch['progress'], args
     )
 
 
