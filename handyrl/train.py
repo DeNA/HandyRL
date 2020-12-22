@@ -204,7 +204,7 @@ def compose_losses(policies, values, returns, log_selected_policies, \
     if values is not None:
         losses['v'] = ((values - value_targets) ** 2).mul(vmasks).sum() / 2
     if returns is not None:
-        losses['r'] = torch.abs(returns - return_targets).mul(vmasks).sum()
+        losses['r'] = F.smooth_l1_loss(returns, return_targets, reduction='none').mul(vmasks).sum()
 
     entropy = dist.Categorical(logits=policies).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
