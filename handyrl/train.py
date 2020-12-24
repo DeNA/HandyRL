@@ -602,7 +602,7 @@ class Learner:
         else:
             n, r, r2 = self.generation_results[self.model_era]
             mean = r / (n + 1e-6)
-            std = ((r2 - 2 * mean * r) / (n + 1e-6) - mean ** 2) ** 0.5
+            std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
             print('generation stats = %.3f +- %.3f' % (mean, std))
 
         model, steps = self.trainer.update()
