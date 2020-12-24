@@ -521,6 +521,7 @@ class Learner:
             self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
 
         # generated datum
+        self.generation_results = {}
         self.num_episodes = 0
 
         # evaluated datum
@@ -556,6 +557,18 @@ class Learner:
         torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
+        # analyze generated episodes
+        for episode in episodes:
+            if episode is None:
+                continue
+            for idx, p in enumerate(episode['args']['player']):
+                if p not in episode['args']['player']:
+                    continue
+                model_id = episode['args']['model_id'][p]
+                outcome = episode['outcome'][idx]
+                n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
+                self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
         while len(self.trainer.episodes) > self.args['maximum_episodes']:
@@ -568,28 +581,30 @@ class Learner:
                 continue
             for p in result['args']['player']:
                 model_id = result['args']['model_id'][p]
-                if model_id not in self.results:
-                    self.results[model_id] = {}
-                r = result['result'][p]
-                if r not in self.results[model_id]:
-                    self.results[model_id][r] = 0
-                self.results[model_id][r] += 1
+                res = result['result'][p]
+                n, r, r2 = self.results.get(model_id, (0, 0, 0))
+                self.results[model_id] = n + 1, r + res, r2 + res ** 2
 
     def update(self):
         # call update to every component
         print()
         print('epoch %d' % self.model_era)
+
         if self.model_era not in self.results:
             print('win rate = Nan (0)')
         else:
-            distribution = self.results[self.model_era]
-            results = {k: distribution[k] for k in sorted(distribution.keys(), reverse=True)}
-            # output evaluation results
-            n, win = 0, 0.0
-            for r, cnt in results.items():
-                n += cnt
-                win += (r + 1) / 2 * cnt
-            print('win rate = %.3f (%.1f / %d)' % (win / n, win, n))
+            n, r, r2 = self.results[self.model_era]
+            mean = r / (n + 1e-6)
+            print('win rate = %.3f (%.1f / %d)' % ((mean + 1) / 2, (r + n) / 2, n))
+
+        if self.model_era not in self.generation_results:
+            print('generation stats = Nan (0)')
+        else:
+            n, r, r2 = self.generation_results[self.model_era]
+            mean = r / (n + 1e-6)
+            std = ((r2 - 2 * mean * r) / (n + 1e-6) - mean ** 2) ** 0.5
+            print('generation stats = %.3f +- %.3f' % (mean, std))
+
         model, steps = self.trainer.update()
         if model is None:
             model = self.model
