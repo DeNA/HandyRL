@@ -11,6 +11,7 @@ import numpy as np
 
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
+from .model import softmax
 
 
 io_match_port = 9876
@@ -36,16 +37,6 @@ class RuleBasedAgent(RandomAgent):
             return random.choice(env.legal_actions())
 
 
-def softmax(p, actions):
-    ep = np.exp(p)
-    p = ep / ep.sum()
-    mask = np.zeros_like(p)
-    mask[actions] = 1
-    p = (p + 1e-16) * mask
-    p /= p.sum()
-    return p
-
-
 def view(env, player=None):
     if hasattr(env, 'view'):
         env.view(player=player)
@@ -69,23 +60,36 @@ def print_outputs(env, prob, v):
 
 
 class Agent:
-    def __init__(self, planner, observation=False):
-        # planner might be a neural nets, or some game tree search
-        self.planner = planner
+    def __init__(self, model, observation=False, temperature=0.0):
+        # model might be a neural net, or some planning algorithm such as game tree search
+        self.model = model
         self.hidden = None
         self.observation = observation
+        self.temperature = temperature
 
     def reset(self, env, show=False):
-        self.hidden = self.planner.init_hidden()
+        self.hidden = self.model.init_hidden()
+
+    def plan(self, obs):
+        p, v, r, self.hidden = self.model.inference(obs, self.hidden)
+        return p, v, r
 
     def action(self, env, player, show=False):
-        p, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
+        p, v, _ = self.plan(env.observation(player))
         actions = env.legal_actions()
+        mask = np.ones_like(p)
+        mask[actions] = 0
+        p -= mask * 1e32
+
         if show:
             view(env, player=player)
-            print_outputs(env, softmax(p, actions), v)
-        ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
-        return ap_list[0][0]
+            print_outputs(env, softmax(p), v)
+
+        if self.temperature == 0:
+            ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
+            return ap_list[0][0]
+        else:
+            return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
 
     def observe(self, env, player, show=False):
         if self.observation:
@@ -96,15 +100,29 @@ class Agent:
                 print_outputs(env, None, v)
 
 
+class EnsembleAgent(Agent):
+    def reset(self, env, show=False):
+        self.hidden = [model.init_hidden() for model in self.model]
+
+    def plan(self, obs):
+        ps, vs, rs = [], [], []
+        for i, model in enumerate(self.model):
+            p, v, r, self.hidden[i] = model.inference(obs, self.hidden[i])
+            if p is not None:
+                ps.append(p)
+            if v is not None:
+                vs.append(v)
+            if r is not None:
+                rs.append(r)
+        p = np.mean(ps, axis=0) if len(ps) > 0 else None
+        v = np.mean(vs, axis=0) if len(vs) > 0 else None
+        r = np.mean(rs, axis=0) if len(rs) > 0 else None
+        return p, v, r
+
+
 class SoftAgent(Agent):
-    def action(self, env, player, show=False):
-        p, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
-        actions = env.legal_actions()
-        prob = softmax(p, actions)
-        if show:
-            view(env, player=player)
-            print_outputs(env, prob, v)
-        return random.choices(np.arange(len(p)), weights=prob)[0]
+    def __init__(self, model, observation=False):
+        super().__init__(model, observation=observation, temperature=1.0)
 
 
 class IOAgentClient:
