@@ -254,7 +254,7 @@ class RandomModel(BaseModel):
         return np.zeros(self.action_length), np.zeros(1), None, None
 
 
-class DuelingNet(BaseModel):
+class SimpleConv2DModel(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
