@@ -1,4 +1,4 @@
 PyYAML
 numpy
-torch
+tensorflow
 pytest
