@@ -7,14 +7,13 @@ import random
 import itertools
 
 import numpy as np
-import torch
-import torch.nn as nn
+import tensorflow
 
 from ..environment import BaseEnvironment
 from ..model import BaseModel, Encoder, Head, DRC, Conv
 
 
-class GeisterNet(BaseModel):
+'''class GeisterNet(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
@@ -47,7 +46,7 @@ class GeisterNet(BaseModel):
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), h_r, hidden
+        return h_p, torch.tanh(h_v), h_r, hidden'''
 
 
 class Environment(BaseEnvironment):

@@ -346,11 +346,9 @@ def io_match_acception(n, env_args, num_agents, port):
 
 
 def get_model(env, model_path):
-    import torch
-    from .model import DuelingNet as Model
-    model = env.net()(env) if hasattr(env, 'net') else Model(env)
-    model.load_state_dict(torch.load(model_path), strict=False)
-    model.eval()
+    import tensorflow as tf
+    tf.keras.models.load_model(model_path)
+    model.inference(env.observation())
     return model
 
 
@@ -365,7 +363,7 @@ def eval_main(args, argv):
     prepare_env(env_args)
     env = make_env(env_args)
 
-    model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
+    model_path = argv[0] if len(argv) >= 1 else 'models/latest'
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
@@ -409,6 +407,6 @@ def eval_client_main(args, argv):
         except EOFError:
             break
 
-        model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
+        model_path = argv[0] if len(argv) >= 1 else 'models/latest'
         mp.Process(target=client_mp_child, args=(env_args, model_path, conn)).start()
         conn.close()

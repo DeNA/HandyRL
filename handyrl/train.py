@@ -490,12 +490,13 @@ class Learner:
         # trained datum
         self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        train_model = self.model_class(self.env, args)
-        self.model = train_model
         if self.model_era != 0:
-            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
-        self.model.inference(self.env.observation())
-        tf.saved_model.save(self.model, self.model_path(self.model_era))
+            self.model = tf.keras.models.load_model(self.model_path(self.model_era))
+            self.model.inference(self.env.observation())
+        else:
+            self.model = self.model_class(self.env, args)
+            self.model.inference(self.env.observation())
+            tf.saved_model.save(self.model, self.model_path(self.model_era))
 
         # generated datum
         self.generation_results = {}
