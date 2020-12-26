@@ -242,14 +242,14 @@ class BaseModel(Model):
         outputs = self.call(xt, ht, **kwargs)
 
         return tuple(
-            [to_numpy(o).squeeze(0) for o in outputs[:-1]] +
+            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
 
 class RandomModel(BaseModel):
     def call(self, x=None, hidden=None):
-        return tf.zeros((1, self.action_length)), tf.zeros((1, 1)), None
+        return tf.zeros((1, self.action_length)), tf.zeros((1, 1)), None, None
 
 
 class DuelingNet(BaseModel):
@@ -272,4 +272,4 @@ class DuelingNet(BaseModel):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, tf.tanh(h_v), None
+        return h_p, tf.tanh(h_v), None, None
