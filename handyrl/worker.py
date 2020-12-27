@@ -28,9 +28,9 @@ class Worker:
         self.conn = conn
         self.latest_model = -1, None
 
-        env = make_env({**args['env'], 'id': wid})
-        self.generator = Generator(env, self.args)
-        self.evaluator = Evaluator(env, self.args)
+        self.env = make_env({**args['env'], 'id': wid})
+        self.generator = Generator(self.env, self.args)
+        self.evaluator = Evaluator(self.env, self.args)
 
         random.seed(args['seed'] + wid)
 
@@ -48,7 +48,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = reload_model(send_recv(self.conn, ('model', model_id)))
+                    model_pool[model_id] = reload_model(send_recv(self.conn, ('model', model_id)), self.env, self.args)
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]

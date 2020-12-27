@@ -347,8 +347,10 @@ def io_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import tensorflow as tf
-    tf.keras.models.load_model(model_path)
+    from .model import DuelingNet as Model
+    model = env.net()(env) if hasattr(env, 'net') else Model(env)
     model.inference(env.observation())
+    model.set_weights(tf.keras.models.load_model(model_path).get_weights())
     return model
 
 

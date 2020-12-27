@@ -6,7 +6,6 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Dense, Flatten, Conv2D
-from tensorflow.keras import Model
 
 
 from .util import map_r
@@ -51,11 +50,9 @@ def softmax(x):
     return x / x.sum(axis=-1)
 
 
-def reload_model(x):
-    weights = x
-    from .environments.tictactoe import Environment
-    env = Environment()
-    model = DuelingNet(env, {})
+def reload_model(x, env, args):
+    model_class, weights = x
+    model = model_class(env, args)
     model.inference(env.observation())
     model.set_weights(weights)
     return model
@@ -142,92 +139,32 @@ class Head(Layer):
         return h
 
 
-'''class ConvLSTMCell(Model):
-    def __init__(self, input_dim, hidden_dim, kernel_size, bias):
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-
-        self.kernel_size = kernel_size
-        self.padding = kernel_size[0] // 2, kernel_size[1] // 2
-        self.bias = bias
-
-        self.conv = nn.Conv2d(
-            in_channels=self.input_dim + self.hidden_dim,
-            out_channels=4 * self.hidden_dim,
-            kernel_size=self.kernel_size,
-            padding=self.padding,
-            bias=self.bias
-        )
-
-    def init_hidden(self, input_size, batch_size):
-        return tuple([
-            torch.zeros(*batch_size, self.hidden_dim, *input_size),
-            torch.zeros(*batch_size, self.hidden_dim, *input_size)
-        ])
-
-    def forward(self, input_tensor, cur_state):
-        h_cur, c_cur = cur_state
-
-        combined = torch.cat([input_tensor, h_cur], dim=-3)  # concatenate along channel axis
-        combined_conv = self.conv(combined)
-
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=-3)
-        i = torch.sigmoid(cc_i)
-        f = torch.sigmoid(cc_f)
-        o = torch.sigmoid(cc_o)
-        g = torch.tanh(cc_g)
-
-        c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
-
-        return h_next, c_next
-
-
-class DRC(Model):
+class DRC(tf.keras.Model):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
         super().__init__()
         self.num_layers = num_layers
 
-        blocks = []
+        self.blocks = []
         for _ in range(self.num_layers):
-            blocks.append(ConvLSTMCell(
-                input_dim=input_dim,
-                hidden_dim=hidden_dim,
+            blocks.append(tf.keras.ConvLSTM2D(
+                filters=hidden_dim,
                 kernel_size=(kernel_size, kernel_size),
-                bias=bias
+                use_bias=bias
             ))
-        self.blocks = blocks
 
-    def init_hidden(self, input_size, batch_size):
-        if batch_size is None:  # for inference
-            with torch.no_grad():
-                return to_numpy(self.init_hidden(input_size, []))
-        else:  # for training
-            hs, cs = [], []
-            for block in self.blocks:
-                h, c = block.init_hidden(input_size, batch_size)
-                hs.append(h)
-                cs.append(c)
-
-            return hs, cs
-
-    def forward(self, x, hidden, num_repeats):
+    def call(self, x, hidden, num_repeats):
         if hidden is None:
-            hidden = self.init_hidden(x.shape[-2:], x.shape[:-3])
+            hidden = self.reset_states(x.shape[-2:], x.shape[:-3])
 
         hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
                 hs[i], cs[i] = block(x, (hs[i], cs[i]))
 
-        return hs[-1], (hs, cs)'''
+        return hs[-1], (hs, cs)
 
 
-# simple model
-
-class BaseModel(Model):
+class BaseModel(tf.keras.Model):
     def __init__(self, env, args=None, action_length=None):
         super().__init__()
         self.action_length = env.action_length() if action_length is None else action_length
@@ -246,6 +183,8 @@ class BaseModel(Model):
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
+
+# simple models
 
 class RandomModel(BaseModel):
     def call(self, x=None, hidden=None):

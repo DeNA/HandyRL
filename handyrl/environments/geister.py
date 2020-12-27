@@ -7,13 +7,13 @@ import random
 import itertools
 
 import numpy as np
-import tensorflow
+import tensorflow as tf
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel, Encoder, Head, DRC, Conv
+from ..model import BaseModel, Encoder, Head, DRC, ConvBN
 
 
-'''class GeisterNet(BaseModel):
+class GeisterNet(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
@@ -24,29 +24,29 @@ from ..model import BaseModel, Encoder, Head, DRC, Conv
 
         self.encoder = Encoder(self.input_size, filters)
         self.body = DRC(layers, filters, filters)
-        self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
-        self.activation_p = nn.LeakyReLU(0.1)
-        self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
+        self.head_p1 = ConvBN(filters * 2, p_filters, 1, bn=False)
+        self.head_p2 = ConvBN(p_filters, 4, 1, bn=False, bias=False)
         self.head_v = Head((filters * 2, 6, 6), 1, 1)
         self.head_r = Head((filters * 2, 6, 6), 1, 1)
 
-    def init_hidden(self, batch_size=None):
-        return self.body.init_hidden(self.input_size[1:], batch_size)
+    def reset_states(self, batch_size=None):
+        return self.body.reset_state(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
         s = x['scalar'].reshape(*x['scalar'].size(), 1, 1).repeat(1, 1, 6, 6)
-        h = torch.cat([s, x['board']], -3)
+        h = tf.concat([s, x['board']], axis=-3)
 
         h_e = self.encoder(h)
         h, hidden = self.body(h_e, hidden, num_repeats=3)
 
-        h = torch.cat([h_e, h], -3)
-        h_p = self.activation_p(self.head_p1(h))
-        h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
+        h = tf.concat([h_e, h], axis=-3)
+        h_p = tf.nn.leaky_relu(self.head_p1(h), 0.1)
+        h_p = self.head_p2(h_p)
+        h_p = tf.reshape(h_p, [*h.shape[:-3], 4 * 6 * 6])
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), h_r, hidden'''
+        return h_p, tf.nn.tanh(h_v), h_r, hidden
 
 
 class Environment(BaseEnvironment):

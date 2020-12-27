@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
-from .model import to_tensor, to_numpy
+from .model import to_tensor, to_numpy, RandomModel
 from .model import DuelingNet as Model
 from .connection import MultiProcessWorkers, MultiThreadWorkers
 from .connection import accept_socket_connections
@@ -410,7 +410,7 @@ class Trainer:
         self.steps = 0
         self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
-        self.updated_model = None, 0
+        self.updated_model = copy.deepcopy(self.model)
         self.update_flag = False
         self.shutdown_flag = False
 
@@ -423,6 +423,7 @@ class Trainer:
             return None, 0  # return None before training
         self.lock.acquire()
         weights = self.model.get_weights()
+        self.updated_model.set_weights(weights)
         steps = self.steps
         data_cnt = self.data_cnt
         loss_sum = copy.deepcopy(self.loss_sum)
@@ -430,7 +431,7 @@ class Trainer:
         self.lock.release()
         if data_cnt > 0:
             print('loss = %s' % ' '.join([k + ':' + '%.3f' % (l / data_cnt) for k, l in loss_sum.items()]))
-        return weights, steps
+        return self.updated_model, steps
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -489,14 +490,14 @@ class Learner:
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
-        if self.model_era != 0:
-            self.model = tf.keras.models.load_model(self.model_path(self.model_era))
-            self.model.inference(self.env.observation())
+        model_class = self.env.net() if hasattr(self.env, 'net') else Model
+        train_model = model_class(self.env, args)
+        train_model.inference(self.env.observation())
+        if self.model_era == 0:
+            self.model = RandomModel(self.env, args)
         else:
-            self.model = self.model_class(self.env, args)
-            self.model.inference(self.env.observation())
-            tf.saved_model.save(self.model, self.model_path(self.model_era))
+            self.model = train_model
+            self.model.set_weights(tf.keras.models.load_model(self.model_path(self.model_era)).get_weights())
 
         # generated datum
         self.generation_results = {}
@@ -510,8 +511,6 @@ class Learner:
         self.workers = Workers(args)
 
         # thread connection
-        train_model = self.model_class(self.env, args)
-        train_model.inference(self.env.observation())
         self.trainer = Trainer(args, train_model)
 
     def shutdown(self):
@@ -527,12 +526,12 @@ class Learner:
     def latest_model_path(self):
         return os.path.join('models', 'latest')
 
-    def update_model(self, weights, steps):
+    def update_model(self, model, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
         self.model_era += 1
-        if weights is not None:
-            self.model.set_weights(weights)
+        if model is not None:
+            self.model = model
         os.makedirs('models', exist_ok=True)
         tf.saved_model.save(self.model, self.model_path(self.model_era))
         tf.saved_model.save(self.model, self.latest_model_path())
@@ -586,8 +585,8 @@ class Learner:
             std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
             print('generation stats = %.3f +- %.3f' % (mean, std))
 
-        weights, steps = self.trainer.update()
-        self.update_model(weights, steps)
+        model, steps = self.trainer.update()
+        self.update_model(model, steps)
 
     def server(self):
         # central conductor server
@@ -651,15 +650,15 @@ class Learner:
                 elif req == 'model':
                     send_data = []
                     for model_id in data:
-                        if model_id == self.model_era:
-                            model = self.model
-                        else:
+                        model = self.model
+                        if model_id != self.model_era:
                             try:
-                                model = tf.keras.models.load_model()
+                                model = copy.deepcopy(model)
+                                model.set_weights(tf.keras.models.load_model(self.model_path(model_id)).get_weights())
                             except:
                                 # return latest model if failed to load specified model
                                 pass
-                        send_data.append((model.get_weights()))
+                        send_data.append((model.__class__, model.get_weights()))
 
                 if not multi_req and len(send_data) == 1:
                     send_data = send_data[0]
