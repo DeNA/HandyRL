@@ -235,7 +235,7 @@ def vtrace_base(batch, model, hidden, args):
 
     if values_nograd is not None:
         if values_nograd.shape[2] == 2:  # two player zerosum game
-            values_nograd_opponent = -tf.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], -1)
+            values_nograd_opponent = -tf.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], axis=-1)
             if args['observation']:
                 values_nograd = (values_nograd + values_nograd_opponent) / 2
             else:
@@ -494,7 +494,7 @@ class Learner:
         train_model = model_class(self.env, args)
         train_model.inference(self.env.observation())
         if self.model_era == 0:
-            self.model = RandomModel(self.env, args)
+            self.model = RandomModel(self.env)
         else:
             self.model = train_model
             self.model.set_weights(tf.keras.models.load_model(self.model_path(self.model_era)).get_weights())
@@ -648,7 +648,6 @@ class Learner:
                     send_data = [None] * len(data)
 
                 elif req == 'model':
-                    send_data = []
                     for model_id in data:
                         model = self.model
                         if model_id != self.model_era:
