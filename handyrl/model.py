@@ -7,8 +7,12 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Dense, Flatten, Conv2D
 
-
 from .util import map_r
+
+
+gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+for device in gpu_devices:
+    tf.config.experimental.set_memory_growth(device, True)
 
 
 def to_tensor(x, transpose=False, unsqueeze=None):
