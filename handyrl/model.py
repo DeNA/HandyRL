@@ -244,14 +244,14 @@ class BaseModel(nn.Module):
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
-            [to_numpy(o).squeeze(0) for o in outputs[:-1]] +
+            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None
+        return np.zeros(self.action_length), np.zeros(1), None, None
 
 
 class DuelingNet(BaseModel):
@@ -274,4 +274,4 @@ class DuelingNet(BaseModel):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), None
+        return h_p, torch.tanh(h_v), None, None

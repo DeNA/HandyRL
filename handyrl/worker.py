@@ -72,8 +72,7 @@ class Worker:
                 send_recv(self.conn, ('episode', episode))
             elif role == 'e':
                 result = self.evaluator.execute(models, args)
-                player_model_id = args['model_id'][args['player']]
-                send_recv(self.conn, ('result', (player_model_id, result)))
+                send_recv(self.conn, ('result', result))
 
 
 def make_worker_args(args, n_ga, gaid, wid, conn):

@@ -29,6 +29,7 @@ class GeisterNet(BaseModel):
         self.activation_p = nn.LeakyReLU(0.1)
         self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
         self.head_v = Head((filters * 2, 6, 6), 1, 1)
+        self.head_r = Head((filters * 2, 6, 6), 1, 1)
 
     def init_hidden(self, batch_size=None):
         return self.body.init_hidden(self.input_size[1:], batch_size)
@@ -44,8 +45,9 @@ class GeisterNet(BaseModel):
         h_p = self.activation_p(self.head_p1(h))
         h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
         h_v = self.head_v(h)
+        h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), hidden
+        return h_p, torch.tanh(h_v), h_r, hidden
 
 
 class Environment(BaseEnvironment):
@@ -292,13 +294,17 @@ class Environment(BaseEnvironment):
         return self.win_color is not None
 
     def reward(self):
-        # return terminal rewards
-        rewards = [0, 0]
+        # return immediate rewards
+        return {p: -0.01 for p in self.players()}
+
+    def outcome(self):
+        # return terminal outcomes
+        outcomes = [0, 0]
         if self.win_color == self.BLACK:
-            rewards = [1, -1]
+            outcomes = [1, -1]
         elif self.win_color == self.WHITE:
-            rewards = [-1, 1]
-        return {p: rewards[idx] for idx, p in enumerate(self.players())}
+            outcomes = [-1, 1]
+        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
     def legal(self, action):
         if self.turn_count < 0:
