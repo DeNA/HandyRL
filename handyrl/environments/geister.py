@@ -28,6 +28,7 @@ class GeisterNet(BaseModel):
         self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
         self.activation_p = nn.LeakyReLU(0.1)
         self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
+        self.head_p_set = nn.Linear(1, 70 * 2, bias=True)
         self.head_v = Head((filters * 2, 6, 6), 1, 1)
         self.head_r = Head((filters * 2, 6, 6), 1, 1)
 
@@ -35,8 +36,9 @@ class GeisterNet(BaseModel):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
-        s = x['scalar'].reshape(*x['scalar'].size(), 1, 1).repeat(1, 1, 6, 6)
-        h = torch.cat([s, x['board']], -3)
+        b, s = x['board'], x['scalar']
+        h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
+        h = torch.cat([h_s, b], -3)
 
         h_e = self.encoder(h)
         h, hidden = self.body(h_e, hidden, num_repeats=3)
@@ -44,6 +46,8 @@ class GeisterNet(BaseModel):
         h = torch.cat([h_e, h], -3)
         h_p = self.activation_p(self.head_p1(h))
         h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
+        h_p_set = self.head_p_set(s.sum(-1, keepdim=True).mul(0))
+        h_p = torch.cat([h_p, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
@@ -76,20 +80,15 @@ class Environment(BaseEnvironment):
         self.reset()
 
     def reset(self, args=None):
-        self.args = args if args is not None else {'B': -1, 'W': -1}
-
+        self.args = args
         self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
         self.color = self.BLACK
-        self.turn_count = 0  # -2 before setting original positions
+        self.turn_count = -2  # before setting original positions
         self.win_color = None
         self.piece_cnt = np.zeros(4, dtype=np.int32)
         self.board_index = -np.ones((6, 6), dtype=np.int32)
         self.piece_position = np.zeros((2 * 8, 2), dtype=np.int32)
         self.record = []
-
-        b_pos, w_pos = self.args.get('B', -1), self.args.get('W', -1)
-        self.set_pieces(self.BLACK, b_pos if b_pos >= 0 else random.randrange(70))
-        self.set_pieces(self.WHITE, w_pos if w_pos >= 0 else random.randrange(70))
 
     def put_piece(self, piece, pos, piece_idx):
         self.board[pos[0], pos[1]] = piece
@@ -236,9 +235,11 @@ class Environment(BaseEnvironment):
             return
 
         if self.turn_count < 0:
+            action = action - 4 * 6 * 6 - 70 * self.color
             self.set_pieces(self.color, action)
             self.color = self.opponent(self.color)
             self.turn_count += 1
+            return
 
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
@@ -273,7 +274,7 @@ class Environment(BaseEnvironment):
 
     def diff_info(self):
         if len(self.record) == 0:
-            return self.args
+            return ""
         return self.action2str(self.record[-1], (self.turn_count - 1) % 2)
 
     def reset_info(self, info):
@@ -308,7 +309,9 @@ class Environment(BaseEnvironment):
 
     def legal(self, action):
         if self.turn_count < 0:
+            action = action - 4 * 6 * 6 - 70 * self.color
             return 0 <= action and action < 70
+
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
 
@@ -332,7 +335,7 @@ class Environment(BaseEnvironment):
     def legal_actions(self):
         # return legal action list
         if self.turn_count < 0:
-            return [i for i in range(70)]
+            return [4 * 6 * 6 + 70 * self.color + i for i in range(70)]
         actions = []
         for pos in self.piece_position[self.color*8:(self.color+1)*8]:
             if pos[0] == -1:
@@ -347,16 +350,13 @@ class Environment(BaseEnvironment):
 
     def action_length(self):
         # maximul action label (it determines output size of policy function)
-        return 70 if self.turn_count < 0 else 4 * 6 * 6
+        return 4 * 6 * 6 + 70 * 2
 
     def players(self):
         return [0, 1]
 
     def observation(self, player=None):
         # state representation to be fed into neural networks
-        if self.turn_count < 0:
-            return np.array([1 if self.color == self.BLACK else 0], dtype=np.float32)
-
         turn_view = player is None or player == self.turn()
         color = self.color if turn_view else self.opponent(self.color)
         opponent = self.opponent(color)
