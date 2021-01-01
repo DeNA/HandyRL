@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel, Encoder, Head, DRC, Conv
+from ..model import BaseModel, Encoder, Head, DRC, Conv, softmax
 
 
 class GeisterNet(BaseModel):
@@ -69,6 +69,7 @@ class Environment(BaseEnvironment):
     ], dtype=np.int32)
 
     D = np.array([(-1, 0), (0, -1), (0, 1), (1, 0)], dtype=np.int32)
+    LEFT, DOWN, UP, RIGHT = 0, 1, 2, 3
     OSEQ = list(itertools.combinations([i for i in range(8)], 4))
 
     def __init__(self, args=None):
@@ -90,6 +91,11 @@ class Environment(BaseEnvironment):
         b_pos, w_pos = self.args.get('B', -1), self.args.get('W', -1)
         self.set_pieces(self.BLACK, b_pos if b_pos >= 0 else random.randrange(70))
         self.set_pieces(self.WHITE, w_pos if w_pos >= 0 else random.randrange(70))
+
+        # for rulebase
+        self.policy_table = np.zeros((2 * 8, 2, 4), dtype=np.float32)
+        self.likelihood_table = np.zeros((2 * 8), dtype=np.float32)
+        self._update_policy()
 
     def put_piece(self, piece, pos, piece_idx):
         self.board[pos[0], pos[1]] = piece
@@ -120,6 +126,10 @@ class Environment(BaseEnvironment):
             piece = self.colortype2piece(c, t)
             pos = self.str2position(self.OPOS[c][idx])
             self.put_piece(piece, pos, c * 8 + idx)
+
+    @staticmethod
+    def manhattan_distance(pos0, pos1):
+        return abs(pos0[0] - pos1[0]) + abs(pos0[1] - pos1[1])
 
     def opponent(self, color):
         return self.BLACK + self.WHITE - color
@@ -235,19 +245,21 @@ class Environment(BaseEnvironment):
                 self.play(self.str2action(astr, self.turn()))
             return
 
+
         if self.turn_count < 0:
             self.set_pieces(self.color, action)
             self.color = self.opponent(self.color)
             self.turn_count += 1
 
-        ox, oy = self.action2from(action, self.color)
-        nx, ny = self.action2to(action, self.color)
+        color = self.color
+        ox, oy = self.action2from(action, color)
+        nx, ny = self.action2to(action, color)
         piece = self.board[ox, oy]
 
         if not self.onboard((nx, ny)):
             # finish by goal
             self.remove_piece(piece, (ox, oy))
-            self.win_color = self.color
+            self.win_color = color
         else:
             piece_cap = self.board[nx, ny]
             if piece_cap != -1:
@@ -256,20 +268,24 @@ class Environment(BaseEnvironment):
                 if self.piece_cnt[piece_cap] == 0:
                     if self.piece2type(piece_cap) == self.BLUE:
                         # win by capturing all opponent blue pieces
-                        self.win_color = self.color
+                        self.win_color = color
                     else:
                         # lose by capturing all opponent red pieces
-                        self.win_color = self.opponent(self.color)
+                        self.win_color = self.opponent(color)
 
             # move piece
             self.move_piece(piece, (ox, oy), (nx, ny))
 
-        self.color = self.opponent(self.color)
+        self.color = self.opponent(color)
         self.turn_count += 1
         self.record.append(action)
 
         if self.turn_count >= 200 and self.win_color is None:
             self.win_color = 2  # draw
+
+        if self.win_color is None:
+            self._update_likelihood(action, color)
+            self._update_policy()
 
     def diff_info(self):
         if len(self.record) == 0:
@@ -362,26 +378,94 @@ class Environment(BaseEnvironment):
                     n += 1
         return n
 
+    def _update_policy(self):
+        # update policy for all pieces
+        opponent = self.opponent(self.color)
+        for piece_index in range(2 * 8):
+            ox, oy = self.piece_position[piece_index]
+            if not self.onboard((ox, oy)) or self.piece2color(self.board[ox, oy]) != self.color:
+                for d in range(4):
+                    self.policy_table[piece_index][self.BLUE][d] = 0
+                    self.policy_table[piece_index][self.RED][d] = 0
+                continue
+            oon = self._count_neighbor((ox, oy), opponent)
+
+            for d in range(4):
+                sd = d if self.color == self.BLACK else (3 - d)
+                nx, ny = ox + self.D[d][0], oy + self.D[d][1]
+                non = self._count_neighbor((nx, ny), opponent)
+                cap = self.onboard((nx, ny)) and self.piece2color(self.board[nx, ny]) == opponent
+                cap_piece_index = self.board_index[nx, ny] if cap else -1
+
+                ### common policy bias ###
+                pc = 0
+
+                # capture opponent blue piece
+                if cap:
+                    assert cap_piece_index >= 0
+                    pc += self.likelihood_table[cap_piece_index] * 2.0
+
+                # stopping opponent goal
+                if cap and 1 in [self.manhattan_distance((nx, ny), g) for g in self.GPOS[opponent]]:
+                    if self.piece_cnt[self.colortype2piece(opponent, self.RED)] == 1:
+                        pc += 0.2
+                    else:
+                        pc += 1.1
+
+                ### policy as blue piece ###
+                pb = 0
+
+                # checkmate
+                if not self.onboard((nx, ny)):
+                    pb += 1000
+
+                # escape blue piece
+                if oon > 0 and non == 0:
+                    if self.piece_cnt[self.colortype2piece(self.color, self.BLUE)] == 1:
+                        pb += 4
+                    else:
+                        pb += 0.2
+
+                # getting closer to goal
+                omhdg0 = self.manhattan_distance((ox, oy), self.GPOS[self.color][0])
+                omhdg1 = self.manhattan_distance((ox, oy), self.GPOS[self.color][1])
+                nmhdg0 = self.manhattan_distance((nx, ny), self.GPOS[self.color][0])
+                nmhdg1 = self.manhattan_distance((nx, ny), self.GPOS[self.color][1])
+                if min(nmhdg0, nmhdg1) < min(omhdg0, omhdg1):
+                    pb += 0.3
+                if min(nmhdg0, nmhdg1) > min(omhdg0, omhdg1):
+                    pb -= 0.3
+
+                ### policy as red piece ###
+                pr = 0
+
+                self.policy_table[piece_index][self.BLUE][d] = pc + pb
+                self.policy_table[piece_index][self.RED][d] = pc + pr
+
+    def _update_likelihood(self, action, color):
+        # update likelihood table for rule-based AI
+        pos_to = self.action2to(action, color)
+        d = self.action2direction(action, color)
+        piece_index = self.board_index[pos_to[0], pos_to[1]]
+
+        loglh = self.policy_table[piece_index, self.BLUE, d] - self.policy_table[piece_index, self.RED, d]
+        self.likelihood_table[piece_index] += loglh
+
     def rule_based_action(self):
         actions = self.legal_actions()
         opponent = self.opponent(self.color)
 
-        # seach checkmate actions
-        mates = [a for a in actions if not self.onboard(self.action2to(a, self.color))]
-        if len(mates) > 0:
-            return random.choice(mates)
+        policy = []
+        for a in actions:
+            pos_from = self.action2from(a, self.color)
+            d = self.action2direction(a, self.color)
+            pt = self.piece2type(self.board[pos_from[0], pos_from[1]])
+            piece_index = self.board_index[pos_from[0], pos_from[1]]
+            policy.append(self.policy_table[piece_index, pt, d] * 10)
 
-        # escape blue piece
-        mbp = self.colortype2piece(self.color, self.BLUE)
-        if self.piece_cnt[mbp] == 1:
-            mbpos = [(x, y) for x in range(6) for y in range(6) if self.board[x, y] == mbp][0]
-            if self._count_neighbor(mbpos, opponent) > 0:
-                escapes_ = [a for a in actions if np.array_equal(self.action2from(a, self.color), mbpos)]
-                escapes = [a for a in escapes_ if self._count_neighbor(self.action2to(a, self.color), opponent) == 0]
-                if len(escapes) > 0:
-                    return random.choice(escapes)
-
-        return random.choice(actions)
+        policy = softmax(policy)
+        action = random.choices(actions, k=1, weights=policy)[0]
+        return action
 
     def observation(self, player=None):
         # state representation to be fed into neural networks
