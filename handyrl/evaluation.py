@@ -188,14 +188,14 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
-    info = env.diff_info()
-    for agent in io_agents.values():
+    for p, agent in io_agents.items():
+        info = env.diff_info(p)
         agent.reset(info)
     while not env.terminal():
         if env.chance():
             return None
-        info = env.diff_info()
-        for agent in io_agents.values():
+        for p, agent in io_agents.items():
+            info = env.diff_info(p)
             agent.chance(info)
         if env.terminal():
             break
@@ -209,8 +209,8 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
                 agent.observe(p)
         if env.play(action):
             return None
-        info = env.diff_info()
-        for agent in io_agents.values():
+        for p, agent in io_agents.items():
+            info = env.diff_info(p)
             agent.play(info)
     outcome = env.outcome()
     for p, agent in io_agents.items():

@@ -120,7 +120,7 @@ class BaseEnvironment:
     #
     # Should be defined if you use network battle mode
     #
-    def diff_info(self):
+    def diff_info(self, player=None):
         return ''
 
     #

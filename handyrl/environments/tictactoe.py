@@ -65,7 +65,7 @@ class Environment(BaseEnvironment):
         self.color = -self.color
         self.record.append(action)
 
-    def diff_info(self):
+    def diff_info(self, _):
         if len(self.record) == 0:
             return ""
         return self.action2str(self.record[-1])
