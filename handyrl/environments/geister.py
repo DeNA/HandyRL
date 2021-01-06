@@ -55,8 +55,8 @@ class Environment(BaseEnvironment):
     BLACK, WHITE = 0, 1
     BLUE, RED = 0, 1
     C = 'BW'
+    T = 'BR'
     P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
-    _P = {'_': -1, 'B': 0, 'R': 1, 'b': 2, 'r': 3}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -87,10 +87,10 @@ class Environment(BaseEnvironment):
         self.record = []
         self.captured_type = None
 
-        self.layouts = {
-            self.BLACK: self.args.get('B', None) or random.randrange(70),
-            self.WHITE: self.args.get('W', None) or random.randrange(70),
-        }
+        self.layouts = {}
+        for c, cs in enumerate(self.C):
+            self.layouts[c] = self.args[cs] if cs in self.args else random.randrange(70)
+
         self.set_pieces(self.BLACK, self.layouts[self.BLACK])
         self.set_pieces(self.WHITE, self.layouts[self.WHITE])
 
@@ -148,9 +148,6 @@ class Environment(BaseEnvironment):
 
     def rotate(self, pos):
         return np.array((5 - pos[0], 5 - pos[1]), dtype=np.int32)
-
-    def str2piece(self, s):
-        return self._P[s]
 
     def position2str(self, pos):
         if self.onboard(pos):
@@ -264,7 +261,7 @@ class Environment(BaseEnvironment):
                     else:
                         # lose by capturing all opponent red pieces
                         self.win_color = self.opponent(self.color)
-                self.captured_type = self.piece2color(piece_cap)
+                self.captured_type = self.piece2type(piece_cap)
 
             # move piece
             self.move_piece(piece, (ox, oy), (nx, ny))
@@ -277,14 +274,15 @@ class Environment(BaseEnvironment):
             self.win_color = 2  # draw
 
     def diff_info(self, player):
+        color = player
+        played_color = (self.turn_count - 1) % 2
         if len(self.record) == 0:
             args = {**self.args}
-            c = player
-            args[self.C[c]] = self.layouts[c]
+            args[self.C[color]] = self.layouts[color]
             return args
-        info = {'move': self.action2str(self.record[-1], (self.turn_count - 1) % 2)}
-        if self.captured_type is not None:
-            info['captured'] = self.P[self.captured_type]
+        info = {'move': self.action2str(self.record[-1], played_color)}
+        if color == played_color and self.captured_type is not None:
+            info['captured'] = self.T[self.captured_type]
         return info
 
     def reset_info(self, info):
@@ -300,8 +298,9 @@ class Environment(BaseEnvironment):
             if 'captured' in info:
                 # set color to captured piece
                 pos_to = self.action2to(action, self.color)
-                t = self._P[info['captured']]
-                self.board[pos_to[0], pos_to[1]] = self.colortype2piece(self.opponent(self.color), t)
+                t = self.T.index(info['captured'])
+                piece = self.colortype2piece(self.opponent(self.color), t)
+                self.board[pos_to[0], pos_to[1]] = piece
             self.play(action)
 
     def turn(self):
