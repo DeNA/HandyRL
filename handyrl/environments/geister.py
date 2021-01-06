@@ -289,9 +289,6 @@ class Environment(BaseEnvironment):
         self.args = {**self.args, **info}
         self.reset(info)
 
-    def chance_info(self, _):
-        pass
-
     def play_info(self, info):
         if 'move' in info:
             action = self.str2action(info['move'], self.color)
