@@ -275,7 +275,7 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
             if len(agents) == 2:
                 # When playing two player game,
                 # the number of games with first or second player is equalized.
-                first_agent = 0 if i < (num_games // 2) else 1
+                first_agent = 0 if i < (num_games + 1) // 2 else 1
                 tmp_pat_idx, agent_ids = (pat_idx + '-F', [0, 1]) if first_agent == 0 else (pat_idx + '-S', [1, 0])
             else:
                 tmp_pat_idx, agent_ids = pat_idx, random.sample(list(range(len(agents))), len(agents))
