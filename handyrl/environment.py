@@ -34,7 +34,7 @@ def make_env(env_args):
 
 class BaseEnvironment:
     def __init__(self, args={}):
-        self.reset()
+        pass
 
     def __str__(self):
         return ''
