@@ -37,7 +37,7 @@ class Generator:
 
             moment = {'observation': {}, 'value': {}, 'reward': {}, 'return': {}}
 
-            for index, player in enumerate(self.env.players()):
+            for player in self.env.players():
                 obs, v = None, None
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
@@ -48,15 +48,14 @@ class Generator:
                         pmask = np.ones_like(p) * 1e32
                         pmask[legal_actions] = 0
                         p_turn = p - pmask
-                        index_turn = index
-                moment['observation'][index] = obs
-                moment['value'][index] = v
+                moment['observation'][player] = obs
+                moment['value'][player] = v
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
             moment['policy'] = p_turn
             moment['pmask'] = pmask
-            moment['turn'] = index_turn
+            moment['turn'] = self.env.turn()
             moment['action'] = action
             moments.append(moment)
 
@@ -65,20 +64,20 @@ class Generator:
                 return None
 
             reward = self.env.reward()
-            for index, player in enumerate(self.env.players()):
-                moment['reward'][index] = reward.get(player, None)
+            for player in self.env.players():
+                moment['reward'][player] = reward.get(player, None)
 
         if len(moments) < 1:
             return None
 
-        for index, player in enumerate(self.env.players()):
+        for player in self.env.players():
             ret = 0
             for i, m in reversed(list(enumerate(moments))):
-                ret = (m['reward'][index] or 0) + self.args['gamma'] * ret
-                moments[i]['return'][index] = ret
+                ret = (m['reward'][player] or 0) + self.args['gamma'] * ret
+                moments[i]['return'][player] = ret
 
         outcomes = self.env.outcome()
-        outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
+        outcomes = {player: outcomes[player] for player in self.env.players()}
 
         episode = {
             'args': args, 'steps': len(moments), 'outcome': outcomes,
