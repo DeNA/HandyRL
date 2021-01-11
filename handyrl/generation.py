@@ -76,11 +76,9 @@ class Generator:
                 ret = (m['reward'][player] or 0) + self.args['gamma'] * ret
                 moments[i]['return'][player] = ret
 
-        outcomes = self.env.outcome()
-        outcomes = {player: outcomes[player] for player in self.env.players()}
-
         episode = {
-            'args': args, 'steps': len(moments), 'outcome': outcomes,
+            'args': args, 'steps': len(moments),
+            'outcome': self.env.outcome(),
             'moment': [
                 bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']]))
                 for i in range(0, len(moments), self.args['compress_steps'])
