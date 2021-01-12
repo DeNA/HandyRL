@@ -317,8 +317,8 @@ def vtrace(batch, model, hidden, args):
             value_targets = lambda_values
             value_advantages = lambda_values - values_nograd
         else:
-            return_targets = None
-            return_advantages = 0
+            value_targets = None
+            value_advantages = 0
 
         if t_returns is not None:
             lambda_returns = deque([returns[:, -1]])
