@@ -63,7 +63,7 @@ def make_batch(episodes, args):
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
-        obs = rotate(obs)  # (T, ..., P, ...) -> (..., P, T, ...)
+        obs = rotate(obs)  # (P, ..., T, ...) -> (..., T, P, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
