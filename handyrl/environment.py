@@ -133,7 +133,7 @@ class BaseEnvironment:
     # Should be defined if you use network battle mode
     #
     def chance_info(self, _):
-        self.chance()
+        pass
 
     #
     # Should be defined if you use network battle mode
