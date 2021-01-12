@@ -271,7 +271,7 @@ class Environment(BaseEnvironment):
         if self.turn_count >= 200 and self.win_color is None:
             self.win_color = 2  # draw
 
-    def diff_info(self):
+    def diff_info(self, _):
         if len(self.record) == 0:
             return self.args
         return self.action2str(self.record[-1], (self.turn_count - 1) % 2)
