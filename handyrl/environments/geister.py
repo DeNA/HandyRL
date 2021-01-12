@@ -321,8 +321,8 @@ class Environment(BaseEnvironment):
 
     def legal(self, action):
         if self.turn_count < 0:
-            action = action - 4 * 6 * 6 - 70 * self.color
-            return 0 <= action and action < 70
+            layout = action - 4 * 6 * 6 - 70 * self.color
+            return 0 <= layout < 70
 
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
