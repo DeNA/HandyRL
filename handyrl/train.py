@@ -561,7 +561,7 @@ class Learner:
         for episode in episodes:
             if episode is None:
                 continue
-            for idx, p in enumerate(episode['args']['player']):
+            for idx, p in enumerate(self.env.players()):
                 if p not in episode['args']['player']:
                     continue
                 model_id = episode['args']['model_id'][p]
