@@ -34,7 +34,7 @@ def make_env(env_args):
 
 class BaseEnvironment:
     def __init__(self, args={}):
-        self.reset()
+        pass
 
     def __str__(self):
         return ''
@@ -84,9 +84,15 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
-    # Should be defined in all games
+    # Should be defined if you use immediate reward
     #
     def reward(self):
+        return {}
+
+    #
+    # Should be defined in all games
+    #
+    def outcome(self):
         raise NotImplementedError()
 
     #
@@ -128,7 +134,7 @@ class BaseEnvironment:
     #
     # Should be defined if you use network battle mode
     #
-    def diff_info(self):
+    def diff_info(self, player=None):
         return ''
 
     #
@@ -141,7 +147,7 @@ class BaseEnvironment:
     # Should be defined if you use network battle mode
     #
     def chance_info(self, _):
-        self.chance()
+        pass
 
     #
     # Should be defined if you use network battle mode

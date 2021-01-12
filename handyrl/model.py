@@ -164,7 +164,7 @@ class ConvLSTMCell(nn.Module):
     def init_hidden(self, input_size, batch_size):
         return tuple([
             torch.zeros(*batch_size, self.hidden_dim, *input_size),
-            torch.zeros(*batch_size, self.hidden_dim, *input_size),
+            torch.zeros(*batch_size, self.hidden_dim, *input_size)
         ])
 
     def forward(self, input_tensor, cur_state):
@@ -196,8 +196,8 @@ class DRC(nn.Module):
                 input_dim=input_dim,
                 hidden_dim=hidden_dim,
                 kernel_size=(kernel_size, kernel_size),
-                bias=bias)
-            )
+                bias=bias
+            ))
         self.blocks = nn.ModuleList(blocks)
 
     def init_hidden(self, input_size, batch_size):
@@ -244,17 +244,17 @@ class BaseModel(nn.Module):
             outputs = self.forward(xt, ht, **kwargs)
 
         return tuple(
-            [to_numpy(o).squeeze(0) for o in outputs[:-1]] + \
+            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
             [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
         )
 
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None
+        return np.zeros(self.action_length), np.zeros(1), None, None
 
 
-class DuelingNet(BaseModel):
+class SimpleConv2DModel(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
@@ -274,4 +274,4 @@ class DuelingNet(BaseModel):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), None
+        return h_p, torch.tanh(h_v), None, None

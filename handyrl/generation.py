@@ -35,7 +35,10 @@ class Generator:
             if self.env.terminal():
                 break
 
-            moment = {'observation': {}, 'policy': {}, 'value': {}, 'pmask': {}, 'action': {}}
+            moment = {
+                'observation': {}, 'policy': {}, 'pmask': {}, 'action': {},
+                'value': {}, 'reward': {}, 'return': {},
+            }
 
             turn_players = self.env.turns()
             for index, player in enumerate(self.env.players()):
@@ -43,7 +46,7 @@ class Generator:
                 if player in turn_players or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p_, v, hidden[player] = model.inference(obs, hidden[player])
+                    p_, v, _, hidden[player] = model.inference(obs, hidden[player])
                     if player in turn_players:
                         legal_actions = self.env.legal_actions(player)
                         pmask = np.ones_like(p_) * 1e32
@@ -63,18 +66,28 @@ class Generator:
             if err:
                 return None
 
+            reward = self.env.reward()
+            for index, player in enumerate(self.env.players()):
+                moment['reward'][index] = reward.get(player, None)
+
         if len(moments) < 1:
             return None
 
-        rewards = self.env.reward()
-        rewards = [rewards[player] for player in self.env.players()]
+        for index, player in enumerate(self.env.players()):
+            ret = 0
+            for i, m in reversed(list(enumerate(moments))):
+                ret = (m['reward'][index] or 0) + self.args['gamma'] * ret
+                moments[i]['return'][index] = ret
+
+        outcomes = self.env.outcome()
+        outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
 
         episode = {
-            'args': args, 'steps': len(moments), 'reward': rewards,
+            'args': args, 'steps': len(moments), 'outcome': outcomes,
             'moment': [
-                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']])) \
-                    for i in range(0, len(moments), self.args['compress_steps'])
-            ],
+                bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']]))
+                for i in range(0, len(moments), self.args['compress_steps'])
+            ]
         }
 
         return episode

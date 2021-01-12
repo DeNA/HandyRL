@@ -10,10 +10,12 @@ env_args:
 
 train_args:
     observation: False
+    gamma: 0.8
     forward_steps: 16
     compress_steps: 4
     lambda: 0.7
     entropy_regularization: 3.0e-1
+    entropy_regularization_decay: 0.1
     update_episodes: 2000
     batch_size: 128
     minimum_episodes: 20000
@@ -24,7 +26,7 @@ train_args:
     worker:
         num_gather: 2
         num_process: 6
-    return: 'TDLAMBDA' #'MC' 'TD0'
+    algorithm: 'TDLAMBDA' # 'VTRACE' 'MC'
     seed: 0
     restart_epoch: 0
 
