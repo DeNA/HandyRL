@@ -55,8 +55,8 @@ class Environment(BaseEnvironment):
     BLACK, WHITE = 0, 1
     BLUE, RED = 0, 1
     C = 'BW'
+    T = 'BR'
     P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
-    _P = {'_': -1, 'B': 0, 'R': 1, 'b': 2, 'r': 3}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -75,9 +75,8 @@ class Environment(BaseEnvironment):
         super().__init__()
         self.reset()
 
-    def reset(self, args=None):
-        self.args = args if args is not None else {'B': -1, 'W': -1}
-
+    def reset(self, args={}):
+        self.args = args
         self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
         self.color = self.BLACK
         self.turn_count = 0  # -2 before setting original positions
@@ -86,10 +85,14 @@ class Environment(BaseEnvironment):
         self.board_index = -np.ones((6, 6), dtype=np.int32)
         self.piece_position = np.zeros((2 * 8, 2), dtype=np.int32)
         self.record = []
+        self.captured_type = None
 
-        b_pos, w_pos = self.args.get('B', -1), self.args.get('W', -1)
-        self.set_pieces(self.BLACK, b_pos if b_pos >= 0 else random.randrange(70))
-        self.set_pieces(self.WHITE, w_pos if w_pos >= 0 else random.randrange(70))
+        self.layouts = {}
+        for c, cs in enumerate(self.C):
+            self.layouts[c] = self.args[cs] if cs in self.args else random.randrange(70)
+
+        self.set_pieces(self.BLACK, self.layouts[self.BLACK])
+        self.set_pieces(self.WHITE, self.layouts[self.WHITE])
 
     def put_piece(self, piece, pos, piece_idx):
         self.board[pos[0], pos[1]] = piece
@@ -145,9 +148,6 @@ class Environment(BaseEnvironment):
 
     def rotate(self, pos):
         return np.array((5 - pos[0], 5 - pos[1]), dtype=np.int32)
-
-    def str2piece(self, s):
-        return self._P[s]
 
     def position2str(self, pos):
         if self.onboard(pos):
@@ -243,6 +243,7 @@ class Environment(BaseEnvironment):
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
         piece = self.board[ox, oy]
+        self.captured_type = None
 
         if not self.onboard((nx, ny)):
             # finish by goal
@@ -260,6 +261,7 @@ class Environment(BaseEnvironment):
                     else:
                         # lose by capturing all opponent red pieces
                         self.win_color = self.opponent(self.color)
+                self.captured_type = self.piece2type(piece_cap)
 
             # move piece
             self.move_piece(piece, (ox, oy), (nx, ny))
@@ -271,20 +273,32 @@ class Environment(BaseEnvironment):
         if self.turn_count >= 200 and self.win_color is None:
             self.win_color = 2  # draw
 
-    def diff_info(self, _):
+    def diff_info(self, player):
+        color = player
+        played_color = (self.turn_count - 1) % 2
         if len(self.record) == 0:
-            return self.args
-        return self.action2str(self.record[-1], (self.turn_count - 1) % 2)
+            args = {**self.args}
+            args[self.C[color]] = self.layouts[color]
+            return args
+        info = {'move': self.action2str(self.record[-1], played_color)}
+        if color == played_color and self.captured_type is not None:
+            info['captured'] = self.T[self.captured_type]
+        return info
 
     def reset_info(self, info):
+        self.args = {**self.args, **info}
         self.reset(info)
 
-    def chance_info(self, _):
-        pass
-
     def play_info(self, info):
-        if info != "":
-            self.play(info)
+        if 'move' in info:
+            action = self.str2action(info['move'], self.color)
+            if 'captured' in info:
+                # set color to captured piece
+                pos_to = self.action2to(action, self.color)
+                t = self.T.index(info['captured'])
+                piece = self.colortype2piece(self.opponent(self.color), t)
+                self.board[pos_to[0], pos_to[1]] = piece
+            self.play(action)
 
     def turn(self):
         return self.players()[self.turn_count % 2]
