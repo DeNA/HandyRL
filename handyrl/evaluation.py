@@ -347,8 +347,8 @@ def io_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    from .model import DuelingNet as Model
-    model = env.net()(env) if hasattr(env, 'net') else Model(env)
+    from .model import SimpleConv2DModel as DefaultModel
+    model = env.net()(env) if hasattr(env, 'net') else DefaultModel(env)
     model.load_state_dict(torch.load(model_path), strict=False)
     model.eval()
     return model
