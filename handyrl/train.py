@@ -27,7 +27,7 @@ import torch.optim as optim
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
-from .model import DuelingNet as Model
+from .model import SimpleConv2DModel as DefaultModel
 from .connection import MultiProcessWorkers, MultiThreadWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
@@ -63,7 +63,7 @@ def make_batch(episodes, args):
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
-        obs = rotate(obs)  # (T, ..., P, ...) -> (..., P, T, ...)
+        obs = rotate(obs)  # (P, ..., T, ...) -> (..., T, P, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
@@ -512,7 +512,7 @@ class Learner:
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
+        self.model_class = self.env.net() if hasattr(self.env, 'net') else DefaultModel
         train_model = self.model_class(self.env, args)
         if self.model_era == 0:
             self.model = RandomModel(self.env)
@@ -561,7 +561,7 @@ class Learner:
         for episode in episodes:
             if episode is None:
                 continue
-            for idx, p in enumerate(episode['args']['player']):
+            for idx, p in enumerate(self.env.players()):
                 if p not in episode['args']['player']:
                     continue
                 model_id = episode['args']['model_id'][p]
@@ -671,9 +671,8 @@ class Learner:
 
                 elif req == 'model':
                     for model_id in data:
-                        if model_id == self.model_era:
-                            model = self.model
-                        else:
+                        model = self.model
+                        if model_id != self.model_era:
                             try:
                                 model = self.model_class(self.env, self.args)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
