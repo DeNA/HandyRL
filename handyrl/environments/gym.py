@@ -45,11 +45,13 @@ class Environment(BaseEnvironment):
         self.latest_reward = reward
         self.done = done
         self.latest_info = info
+        self.total_reward += reward
 
     def reset(self, args={}):
         self.reset_info(self.env.reset())
 
     def reset_info(self, obs):
+        self.total_reward = 0
         return self.step_info((obs, 0, False, {}))
 
     def play(self, action):
@@ -68,7 +70,7 @@ class Environment(BaseEnvironment):
         return {0: self.latest_reward}
 
     def outcome(self):
-        return {0: 0.0}
+        return {0: self.total_reward}
 
     def legal_actions(self):
         return [0, 1]
