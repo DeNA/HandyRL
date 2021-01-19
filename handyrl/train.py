@@ -181,9 +181,7 @@ def forward_prediction(model, hidden, batch, obs_mode):
     return outputs
 
 
-def compose_losses(outputs, log_selected_policies, \
-                   advantages, value_targets, return_targets, \
-                   tmasks, vmasks, progress, args):
+def compose_losses(outputs, log_selected_policies, total_advantages, targets, batch, args):
     """Caluculate loss value
 
     Returns:
@@ -191,21 +189,21 @@ def compose_losses(outputs, log_selected_policies, \
     """
 
     losses = {}
+    tmasks, vmasks = batch['tmask'], batch['vmask']
     dcnt = tmasks.sum().item()
-
-    turn_advantages = advantages.mul(tmasks).sum(-1, keepdim=True)
+    turn_advantages = total_advantages.mul(tmasks).sum(-1, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
     if 'value' in outputs:
-        losses['v'] = ((outputs['value'] - value_targets) ** 2).mul(vmasks).sum() / 2
+        losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(vmasks).sum() / 2
     if 'return' in outputs:
-        losses['r'] = F.smooth_l1_loss(outputs['return'], return_targets, reduction='none').mul(vmasks).sum()
+        losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(vmasks).sum()
 
     entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
     base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
-    entropy_loss = entropy.mul(1 - progress * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
+    entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
     return losses, dcnt
@@ -225,10 +223,10 @@ def vtrace_base(batch, model, hidden, args):
     rhos = torch.exp(log_rhos)
     clipped_rhos = torch.clamp(rhos, 0, clip_rho_threshold)
     cs = torch.clamp(rhos, 0, clip_c_threshold)
-    values_nograd = outputs['value'].detach() if 'value' in outputs else None
-    returns_nograd = outputs['return'].detach() if 'return' in outputs else None
+    outputs_nograd = {k: o.detach() for k, o in outputs.items()}
 
-    if values_nograd is not None:
+    if 'value' in outputs_nograd:
+        values_nograd = outputs_nograd['value']
         if values_nograd.size(2) == 2:  # two player zerosum game
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=-1)
             if args['observation']:
@@ -238,27 +236,29 @@ def vtrace_base(batch, model, hidden, args):
                 # Be careful, vmask in batch is changed here
                 batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
 
-        values_nograd = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
+        outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
-    return batch, outputs, log_selected_t_policies, \
-        values_nograd, returns_nograd, clipped_rhos, cs
+    return batch, outputs, log_selected_t_policies, outputs_nograd, clipped_rhos, cs
 
 
 def vtrace(batch, model, hidden, args):
     # IMPALA
     # https://github.com/deepmind/scalable_agent/blob/master/vtrace.py
 
-    batch, outputs, log_selected_t_policies, \
-        values_nograd, returns_nograd, clipped_rhos, cs = \
-        vtrace_base(batch, model, hidden, args)
+    batch, outputs, log_selected_t_policies, outputs_nograd, clipped_rhos, cs = vtrace_base(batch, model, hidden, args)
     outcomes, returns, rewards = batch['outcome'], batch['return'], batch['reward']
     time_length = batch['vmask'].size(1)
+    values_nograd = outputs_nograd.get('value', None)
+    returns_nograd = outputs_nograd.get('return', None)
+
+    targets = {}
+    advantages = {}
 
     if args['algorithm'] == 'MC':
         # IS with naive advantage
-        value_targets, return_targets = outcomes, returns
-        value_advantages = (outcomes - values_nograd) if t_values is not None else 0
-        return_advantages = (returns - returns_nograd) if t_returns is not None else 0
+        targets['value'], targets['return'] = outcomes, returns
+        advantages['value'] = (outcomes - values_nograd) if 'value' in outputs else 0
+        advantages['return'] = (returns - returns_nograd) if 'return' in outputs else 0
 
     elif args['algorithm'] == 'VTRACE':
         if values_nograd is not None:
@@ -274,11 +274,8 @@ def vtrace(batch, model, hidden, args):
             vs = vs_minus_v_xs + values_nograd
             vs_t_plus_1 = torch.cat([vs[:, 1:], outcomes], dim=1)
 
-            value_targets = vs
-            value_advantages = vs_t_plus_1 - values_nograd
-        else:
-            value_targets = None
-            value_advantages = 0
+            targets['value'] = vs
+            advantages['value'] = vs_t_plus_1 - values_nograd
 
         if returns_nograd is not None:
             next_returns = (returns[:, -1:] - rewards[:, -1:]) / args['gamma']
@@ -294,11 +291,8 @@ def vtrace(batch, model, hidden, args):
             rs = rs_minus_r_xs + returns_nograd
             rs_t_plus_1 = torch.cat([rs[:, 1:], next_returns], dim=1)
 
-            return_targets = rs
-            return_advantages = rewards + args['gamma'] * rs_t_plus_1 - returns_nograd
-        else:
-            return_targets = None
-            return_advantages = 0
+            targets['return'] = rs
+            advantages['return'] = rewards + args['gamma'] * rs_t_plus_1 - returns_nograd
 
     elif args['algorithm'] == 'TDLAMBDA':
         lmb = args['lambda']
@@ -309,11 +303,8 @@ def vtrace(batch, model, hidden, args):
                 lambda_values.appendleft((1 - lmb) * values_nograd[:, i + 1] + lmb * lambda_values[0])
 
             lambda_values = torch.stack(tuple(lambda_values), dim=1)
-            value_targets = lambda_values
-            value_advantages = lambda_values - values_nograd
-        else:
-            value_targets = None
-            value_advantages = 0
+            targets['value'] = lambda_values
+            advantages['value'] = lambda_values - values_nograd
 
         if returns_nograd is not None:
             lambda_returns = deque([returns[:, -1]])
@@ -321,19 +312,13 @@ def vtrace(batch, model, hidden, args):
                 lambda_returns.appendleft(rewards[:, i] + args['gamma'] * ((1 - lmb) * returns_nograd[:, i + 1] + lmb * lambda_returns[0]))
 
             lambda_returns = torch.stack(tuple(lambda_returns), dim=1)
-            return_targets = lambda_returns
-            return_advantages = lambda_returns - returns_nograd
-        else:
-            return_targets = None
-            return_advantages = 0
+            targets['return'] = lambda_returns
+            advantages['return'] = lambda_returns - returns_nograd
 
     # compute policy advantage
-    advantages = clipped_rhos * (value_advantages + return_advantages)
+    total_advantages = clipped_rhos * sum(advantages.values())
 
-    return compose_losses(
-        outputs, log_selected_t_policies, advantages, value_targets, return_targets,
-        batch['tmask'], batch['vmask'], batch['progress'], args
-    )
+    return compose_losses(outputs, log_selected_t_policies, total_advantages, targets, batch, args)
 
 
 class Batcher:
