@@ -168,15 +168,14 @@ def forward_prediction(model, hidden, batch, obs_mode):
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
-    # gather turn player's policies
-    t_policies = outputs['policy'].view(*batch['tmask'].size()[:2], -1, outputs['policy'].size(-1))
-    outputs['policy'] = t_policies.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
-
-    # mask valid target values and cumulative rewards
-    if 'value' in outputs:
-        outputs['value'] = outputs['value'].view(*batch['tmask'].size()[:2], -1).mul(batch['vmask'])
-    if 'return' in outputs:
-        outputs['return'] = outputs['return'].view(*batch['tmask'].size()[:2], -1).mul(batch['vmask'])
+    for k, o in outputs.items():
+        if k == 'policy':
+            # gather turn player's policies
+            o = o.view(*batch['tmask'].size()[:2], -1, o.size(-1))
+            outputs[k] = o.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
+        else:
+            # mask valid target values and cumulative rewards
+            outputs[k] = o.view(*batch['tmask'].size()[:2], -1).mul(batch['vmask'])
 
     return outputs
 
