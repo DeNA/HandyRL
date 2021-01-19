@@ -28,7 +28,7 @@ from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import SimpleConv2DModel as DefaultModel
-from .connection import MultiProcessWorkers, MultiThreadWorkers
+from .connection import MultiProcessWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
 
@@ -54,7 +54,7 @@ def make_batch(episodes, args):
         # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
-        players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
+        players = list(moments[0]['observation'].keys())
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
@@ -80,7 +80,7 @@ def make_batch(episodes, args):
             dtype=np.float32
         ).reshape(-1, len(players))
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
-        tmsk = np.eye(len(players))[[m['turn'] for m in moments]]
+        tmsk = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)
         pmsk = np.array([m['pmask'] for m in moments])
         vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
 
@@ -347,13 +347,10 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        if self.args['use_batcher_process']:
-            self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'],
-                buffer_length=3, num_receivers=2
-            )
-        else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
+        self.workers = MultiProcessWorkers(
+            self._worker, self._selector(), self.args['num_batchers'],
+            buffer_length=3, num_receivers=2
+        )
 
     def _selector(self):
         while True:
@@ -561,11 +558,9 @@ class Learner:
         for episode in episodes:
             if episode is None:
                 continue
-            for idx, p in enumerate(self.env.players()):
-                if p not in episode['args']['player']:
-                    continue
+            for p in episode['args']['player']:
                 model_id = episode['args']['model_id'][p]
-                outcome = episode['outcome'][idx]
+                outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
 
