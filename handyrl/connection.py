@@ -202,55 +202,6 @@ class MultiProcessWorkers:
         print('finished receiver %d' % index)
 
 
-class MultiThreadWorkers:
-    def __init__(self, func, send_generator, num, postprocess=None):
-        self.func = func
-        self.send_generator = send_generator
-        self.postprocess = postprocess
-        self.num = num
-        self.conns = []
-        self.send_cnt = {}
-        self.shutdown_flag = False
-        self.lock = threading.Lock()
-        self.output_queue = queue.Queue(maxsize=8)
-        self.threads = []
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        for thread in self.threads:
-            thread.join()
-
-    def recv(self):
-        return self.output_queue.get()
-
-    def start(self):
-        class LocalConnection:
-            def __init__(self, parent):
-                self.parent = parent
-
-            def send(self, recv_data):
-                data, _ = recv_data
-                if self.parent.postprocess is not None:
-                    data = self.parent.postprocess(data)
-                while not self.parent.shutdown_flag:
-                    try:
-                        self.parent.output_queue.put(data, timeout=0.3)
-                        break
-                    except queue.Full:
-                        pass
-
-            def recv(self):
-                self.parent.lock.acquire()
-                data = next(self.parent.send_generator)
-                self.parent.lock.release()
-                return data
-
-        for i in range(self.num):
-            conn = LocalConnection(self)
-            self.threads.append(threading.Thread(target=self.func, args=(conn, i)))
-            self.threads[-1].start()
-
-
 class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)

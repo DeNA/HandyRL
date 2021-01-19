@@ -28,7 +28,7 @@ from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import SimpleConv2DModel as DefaultModel
-from .connection import MultiProcessWorkers, MultiThreadWorkers
+from .connection import MultiProcessWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
 
@@ -347,13 +347,10 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        if self.args['use_batcher_process']:
-            self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'],
-                buffer_length=3, num_receivers=2
-            )
-        else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
+        self.workers = MultiProcessWorkers(
+            self._worker, self._selector(), self.args['num_batchers'],
+            buffer_length=3, num_receivers=2
+        )
 
     def _selector(self):
         while True:
