@@ -22,9 +22,9 @@ import torch.optim as optim
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
-from .model import DuelingNet as Model
+from .model import SimpleConv2DModel as DefaultModel
 from .losses import compute_target
-from .connection import MultiProcessWorkers, MultiThreadWorkers
+from .connection import MultiProcessWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
 
@@ -50,7 +50,7 @@ def make_batch(episodes, args):
         # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
-        players = sorted([player for player in moments[0]['observation'].keys() if player >= 0])
+        players = list(moments[0]['observation'].keys())
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
@@ -59,7 +59,7 @@ def make_batch(episodes, args):
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
-        obs = rotate(obs)  # (T, ..., P, ...) -> (..., P, T, ...)
+        obs = rotate(obs)  # (P, ..., T, ...) -> (..., T, P, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
@@ -76,7 +76,7 @@ def make_batch(episodes, args):
             dtype=np.float32
         ).reshape(-1, len(players))
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
-        tmsk = np.eye(len(players))[[m['turn'] for m in moments]]
+        tmsk = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)
         pmsk = np.array([m['pmask'] for m in moments])
         vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
 
@@ -279,13 +279,10 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        if self.args['use_batcher_process']:
-            self.workers = MultiProcessWorkers(
-                self._worker, self._selector(), self.args['num_batchers'],
-                buffer_length=3, num_receivers=2
-            )
-        else:
-            self.workers = MultiThreadWorkers(self._worker, self._selector(), self.args['num_batchers'])
+        self.workers = MultiProcessWorkers(
+            self._worker, self._selector(), self.args['num_batchers'],
+            buffer_length=3, num_receivers=2
+        )
 
     def _selector(self):
         while True:
@@ -444,7 +441,7 @@ class Learner:
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = self.env.net() if hasattr(self.env, 'net') else Model
+        self.model_class = self.env.net() if hasattr(self.env, 'net') else DefaultModel
         train_model = self.model_class(self.env, args)
         if self.model_era == 0:
             self.model = RandomModel(self.env)
@@ -453,6 +450,7 @@ class Learner:
             self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
 
         # generated datum
+        self.generation_results = {}
         self.num_episodes = 0
 
         # evaluated datum
@@ -488,6 +486,16 @@ class Learner:
         torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
+        # analyze generated episodes
+        for episode in episodes:
+            if episode is None:
+                continue
+            for p in episode['args']['player']:
+                model_id = episode['args']['model_id'][p]
+                outcome = episode['outcome'][p]
+                n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
+                self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
         while len(self.trainer.episodes) > self.args['maximum_episodes']:
@@ -500,28 +508,30 @@ class Learner:
                 continue
             for p in result['args']['player']:
                 model_id = result['args']['model_id'][p]
-                if model_id not in self.results:
-                    self.results[model_id] = {}
-                r = result['result'][p]
-                if r not in self.results[model_id]:
-                    self.results[model_id][r] = 0
-                self.results[model_id][r] += 1
+                res = result['result'][p]
+                n, r, r2 = self.results.get(model_id, (0, 0, 0))
+                self.results[model_id] = n + 1, r + res, r2 + res ** 2
 
     def update(self):
         # call update to every component
         print()
         print('epoch %d' % self.model_era)
+
         if self.model_era not in self.results:
             print('win rate = Nan (0)')
         else:
-            distribution = self.results[self.model_era]
-            results = {k: distribution[k] for k in sorted(distribution.keys(), reverse=True)}
-            # output evaluation results
-            n, win = 0, 0.0
-            for r, cnt in results.items():
-                n += cnt
-                win += (r + 1) / 2 * cnt
-            print('win rate = %.3f (%.1f / %d)' % (win / n, win, n))
+            n, r, r2 = self.results[self.model_era]
+            mean = r / (n + 1e-6)
+            print('win rate = %.3f (%.1f / %d)' % ((mean + 1) / 2, (r + n) / 2, n))
+
+        if self.model_era not in self.generation_results:
+            print('generation stats = Nan (0)')
+        else:
+            n, r, r2 = self.generation_results[self.model_era]
+            mean = r / (n + 1e-6)
+            std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
+            print('generation stats = %.3f +- %.3f' % (mean, std))
+
         model, steps = self.trainer.update()
         if model is None:
             model = self.model
@@ -588,9 +598,8 @@ class Learner:
 
                 elif req == 'model':
                     for model_id in data:
-                        if model_id == self.model_era:
-                            model = self.model
-                        else:
+                        model = self.model
+                        if model_id != self.model_era:
                             try:
                                 model = self.model_class(self.env, self.args)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
