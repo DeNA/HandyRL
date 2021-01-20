@@ -71,11 +71,12 @@ class Agent:
         self.hidden = self.model.init_hidden()
 
     def plan(self, obs):
-        return self.model.inference(obs, self.hidden)
+        outputs = self.model.inference(obs, self.hidden)
+        self.hidden = outputs.pop('hidden', None)
+        return outputs
 
     def action(self, env, player, show=False):
         outputs = self.plan(env.observation(player))
-        self.hidden = outputs.get('hidden', None)
         actions = env.legal_actions()
         p = outputs['policy']
         v = outputs.get('value', None)
@@ -95,8 +96,7 @@ class Agent:
 
     def observe(self, env, player, show=False):
         if self.observation:
-            outputs = self.planner.inference(env.observation(player), self.hidden)
-            self.hidden = outputs.get('hidden', None)
+            outputs = self.plan(env.observation(player))
             v = outputs.get('value', None)
         if show:
             view(env, player=player)
