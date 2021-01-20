@@ -93,7 +93,7 @@ class Agent:
 
     def observe(self, env, player, show=False):
         if self.observation:
-            _, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
+            _, v, _ = self.plan(env.observation(player))
         if show:
             view(env, player=player)
             if self.observation:
