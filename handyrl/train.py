@@ -55,6 +55,8 @@ def make_batch(episodes, args):
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = list(moments[0]['observation'].keys())
+        if args['observation']:
+            players = [random.choice(players)]  # choose 1 player in observation mode
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
