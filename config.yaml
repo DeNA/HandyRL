@@ -11,7 +11,7 @@ train_args:
     gamma: 0.8
     forward_steps: 16
     compress_steps: 4
-    entropy_regularization: 3.0e-1
+    entropy_regularization: 1.0e-1
     entropy_regularization_decay: 0.1
     update_episodes: 2000
     batch_size: 128

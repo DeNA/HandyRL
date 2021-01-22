@@ -11,7 +11,6 @@ import numpy as np
 
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
-from .model import softmax
 
 
 io_match_port = 9876
@@ -81,6 +80,10 @@ class Agent:
         mask[actions] = 0
         p -= mask * 1e32
 
+        def softmax(x):
+            x = np.exp(x - np.max(x, axis=-1))
+            return x / x.sum(axis=-1)
+
         if show:
             view(env, player=player)
             print_outputs(env, softmax(p), v)
@@ -93,7 +96,7 @@ class Agent:
 
     def observe(self, env, player, show=False):
         if self.observation:
-            _, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
+            _, v, _ = self.plan(env.observation(player))
         if show:
             view(env, player=player)
             if self.observation:
