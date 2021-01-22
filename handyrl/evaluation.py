@@ -121,7 +121,7 @@ class EnsembleAgent(Agent):
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
         for k, vl in outputs:
-            outputs[k] = p = np.mean(vl, axis=0)
+            outputs[k] = np.mean(vl, axis=0)
         return outputs
 
 
