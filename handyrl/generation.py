@@ -45,16 +45,16 @@ class Generator:
                     p, v, _, hidden[player] = model.inference(obs, hidden[player])
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
-                        pmask = np.ones_like(p) * 1e32
-                        pmask[legal_actions] = 0
-                        p_turn = p - pmask
+                        action_mask = np.ones_like(p) * 1e32
+                        action_mask[legal_actions] = 0
+                        p_turn = p - action_mask
                 moment['observation'][player] = obs
                 moment['value'][player] = v
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
             moment['policy'] = p_turn
-            moment['pmask'] = pmask
+            moment['action_mask'] = action_mask
             moment['turn'] = self.env.turn()
             moment['action'] = action
             moments.append(moment)
