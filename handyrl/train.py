@@ -140,12 +140,11 @@ def forward_prediction(model, hidden, batch, obs_mode):
     if hidden is None:
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
-        t_policies, t_values, t_returns, _ = model(obs, None)
+        outputs = model(obs, None)
     else:
         # sequential computation with RNN
         bmasks = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (B, T, P)
-
-        t_policies, t_values, t_returns = [], [], []
+        outputs = {}
         for t in range(batch['tmask'].size(1)):
             obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
             bmask_ = bmasks[:, t]
@@ -155,36 +154,29 @@ def forward_prediction(model, hidden, batch, obs_mode):
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
-            t_policy, t_value, t_return, next_hidden = model(obs, hidden_)
-            t_policies.append(t_policy)
-            t_values.append(t_value)
-            t_returns.append(t_return)
+            outputs_ = model(obs, hidden_)
+            for k, o in outputs_.items():
+                if k == 'hidden':
+                    next_hidden = outputs_['hidden']
+                else:
+                    outputs[k] = outputs.get(k, []) + [o]
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
-        t_policies = torch.stack(t_policies, dim=1)
-        t_values = torch.stack(t_values, dim=1) if t_values[0] is not None else None
-        t_returns = torch.stack(t_returns, dim=1) if t_returns[0] is not None else None
+        outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
-    # gather turn player's policies
-    t_policies = t_policies.view(*batch['tmask'].size()[:2], -1, t_policies.size(-1))
-    t_policies = t_policies.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
+    for k, o in outputs.items():
+        if k == 'policy':
+            # gather turn player's policies
+            o = o.view(*batch['tmask'].size()[:2], -1, o.size(-1))
+            outputs[k] = o.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
+        else:
+            # mask valid target values and cumulative rewards
+            outputs[k] = o.view(*batch['tmask'].size()[:2], -1).mul(batch['vmask'])
 
-    # mask valid target values
-    if t_values is not None:
-        t_values = t_values.view(*batch['tmask'].size()[:2], -1)
-        t_values = t_values.mul(batch['vmask'])
-
-    # mask valid cumulative rewards
-    if t_returns is not None:
-        t_returns = t_returns.view(*batch['tmask'].size()[:2], -1)
-        t_returns = t_returns.mul(batch['vmask'])
-
-    return t_policies, t_values, t_returns
+    return outputs
 
 
-def compose_losses(policies, values, returns, log_selected_policies, \
-                   advantages, value_targets, return_targets, \
-                   tmasks, vmasks, progress, args):
+def compose_losses(outputs, log_selected_policies, total_advantages, targets, batch, args):
     """Caluculate loss value
 
     Returns:
@@ -192,44 +184,44 @@ def compose_losses(policies, values, returns, log_selected_policies, \
     """
 
     losses = {}
+    tmasks, vmasks = batch['tmask'], batch['vmask']
     dcnt = tmasks.sum().item()
-
-    turn_advantages = advantages.mul(tmasks).sum(-1, keepdim=True)
+    turn_advantages = total_advantages.mul(tmasks).sum(-1, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    if values is not None:
-        losses['v'] = ((values - value_targets) ** 2).mul(vmasks).sum() / 2
-    if returns is not None:
-        losses['r'] = F.smooth_l1_loss(returns, return_targets, reduction='none').mul(vmasks).sum()
+    if 'value' in outputs:
+        losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(vmasks).sum() / 2
+    if 'return' in outputs:
+        losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(vmasks).sum()
 
-    entropy = dist.Categorical(logits=policies).entropy().mul(tmasks.sum(-1))
+    entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
     base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
-    entropy_loss = entropy.mul(1 - progress * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
+    entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
     return losses, dcnt
 
 
-def vtrace_base(batch, model, hidden, args):
-    t_policies, t_values, t_returns = forward_prediction(model, hidden, batch, args['observation'])
+def compute_loss(batch, model, hidden, args):
+    outputs = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
     gmasks = batch['tmask'].sum(-1, keepdim=True)
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = F.log_softmax(batch['policy'], dim=-1).gather(-1, actions) * gmasks
-    log_selected_t_policies = F.log_softmax(t_policies     , dim=-1).gather(-1, actions) * gmasks
+    log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * gmasks
+    log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * gmasks
 
     # thresholds of importance sampling
     log_rhos = log_selected_t_policies.detach() - log_selected_b_policies
     rhos = torch.exp(log_rhos)
     clipped_rhos = torch.clamp(rhos, 0, clip_rho_threshold)
     cs = torch.clamp(rhos, 0, clip_c_threshold)
-    values_nograd = t_values.detach() if t_values is not None else None
-    returns_nograd = t_returns.detach() if t_returns is not None else None
+    outputs_nograd = {k: o.detach() for k, o in outputs.items()}
 
-    if values_nograd is not None:
+    if 'value' in outputs_nograd:
+        values_nograd = outputs_nograd['value']
         if values_nograd.size(2) == 2:  # two player zerosum game
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=-1)
             if args['observation']:
@@ -238,39 +230,26 @@ def vtrace_base(batch, model, hidden, args):
                 values_nograd = values_nograd + values_nograd_opponent
                 # Be careful, vmask in batch is changed here
                 batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
+        outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
-        values_nograd = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
+    # compute targets and advantage
+    targets = {}
+    advantages = {}
 
-    return batch, t_policies, t_values, t_returns, log_selected_t_policies, \
-        values_nograd, returns_nograd, clipped_rhos, cs
+    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs
+    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs
 
-
-def vtrace(batch, model, hidden, args):
-    # IMPALA
-    # https://github.com/deepmind/scalable_agent/blob/master/vtrace.py
-
-    batch, t_policies, t_values, t_returns, log_selected_t_policies, \
-        values_nograd, returns_nograd, clipped_rhos, cs = \
-        vtrace_base(batch, model, hidden, args)
-    outcomes, returns, rewards = batch['outcome'], batch['return'], batch['reward']
-
-    value_args = values_nograd, outcomes, None, args['lambda'], 1, clipped_rhos, cs
-    return_args = returns_nograd, returns, rewards, args['lambda'], args['gamma'], clipped_rhos, cs
-
-    value_targets, value_advantages = compute_target(args['value_target'], *value_args)
-    return_targets, return_advantages = compute_target(args['value_target'], *return_args)
+    targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
+    targets['return'], advantages['return'] = compute_target(args['value_target'], *return_args)
 
     if args['policy_target'] != args['value_target']:
-        _, value_advantages = compute_target(args['policy_target'], *value_args)
-        _, return_advantages = compute_target(args['policy_target'], *return_args)
+        _, advantages['value'] = compute_target(args['policy_target'], *value_args)
+        _, advantages['return'] = compute_target(args['policy_target'], *return_args)
 
     # compute policy advantage
-    advantages = clipped_rhos * (value_advantages + return_advantages)
+    total_advantages = clipped_rhos * sum(advantages.values())
 
-    return compose_losses(
-        t_policies, t_values, t_returns, log_selected_t_policies, advantages, value_targets, return_targets,
-        batch['tmask'], batch['vmask'], batch['progress'], args
-    )
+    return compose_losses(outputs, log_selected_t_policies, total_advantages, targets, batch, args)
 
 
 class Batcher:
@@ -392,7 +371,7 @@ class Trainer:
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
 
-            losses, dcnt = vtrace(batch, train_model, hidden, self.args)
+            losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
 
             self.optimizer.zero_grad()
             losses['total'].backward()

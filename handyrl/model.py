@@ -242,16 +242,12 @@ class BaseModel(nn.Module):
             xt = to_torch(x, unsqueeze=0)
             ht = to_torch(hidden, unsqueeze=0)
             outputs = self.forward(xt, ht, **kwargs)
-
-        return tuple(
-            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
-            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
-        )
+        return map_r(outputs, lambda o: o.detach().numpy().squeeze(0) if o is not None else None)
 
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None, None
+        return {'policy': np.zeros(self.action_length)}
 
 
 class SimpleConv2DModel(BaseModel):
@@ -274,4 +270,4 @@ class SimpleConv2DModel(BaseModel):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), None, None
+        return {'policy': h_p, 'value': torch.tanh(h_v)}

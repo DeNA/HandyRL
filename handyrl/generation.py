@@ -40,12 +40,13 @@ class Generator:
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p, v, _, hidden[player] = model.inference(obs, hidden[player])
+                    outputs = model.inference(obs, hidden[player])
+                    v = outputs.get('value', None)
                     if player == self.env.turn():
                         legal_actions = self.env.legal_actions()
-                        pmask = np.ones_like(p) * 1e32
+                        pmask = np.ones_like(outputs['policy']) * 1e32
                         pmask[legal_actions] = 0
-                        p_turn = p - pmask
+                        p_turn = outputs['policy'] - pmask
                 moment['observation'][player] = obs
                 moment['value'][player] = v
 

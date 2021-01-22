@@ -51,7 +51,7 @@ class GeisterNet(BaseModel):
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), h_r, hidden
+        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
 
 
 class Environment(BaseEnvironment):
