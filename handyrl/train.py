@@ -1,10 +1,5 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
-#
-# Paper that proposed VTrace algorithm
-# https://arxiv.org/abs/1802.01561
-# Official code
-# https://github.com/deepmind/scalable_agent/blob/6c0c8a701990fab9053fb338ede9c915c18fa2b1/vtrace.py
 
 # training
 
@@ -28,6 +23,7 @@ from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate, type_r
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import SimpleConv2DModel as DefaultModel
+from .losses import compute_target
 from .connection import MultiProcessWorkers
 from .connection import accept_socket_connections
 from .worker import Workers
@@ -208,7 +204,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     return losses, dcnt
 
 
-def vtrace_base(batch, model, hidden, args):
+def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
     gmasks = batch['tmask'].sum(-1, keepdim=True)
@@ -234,85 +230,21 @@ def vtrace_base(batch, model, hidden, args):
                 values_nograd = values_nograd + values_nograd_opponent
                 # Be careful, vmask in batch is changed here
                 batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
-
         outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
-    return batch, outputs, log_selected_t_policies, outputs_nograd, clipped_rhos, cs
-
-
-def vtrace(batch, model, hidden, args):
-    # IMPALA
-    # https://github.com/deepmind/scalable_agent/blob/master/vtrace.py
-
-    batch, outputs, log_selected_t_policies, outputs_nograd, clipped_rhos, cs = vtrace_base(batch, model, hidden, args)
-    outcomes, returns, rewards = batch['outcome'], batch['return'], batch['reward']
-    time_length = batch['vmask'].size(1)
-    values_nograd = outputs_nograd.get('value', None)
-    returns_nograd = outputs_nograd.get('return', None)
-
+    # compute targets and advantage
     targets = {}
     advantages = {}
 
-    if args['algorithm'] == 'MC':
-        # IS with naive advantage
-        targets['value'], targets['return'] = outcomes, returns
-        advantages['value'] = (outcomes - values_nograd) if 'value' in outputs else 0
-        advantages['return'] = (returns - returns_nograd) if 'return' in outputs else 0
+    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs
+    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs
 
-    elif args['algorithm'] == 'VTRACE':
-        if values_nograd is not None:
-            values_t_plus_1 = torch.cat([values_nograd[:, 1:], outcomes], dim=1)
-            deltas_v = clipped_rhos * (values_t_plus_1 - values_nograd)
+    targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
+    targets['return'], advantages['return'] = compute_target(args['value_target'], *return_args)
 
-            # compute Vtrace value target recursively
-            vs_minus_v_xs = deque([deltas_v[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                vs_minus_v_xs.appendleft(deltas_v[:, i] + cs[:, i] * vs_minus_v_xs[0])
-
-            vs_minus_v_xs = torch.stack(tuple(vs_minus_v_xs), dim=1)
-            vs = vs_minus_v_xs + values_nograd
-            vs_t_plus_1 = torch.cat([vs[:, 1:], outcomes], dim=1)
-
-            targets['value'] = vs
-            advantages['value'] = vs_t_plus_1 - values_nograd
-
-        if returns_nograd is not None:
-            next_returns = (returns[:, -1:] - rewards[:, -1:]) / args['gamma']
-            returns_t_plus_1 = torch.cat([returns_nograd[:, 1:], next_returns], dim=1)
-            deltas_r = clipped_rhos * (rewards + args['gamma'] * returns_t_plus_1 - returns_nograd)
-
-            # compute Vtrace return target recursively
-            rs_minus_r_xs = deque([deltas_r[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                rs_minus_r_xs.appendleft(deltas_r[:, i] + args['gamma'] * cs[:, i] * rs_minus_r_xs[0])
-
-            rs_minus_r_xs = torch.stack(tuple(rs_minus_r_xs), dim=1)
-            rs = rs_minus_r_xs + returns_nograd
-            rs_t_plus_1 = torch.cat([rs[:, 1:], next_returns], dim=1)
-
-            targets['return'] = rs
-            advantages['return'] = rewards + args['gamma'] * rs_t_plus_1 - returns_nograd
-
-    elif args['algorithm'] == 'TDLAMBDA':
-        lmb = args['lambda']
-
-        if values_nograd is not None:
-            lambda_values = deque([outcomes[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                lambda_values.appendleft((1 - lmb) * values_nograd[:, i + 1] + lmb * lambda_values[0])
-
-            lambda_values = torch.stack(tuple(lambda_values), dim=1)
-            targets['value'] = lambda_values
-            advantages['value'] = lambda_values - values_nograd
-
-        if returns_nograd is not None:
-            lambda_returns = deque([returns[:, -1]])
-            for i in range(time_length - 2, -1, -1):
-                lambda_returns.appendleft(rewards[:, i] + args['gamma'] * ((1 - lmb) * returns_nograd[:, i + 1] + lmb * lambda_returns[0]))
-
-            lambda_returns = torch.stack(tuple(lambda_returns), dim=1)
-            targets['return'] = lambda_returns
-            advantages['return'] = lambda_returns - returns_nograd
+    if args['policy_target'] != args['value_target']:
+        _, advantages['value'] = compute_target(args['policy_target'], *value_args)
+        _, advantages['return'] = compute_target(args['policy_target'], *return_args)
 
     # compute policy advantage
     total_advantages = clipped_rhos * sum(advantages.values())
@@ -439,7 +371,7 @@ class Trainer:
             player_count = batch['value'].size(2)
             hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
 
-            losses, dcnt = vtrace(batch, train_model, hidden, self.args)
+            losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
 
             self.optimizer.zero_grad()
             losses['total'].backward()

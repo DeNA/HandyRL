@@ -9,8 +9,6 @@ import pickle
 
 import numpy as np
 
-from .model import softmax
-
 
 class Generator:
     def __init__(self, env, args):
@@ -51,6 +49,10 @@ class Generator:
                         p_turn = outputs['policy'] - pmask
                 moment['observation'][player] = obs
                 moment['value'][player] = v
+
+            def softmax(x):
+                x = np.exp(x - np.max(x, axis=-1))
+                return x / x.sum(axis=-1)
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
