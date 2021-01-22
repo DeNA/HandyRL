@@ -46,6 +46,9 @@ def make_batch(episodes, args):
 
     obss, datum = [], []
 
+    def replace_none(a, b):
+        return a if a is not None else b
+
     for ep in episodes:
         # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
@@ -55,7 +58,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
-            obs = [[(lambda x: (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
+            obs = [[replace_none(m['observation'][pl], obs_zeros) for pl in players] for m in moments]
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
@@ -63,40 +66,31 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array(
-            [[m['value'][player] or 0 for player in players] for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        rew = np.array(
-            [[m['reward'][player] or 0 for player in players] for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        ret = np.array(
-            [[m['return'][player] for player in players] for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
-        tmsk = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)
-        pmsk = np.array([m['pmask'] for m in moments])
-        vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
+        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
+        pmsk = np.array([[m['pmask'][m['turn']]] for m in moments])
+        tmsk = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        vmsk = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
-        act = np.array([m['action'] for m in moments]).reshape(-1, 1)
-        p = np.array([m['policy'] for m in moments])
-        progress = np.arange(ep['start'], ep['end'], dtype=np.float32) / ep['total']
+        act = np.array([[m['action']] for m in moments])[..., np.newaxis]
+        p = np.array([[m['policy'][m['turn']]] for m in moments])
+        progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
         if len(tmsk) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmsk)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1])])
-            rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            tmsk = np.pad(tmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            pmsk = np.pad(pmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
-            vmsk = np.pad(vmsk, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            act = np.pad(act, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            p = np.pad(p, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            progress = np.pad(progress, [(0, pad_len)], 'constant', constant_values=1)
+            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
+            rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmsk = np.pad(tmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            pmsk = np.pad(pmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
+            vmsk = np.pad(vmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
         datum.append((tmsk, pmsk, vmsk, act, p, v, rew, ret, oc, progress))
@@ -165,13 +159,13 @@ def forward_prediction(model, hidden, batch, obs_mode):
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
+        o = o.view(*batch['tmask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
             # gather turn player's policies
-            o = o.view(*batch['tmask'].size()[:2], -1, o.size(-1))
-            outputs[k] = o.mul(batch['tmask'].unsqueeze(-1)).sum(-2) - batch['pmask']
+            outputs[k] = o.mul(batch['tmask']).sum(2, keepdim=True) - batch['pmask']
         else:
             # mask valid target values and cumulative rewards
-            outputs[k] = o.view(*batch['tmask'].size()[:2], -1).mul(batch['vmask'])
+            outputs[k] = o.mul(batch['vmask'])
 
     return outputs
 
@@ -186,7 +180,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     losses = {}
     tmasks, vmasks = batch['tmask'], batch['vmask']
     dcnt = tmasks.sum().item()
-    turn_advantages = total_advantages.mul(tmasks).sum(-1, keepdim=True)
+    turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
     if 'value' in outputs:
@@ -207,7 +201,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
-    gmasks = batch['tmask'].sum(-1, keepdim=True)
+    gmasks = batch['tmask'].sum(2, keepdim=True)
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * gmasks
@@ -223,13 +217,13 @@ def compute_loss(batch, model, hidden, args):
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
         if values_nograd.size(2) == 2:  # two player zerosum game
-            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=-1)
+            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
             if args['observation']:
                 values_nograd = (values_nograd + values_nograd_opponent) / 2
             else:
                 values_nograd = values_nograd + values_nograd_opponent
                 # Be careful, vmask in batch is changed here
-                batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
+                batch['vmask'] = batch['vmask'].sum(2, keepdim=True)
         outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
     # compute targets and advantage

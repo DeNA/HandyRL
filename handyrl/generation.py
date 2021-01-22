@@ -33,22 +33,29 @@ class Generator:
             if self.env.terminal():
                 break
 
-            moment = {'observation': {}, 'value': {}, 'reward': {}, 'return': {}}
+            moment_keys = ['observation', 'policy', 'pmask', 'value', 'reward', 'return']
+            moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             for player in self.env.players():
-                obs, v = None, None
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
                     outputs = model.inference(obs, hidden[player])
                     v = outputs.get('value', None)
+
+                    moment['observation'][player] = obs
+                    moment['value'][player] = v
+
                     if player == self.env.turn():
+                        p_ = outputs['policy']
                         legal_actions = self.env.legal_actions()
-                        pmask = np.ones_like(outputs['policy']) * 1e32
+                        pmask = np.ones_like(p_) * 1e32
                         pmask[legal_actions] = 0
-                        p_turn = outputs['policy'] - pmask
-                moment['observation'][player] = obs
-                moment['value'][player] = v
+                        p_turn = p_ - pmask
+                        p = p_turn
+
+                        moment['policy'][player] = p
+                        moment['pmask'][player] = pmask
 
             def softmax(x):
                 x = np.exp(x - np.max(x, axis=-1))
@@ -56,8 +63,6 @@ class Generator:
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
-            moment['policy'] = p_turn
-            moment['pmask'] = pmask
             moment['turn'] = self.env.turn()
             moment['action'] = action
             moments.append(moment)
