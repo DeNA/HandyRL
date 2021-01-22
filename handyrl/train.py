@@ -228,8 +228,6 @@ def compute_loss(batch, model, hidden, args):
                 values_nograd = (values_nograd + values_nograd_opponent) / 2
             else:
                 values_nograd = values_nograd + values_nograd_opponent
-                # Be careful, vmask in batch is changed here
-                batch['vmask'] = batch['vmask'].sum(-1, keepdim=True)
         outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
 
     # compute targets and advantage
