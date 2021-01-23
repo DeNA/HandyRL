@@ -78,6 +78,7 @@ def make_batch(episodes, args):
         ).reshape(-1, len(players))
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
 
+        emask = np.ones((len(moments), 1), dtype=np.float32)  # episode mask
         tmask = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)  # turn mask
         omask = np.ones_like(tmask) if args['observation'] else tmask  # observation mask
         amask = np.array([m['action_mask'] for m in moments])  # action mask
@@ -95,6 +96,7 @@ def make_batch(episodes, args):
             act = np.pad(act, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             tmask = np.pad(tmask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             omask = np.pad(omask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             amask = np.pad(amask, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
@@ -112,6 +114,7 @@ def make_batch(episodes, args):
     oc = to_torch(np.array(oc))
     rew = to_torch(np.array(rew))
     ret = to_torch(np.array(ret))
+    emask = to_torch(np.array(emask))
     tmask = to_torch(np.array(tmask))
     omask = to_torch(np.array(omask))
     amask = to_torch(np.array(amask))
@@ -122,7 +125,9 @@ def make_batch(episodes, args):
         'policy': p, 'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
-        'turn_mask': tmask, 'observation_mask': omask, 'action_mask': amask,
+        'episode_mask': emask,
+        'turn_mask': tmask, 'observation_mask': omask,
+        'action_mask': amask,
         'progress': progress,
     }
 
@@ -212,7 +217,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
-    emasks = batch['turn_mask'].sum(-1, keepdim=True)  # episode mask
+    emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * emasks
