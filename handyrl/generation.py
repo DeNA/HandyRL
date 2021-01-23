@@ -9,8 +9,6 @@ import pickle
 
 import numpy as np
 
-from .model import softmax
-
 
 class Generator:
     def __init__(self, env, args):
@@ -42,14 +40,20 @@ class Generator:
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p, v, _, hidden[player] = model.inference(obs, hidden[player])
+                    outputs = model.inference(obs, hidden[player])
+                    v = outputs.get('value', None)
                     if player == self.env.turn():
+                        p = outputs['policy']
                         legal_actions = self.env.legal_actions()
                         action_mask = np.ones_like(p) * 1e32
                         action_mask[legal_actions] = 0
                         p_turn = p - action_mask
                 moment['observation'][player] = obs
                 moment['value'][player] = v
+
+            def softmax(x):
+                x = np.exp(x - np.max(x, axis=-1))
+                return x / x.sum(axis=-1)
 
             action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
 
