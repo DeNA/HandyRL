@@ -119,7 +119,7 @@ def open_multiprocessing_connections(num_process, target, args_func):
     # open connections
     s_conns, g_conns = [], []
     for _ in range(num_process):
-        conn0, conn1 = mp.connection.Pipe(duplex=True)
+        conn0, conn1 = mp.Pipe(duplex=True)
         s_conns.append(conn0)
         g_conns.append(conn1)
 
