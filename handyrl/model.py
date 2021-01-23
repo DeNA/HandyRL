@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .util import map_r
+from .search import MonteCarloTree
 
 
 def to_torch(x, transpose=False, unsqueeze=None):
@@ -271,3 +272,99 @@ class SimpleConv2DModel(BaseModel):
         h_v = self.head_v(h)
 
         return {'policy': h_p, 'value': torch.tanh(h_v)}
+
+
+class MuZero(BaseModel):
+    class Representation(nn.Module):
+        ''' Conversion from observation to inner abstract state '''
+        def __init__(self, input_dim, layers, filters):
+            super().__init__()
+            self.layer0 = Conv(input_dim, filters, 3, bn=True)
+            self.blocks = nn.ModuleList([WideResidualBlock(filters, 3, bn=True) for _ in range(layers)])
+
+        def forward(self, x):
+            h = F.relu(self.layer0(x))
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, x):
+            self.eval()
+            with torch.no_grad():
+                rp = self(torch.from_numpy(x).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    class Prediction(nn.Module):
+        ''' Policy and value prediction from inner abstract state '''
+        def __init__(self, internal_size, action_length):
+            super().__init__()
+            self.head_p = Head(internal_size, 4, action_length)
+            self.head_v = Head(internal_size, 4, 1)
+
+        def forward(self, rp):
+            p = self.head_p(rp)
+            v = self.head_v(rp)
+            return p, torch.tanh(v)
+
+        def inference(self, rp):
+            self.eval()
+            with torch.no_grad():
+                p, v = self(torch.from_numpy(rp).unsqueeze(0))
+            return p.cpu().numpy().squeeze(0), v.cpu().numpy().squeeze(0)
+
+    class Dynamics(nn.Module):
+        '''Abstract state transition'''
+        def __init__(self, rp_shape, action_length, action_filters, layers):
+            super().__init__()
+            self.action_shape = action_filters, rp_shape[1], rp_shape[2]
+            filters = rp_shape[0]
+            self.action_embedding = nn.Embedding(action_length, embedding_dim=np.prod(self.action_shape))
+            self.layer0 = Conv(rp_shape[0] + self.action_shape[0], filters, 3, bn=True)
+            self.blocks = nn.ModuleList([WideResidualBlock(filters, 3, bn=True) for _ in range(layers)])
+
+        def forward(self, rp, a):
+            arp = self.action_embedding(a).view(-1, *self.action_shape)
+            h = torch.cat([rp, arp], dim=1)
+            h = self.layer0(h)
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, rp, a):
+            self.eval()
+            with torch.no_grad():
+                rp = self(torch.from_numpy(rp).unsqueeze(0), torch.from_numpy(a).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    def __init__(self, env, args={}):
+        super().__init__(env, args)
+        self.input_size = env.observation().shape
+        layers, filters = args.get('layers', 3), args.get('filters', 32)
+        internal_size = (filters, *self.input_size[1:])
+
+        self.nets = nn.ModuleDict({
+            'representation': self.Representation(self.input_size[0], layers, filters),
+            'prediction': self.Prediction(internal_size, self.action_length),
+            'dynamics': self.Dynamics(internal_size, self.action_length, 2, layers),
+        })
+
+    def init_hidden(self, batch_size=None):
+        return {}
+
+    def forward(self, x, hidden, action=None):
+        if 'representation' not in hidden:
+            rp = self.nets['representation'](x)
+        else:
+            rp = hidden['representation']
+        p, v = self.nets['prediction'](rp)
+        outputs = {'policy': p, 'value': v}
+
+        if action is not None:
+            next_rp = self.nets['dynamics'](rp, action)
+            outputs['hidden'] = {'representation': next_rp}
+        return outputs
+
+    def inference(self, x, hidden=None, num_simulations=30):
+        tree = MonteCarloTree(self.nets, {})
+        p, v = tree.think(x, num_simulations)
+        return {'policy': p, 'value': v}
