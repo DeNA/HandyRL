@@ -28,10 +28,12 @@ class Environment(BaseEnvironment):
         self.record = []
 
     def action2str(self, a, _=None):
-        return self.X[a // 3] + self.Y[a % 3]
+        pos = a % 9
+        return self.X[pos // 3] + self.Y[pos % 3]
 
-    def str2action(self, s, _=None):
-        return self.X.find(s[0]) * 3 + self.Y.find(s[1])
+    def str2action(self, s, player):
+        pos = self.X.find(s[0]) * 3 + self.Y.find(s[1])
+        return pos + 9 * player
 
     def record_string(self):
         return ' '.join([self.action2str(a) for a in self.record])
@@ -48,10 +50,11 @@ class Environment(BaseEnvironment):
         # action is integer (0 ~ 8) or string (sequence)
         if isinstance(action, str):
             for astr in action.split():
-                self.play(self.str2action(astr))
+                self.play(self.str2action(astr, self.turn()))
             return
 
-        x, y = action // 3, action % 3
+        pos = action % 9
+        x, y = pos // 3, pos % 3
         self.board[x, y] = self.color
 
         # check winning condition
@@ -93,11 +96,12 @@ class Environment(BaseEnvironment):
 
     def legal_actions(self):
         # legal action list
-        return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
+        player = self.turn()
+        return [pos + 9 * player for pos in range(3 * 3) if self.board[pos // 3, pos % 3] == 0]
 
     def action_length(self):
         # maximum size of policy (it determines output size of policy function)
-        return 3 * 3
+        return 3 * 3 * 2
 
     def players(self):
         return [0, 1]
@@ -107,12 +111,10 @@ class Environment(BaseEnvironment):
 
     def observation(self, player=None):
         # input feature for neural nets
-        turn_view = player is None or player == self.turn()
-        color = self.color if turn_view else -self.color
         a = np.stack([
-            np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
-            self.board == color,
-            self.board == -color
+            np.ones_like(self.board) if self.turn() == 0 else np.zeros_like(self.board),
+            self.board == self.BLACK,
+            self.board == self.WHITE,
         ]).astype(np.float32)
         return a
 
