@@ -184,7 +184,7 @@ def forward_prediction(model, hidden, batch, obs_mode):
         if k == 'policy':
             # gather turn player's policies
             o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
-            outputs[k] = o.mul(batch['turn_mask'].unsqueeze(-1)).sum(-2) - batch['action_mask']
+            outputs[k] = o.mul(batch['turn_mask'].unsqueeze(-1)).sum(-2)# - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.view(*batch['turn_mask'].size()[:2], -1).mul(batch['observation_mask'])
@@ -207,8 +207,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     turn_advantages = total_advantages.mul(tmasks).sum(-1, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    spolicies = batch['supervised_policy']
-    losses['sp'] = (spolicies * (torch.clamp(spolicies, 1e-10, 1).log() - F.log_softmax(outputs['policy'], dim=-1))).sum(-1, keepdim=True).mul(tmasks).sum()
+    spolicies = batch['supervised_policy'] - batch['action_mask']
+    losses['sp'] = (F.softmax(spolicies, -1) * (F.log_softmax(spolicies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
         losses['sv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2

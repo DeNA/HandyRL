@@ -68,7 +68,7 @@ class MonteCarloTree:
 
         return q_new
 
-    def think(self, root_obs, num_simulations, temperature=0, env=None, show=False):
+    def think(self, root_obs, num_simulations, temperature=1.0, env=None, show=False):
         # End point of MCTS
         start, prev_time = time.time(), 0
         for _ in range(num_simulations):
@@ -87,8 +87,7 @@ class MonteCarloTree:
         #  Return probability distribution weighted by the number of simulations
         root = self.nodes['|']
         n = root.n + 1
-        n = (n / np.max(n)) ** (1 / (temperature + 1e-8))
-        p = n / n.sum()
+        p = np.log(n / n.sum()) * (1 / (temperature + 1e-8))
         v = root.q_sum_all / root.n_all
         return p, v
 
