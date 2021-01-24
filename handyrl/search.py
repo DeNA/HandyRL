@@ -81,8 +81,8 @@ class MonteCarloTree:
                     prev_time = tmp_time
                     root, pv = self.nodes['|'], self.pv(env)
                     print('%.2f sec. best %s. q = %.4f. n = %d / %d. pv = %s'
-                          % (tmp_time, env.action2str(pv[0]), root.q_sum[pv[0]] / root.n[pv[0]],
-                             root.n[pv[0]], root.n_all, ' '.join([env.action2str(a) for a in pv])))
+                          % (tmp_time, env.action2str(pv[0][0], pv[0][1]), root.q_sum[pv[0][0]] / root.n[pv[0][0]],
+                             root.n[pv[0][0]], root.n_all, ' '.join([env.action2str(a, p) for a, p in pv])))
 
         #  Return probability distribution weighted by the number of simulations
         root = self.nodes['|']
@@ -91,14 +91,16 @@ class MonteCarloTree:
         v = root.q_sum_all / root.n_all
         return p, v
 
-    def pv(self, env):
+    def pv(self, env_):
         # Return principal variation (action sequence which is considered as the best)
-        s, pv_seq = copy.deepcopy(env), []
+        env = copy.deepcopy(env_)
+        pv_seq = []
         while True:
-            key = '|'
+            path = list(zip(*pv_seq))[0]
+            key = '|' + ' '.join(map(str, path))
             if key not in self.nodes or self.nodes[key].n.sum() == 0:
                 break
             best_action = sorted([(a, self.nodes[key].n[a]) for a in env.legal_actions()], key=lambda x: -x[1])[0][0]
-            pv_seq.append(best_action)
-            s.play(best_action)
+            pv_seq.append((best_action, env.turn()))
+            env.play(best_action)
         return pv_seq
