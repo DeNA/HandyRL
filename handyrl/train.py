@@ -46,6 +46,9 @@ def make_batch(episodes, args):
 
     obss, datum = [], []
 
+    def replace_none(a, b):
+        return a if a is not None else b
+
     for ep in episodes:
         # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
@@ -66,7 +69,7 @@ def make_batch(episodes, args):
         p = np.array([m['policy'] for m in moments])
         sp = np.array([m['supervised_policy'] for m in moments])
         v = np.array(
-            [[m['value'][player] or 0 for player in players] for m in moments],
+            [replace_none(m['value'][m['turn']], [0, 0]) for m in moments],
             dtype=np.float32
         ).reshape(-1, len(players))
         rew = np.array(

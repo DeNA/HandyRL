@@ -296,10 +296,10 @@ class MuZero(BaseModel):
 
     class Prediction(nn.Module):
         ''' Policy and value prediction from inner abstract state '''
-        def __init__(self, internal_size, action_length):
+        def __init__(self, internal_size, action_length, player_count):
             super().__init__()
             self.head_p = Head(internal_size, 4, action_length)
-            self.head_v = Head(internal_size, 4, 1)
+            self.head_v = Head(internal_size, 4, player_count)
 
         def forward(self, rp):
             p = self.head_p(rp)
@@ -344,7 +344,7 @@ class MuZero(BaseModel):
 
         self.nets = nn.ModuleDict({
             'representation': self.Representation(self.input_size[0], layers, filters),
-            'prediction': self.Prediction(internal_size, self.action_length),
+            'prediction': self.Prediction(internal_size, self.action_length, len(env.players())),
             'dynamics': self.Dynamics(internal_size, self.action_length, 2, layers),
         })
 

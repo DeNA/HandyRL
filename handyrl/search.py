@@ -18,7 +18,8 @@ class Node:
     '''Search result of one abstract (or root) state'''
     def __init__(self, p, v):
         self.p, self.v = p, v
-        self.n, self.q_sum = np.zeros_like(p), np.zeros_like(p)
+        self.n = np.zeros_like(p)
+        self.q_sum = np.zeros((*p.shape, 2))
         self.n_all, self.q_sum_all = 1, v / 2 # prior
 
     def update(self, action, q_new):
@@ -43,7 +44,7 @@ class MonteCarloTree:
         key = '|' + ' '.join(map(str, path))
         if key not in self.nodes:
             p, v = self.model['prediction'].inference(rp)
-            p, v = softmax(p), v[0]
+            p, v = softmax(p), v
             self.nodes[key] = Node(p, v)
             return v
 
@@ -52,18 +53,21 @@ class MonteCarloTree:
         p = node.p
         if len(path) == 0:
             # Add noise to policy on the root node
-            p = 0.75 * p + 0.25 * np.random.dirichlet([0.15] * len(p))
+            p = 0.75 * p + 0.25 * np.random.dirichlet([0.15] * np.prod(p.shape)).reshape(*p.shape)
             # On the root node, we choose action only from legal actions
             p /= p.sum() + 1e-16
 
-        n, q_sum = 1 + node.n, node.q_sum_all / node.n_all + node.q_sum
-        ucb = q_sum / n + 2.0 * np.sqrt(node.n_all) * p / n  # PUCB formula
+        q_mean_all = node.q_sum_all.reshape(1, -1) / node.n_all
+        n, q_sum = 1 + node.n, q_mean_all + node.q_sum
+        adv = (q_sum / n.reshape(-1, 1) - q_mean_all).reshape(2, -1, 2)
+        adv = np.concatenate([adv[0, :, 0], adv[1, :, 1]])
+        ucb = adv + 2.0 * np.sqrt(node.n_all) * p / n  # PUCB formula
         best_action = np.argmax(ucb)
 
         # Search next state by recursively calling this function
         next_rp = self.model['dynamics'].inference(rp, np.array([best_action]))
         path.append(best_action)
-        q_new = -self.search(next_rp, path)  # With the assumption of changing player by turn
+        q_new = self.search(next_rp, path)
         node.update(best_action, q_new)
 
         return q_new
