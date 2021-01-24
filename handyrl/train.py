@@ -94,12 +94,12 @@ def make_batch(episodes, args):
             p = np.pad(p, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             v = np.concatenate([v, np.tile(oc, [pad_len, 1])])
             sp = np.pad(sp, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            act = np.pad(act, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            act = np.concatenate([act, [[random.randrange(len(p[0]))] for _ in range(pad_len)]])
             rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            omask = np.pad(omask, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
+            tmask = np.pad(tmask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
+            omask = np.pad(omask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
             amask = np.pad(amask, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
             progress = np.pad(progress, [(0, pad_len)], 'constant', constant_values=1)
 
@@ -306,7 +306,8 @@ class Batcher:
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
-        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        #turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        turn_candidates = ep['steps']
         st = random.randrange(turn_candidates)
         ed = min(st + self.args['forward_steps'], ep['steps'])
         st_block = st // self.args['compress_steps']
