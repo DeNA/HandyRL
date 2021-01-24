@@ -9,6 +9,7 @@ import random
 import numpy as np
 
 from ..environment import BaseEnvironment
+from ..model import MuZero
 
 
 class Environment(BaseEnvironment):
@@ -100,6 +101,9 @@ class Environment(BaseEnvironment):
 
     def players(self):
         return [0, 1]
+
+    def net(self):
+        return MuZero
 
     def observation(self, player=None):
         # input feature for neural nets

@@ -77,11 +77,11 @@ class Agent:
     def action(self, env, player, show=False):
         outputs = self.plan(env.observation(player))
         actions = env.legal_actions()
-        p = outputs['policy']
+        p_ = outputs['policy']
         v = outputs.get('value', None)
-        mask = np.ones_like(p)
+        mask = np.ones_like(p_)
         mask[actions] = 0
-        p -= mask * 1e32
+        p = p_ - mask * 1e32
 
         def softmax(x):
             x = np.exp(x - np.max(x, axis=-1))
@@ -89,6 +89,7 @@ class Agent:
 
         if show:
             view(env, player=player)
+            print('p_ = %s' % (softmax(p_) * 1000).astype(int))
             print_outputs(env, softmax(p), v)
 
         if self.temperature == 0:
