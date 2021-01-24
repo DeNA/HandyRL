@@ -428,4 +428,4 @@ if __name__ == '__main__':
             print([e.action2str(a, e.turn()) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward())
+        print(e.outcome())
