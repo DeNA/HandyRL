@@ -50,6 +50,9 @@ def make_batch(episodes, args):
 
     obss, datum = [], []
 
+    def replace_none(a, b):
+        return a if a is not None else b
+
     for ep in episodes:
         # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
@@ -59,7 +62,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
-            obs = [[(lambda x: (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
+            obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
@@ -68,11 +71,11 @@ def make_batch(episodes, args):
 
         # datum that is not changed by training configuration
         v = np.array(
-            [[m['value'][player] or 0 for player in players] for m in moments],
+            [[replace_none(m['value'][player], 0) for player in players] for m in moments],
             dtype=np.float32
         ).reshape(-1, len(players))
         rew = np.array(
-            [[m['reward'][player] or 0 for player in players] for m in moments],
+            [[replace_none(m['reward'][player], 0) for player in players] for m in moments],
             dtype=np.float32
         ).reshape(-1, len(players))
         ret = np.array(
@@ -80,7 +83,7 @@ def make_batch(episodes, args):
             dtype=np.float32
         ).reshape(-1, len(players))
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
-        tmsk = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)
+        tmsk = np.array([[player == m['turn'] for player in players] for m in moments], dtype=np.float32)
         pmsk = np.array([m['pmask'] for m in moments])
         vmsk = np.ones_like(tmsk) if args['observation'] else tmsk
 
