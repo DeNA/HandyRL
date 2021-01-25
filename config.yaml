@@ -11,7 +11,6 @@ train_args:
     gamma: 0.8
     forward_steps: 16
     compress_steps: 4
-    lambda: 0.7
     entropy_regularization: 1.0e-1
     entropy_regularization_decay: 0.1
     update_episodes: 2000
@@ -23,7 +22,9 @@ train_args:
     worker:
         num_gather: 2
         num_process: 6
-    algorithm: 'TDLAMBDA' # 'VTRACE' 'MC'
+    lambda: 0.7
+    policy_target: 'TD' # 'UGPO' 'VTRACE' 'TD' 'MC'
+    value_target: 'TD' # 'VTRACE' 'TD' 'MC'
     seed: 0
     restart_epoch: 0
 
