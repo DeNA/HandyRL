@@ -299,7 +299,7 @@ class MuZero(BaseModel):
         def __init__(self, internal_size, action_length, player_count):
             super().__init__()
             self.head_p = Head(internal_size, 4, action_length)
-            self.head_v = Head(internal_size, 4, player_count)
+            self.head_v = Head(internal_size, 2, player_count)
 
         def forward(self, rp):
             p = self.head_p(rp)
