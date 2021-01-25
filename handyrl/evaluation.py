@@ -54,7 +54,7 @@ def print_outputs(env, prob, v):
     if hasattr(env, 'print_outputs'):
         env.print_outputs(prob, v)
     else:
-        print('v = %f' % v)
+        print('v = %s' % v)
         print('p = %s' % (prob * 1000).astype(int))
 
 
