@@ -41,6 +41,7 @@ class Generator:
                     obs = self.env.observation(player)
                     model = models[player]
                     outputs = model.inference(obs, hidden[player])
+                    hidden[player] = outputs.get('hidden', None)
                     v = outputs.get('value', None)
                     if player == self.env.turn():
                         p = outputs['policy']
