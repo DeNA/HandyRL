@@ -9,8 +9,6 @@ import pickle
 
 import numpy as np
 
-from .model import softmax
-
 
 class Generator:
     def __init__(self, env, args):
@@ -35,31 +33,38 @@ class Generator:
             if self.env.terminal():
                 break
 
-            moment = {
-                'observation': {}, 'policy': {}, 'pmask': {}, 'action': {},
-                'value': {}, 'reward': {}, 'return': {},
-            }
+            moment_keys = ['observation', 'policy', 'action_mask', 'action', 'value', 'reward', 'return']
+            moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
+
+            def softmax(x):
+                x = np.exp(x - np.max(x, axis=-1))
+                return x / x.sum(axis=-1)
 
             turn_players = self.env.turns()
-            for index, player in enumerate(self.env.players()):
-                obs, p, v, pmask, action = None, None, None, None, None
+            for player in self.env.players():
                 if player in turn_players or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    p_, v, _, hidden[player] = model.inference(obs, hidden[player])
+                    outputs = model.inference(obs, hidden[player])
+                    hidden[player] = outputs.get('hidden', None)
+                    v = outputs.get('value', None)
+
+                    moment['observation'][player] = obs
+                    moment['value'][player] = v
+
                     if player in turn_players:
+                        p_ = outputs['policy']
                         legal_actions = self.env.legal_actions(player)
-                        pmask = np.ones_like(p_) * 1e32
-                        pmask[legal_actions] = 0
-                        p = p_ - pmask
+                        action_mask = np.ones_like(p_) * 1e32
+                        action_mask[legal_actions] = 0
+                        p = p_ - action_mask
                         action = random.choices(legal_actions, weights=softmax(p[legal_actions]))[0]
 
-                moment['observation'][index] = obs
-                moment['value'][index] = v
-                moment['policy'][index] = p
-                moment['pmask'][index] = pmask
-                moment['action'][index] = action
+                        moment['policy'][player] = p
+                        moment['action_mask'][player] = action_mask
+                        moment['action'][player] = action
 
+            moment['turn'] = turn_players
             moments.append(moment)
 
             err = self.env.plays(moment['action'])
@@ -67,23 +72,21 @@ class Generator:
                 return None
 
             reward = self.env.reward()
-            for index, player in enumerate(self.env.players()):
-                moment['reward'][index] = reward.get(player, None)
+            for player in self.env.players():
+                moment['reward'][player] = reward.get(player, None)
 
         if len(moments) < 1:
             return None
 
-        for index, player in enumerate(self.env.players()):
+        for player in self.env.players():
             ret = 0
             for i, m in reversed(list(enumerate(moments))):
-                ret = (m['reward'][index] or 0) + self.args['gamma'] * ret
-                moments[i]['return'][index] = ret
-
-        outcomes = self.env.outcome()
-        outcomes = {index: outcomes[player] for index, player in enumerate(self.env.players())}
+                ret = (m['reward'][player] or 0) + self.args['gamma'] * ret
+                moments[i]['return'][player] = ret
 
         episode = {
-            'args': args, 'steps': len(moments), 'outcome': outcomes,
+            'args': args, 'steps': len(moments),
+            'outcome': self.env.outcome(),
             'moment': [
                 bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']]))
                 for i in range(0, len(moments), self.args['compress_steps'])

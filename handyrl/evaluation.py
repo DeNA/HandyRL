@@ -11,7 +11,6 @@ import numpy as np
 
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
-from .model import softmax
 
 
 io_match_port = 9876
@@ -71,15 +70,22 @@ class Agent:
         self.hidden = self.model.init_hidden()
 
     def plan(self, obs):
-        p, v, r, self.hidden = self.model.inference(obs, self.hidden)
-        return p, v, r
+        outputs = self.model.inference(obs, self.hidden)
+        self.hidden = outputs.pop('hidden', None)
+        return outputs
 
     def action(self, env, player, show=False):
-        p, v, _ = self.plan(env.observation(player))
+        outputs = self.plan(env.observation(player))
         actions = env.legal_actions(player)
+        p = outputs['policy']
+        v = outputs.get('value', None)
         mask = np.ones_like(p)
         mask[actions] = 0
         p -= mask * 1e32
+
+        def softmax(x):
+            x = np.exp(x - np.max(x, axis=-1))
+            return x / x.sum(axis=-1)
 
         if show:
             view(env, player=player)
@@ -93,7 +99,8 @@ class Agent:
 
     def observe(self, env, player, show=False):
         if self.observation:
-            _, v, _, self.hidden = self.planner.inference(env.observation(player), self.hidden)
+            outputs = self.plan(env.observation(player))
+            v = outputs.get('value', None)
         if show:
             view(env, player=player)
             if self.observation:
@@ -105,19 +112,17 @@ class EnsembleAgent(Agent):
         self.hidden = [model.init_hidden() for model in self.model]
 
     def plan(self, obs):
-        ps, vs, rs = [], [], []
+        outputs = {}
         for i, model in enumerate(self.model):
-            p, v, r, self.hidden[i] = model.inference(obs, self.hidden[i])
-            if p is not None:
-                ps.append(p)
-            if v is not None:
-                vs.append(v)
-            if r is not None:
-                rs.append(r)
-        p = np.mean(ps, axis=0) if len(ps) > 0 else None
-        v = np.mean(vs, axis=0) if len(vs) > 0 else None
-        r = np.mean(rs, axis=0) if len(rs) > 0 else None
-        return p, v, r
+            o = model.inference(obs, self.hidden[i])
+            for k, v in o:
+                if k == 'hidden':
+                    self.hidden[i] = v
+                else:
+                    outputs[k] = outputs.get(k, []) + [o]
+        for k, vl in outputs:
+            outputs[k] = np.mean(vl, axis=0)
+        return outputs
 
 
 class SoftAgent(Agent):
