@@ -33,33 +33,36 @@ class Generator:
             if self.env.terminal():
                 break
 
-            moment = {'observation': {}, 'value': {}, 'reward': {}, 'return': {}}
+            moment_keys = ['observation', 'policy', 'action_mask', 'value', 'reward', 'return']
+            moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             for player in self.env.players():
-                obs, v = None, None
                 if player == self.env.turn() or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
                     outputs = model.inference(obs, hidden[player])
                     hidden[player] = outputs.get('hidden', None)
                     v = outputs.get('value', None)
+
+                    moment['observation'][player] = obs
+                    moment['value'][player] = v
+
                     if player == self.env.turn():
-                        p = outputs['policy']
+                        p_ = outputs['policy']
                         legal_actions = self.env.legal_actions()
-                        action_mask = np.ones_like(p) * 1e32
+                        action_mask = np.ones_like(p_) * 1e32
                         action_mask[legal_actions] = 0
-                        p_turn = p - action_mask
-                moment['observation'][player] = obs
-                moment['value'][player] = v
+                        p = p_ - action_mask
+
+                        moment['policy'][player] = p
+                        moment['action_mask'][player] = action_mask
 
             def softmax(x):
                 x = np.exp(x - np.max(x, axis=-1))
                 return x / x.sum(axis=-1)
 
-            action = random.choices(legal_actions, weights=softmax(p_turn[legal_actions]))[0]
+            action = random.choices(legal_actions, weights=softmax(p[legal_actions]))[0]
 
-            moment['policy'] = p_turn
-            moment['action_mask'] = action_mask
             moment['turn'] = self.env.turn()
             moment['action'] = action
             moments.append(moment)

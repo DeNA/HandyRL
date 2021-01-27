@@ -247,7 +247,7 @@ class BaseModel(nn.Module):
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length)}
+        return {'policy': np.zeros(self.action_length), 'value': np.zeros(1)}
 
 
 class SimpleConv2DModel(BaseModel):
