@@ -226,7 +226,7 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action):
+    def play(self, action, _=None):
         # state transition
         if isinstance(action, str):
             for astr in action.split():
@@ -344,7 +344,7 @@ class Environment(BaseEnvironment):
             # can move to my goal
             return t == self.BLUE and self.goal(c, pos_to)
 
-    def legal_actions(self):
+    def legal_actions(self, _=None):
         # return legal action list
         if self.turn_count < 0:
             return [4 * 6 * 6 + 70 * self.color + i for i in range(70)]
