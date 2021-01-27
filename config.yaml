@@ -4,9 +4,12 @@ env_args:
     source: 'handyrl.environments.tictactoe'
     #env: 'Geister'
     #source: 'handyrl.environments.geister'
+    #env: 'ParallelTicTacToe'
+    #source: 'handyrl.environments.parallel_tictactoe'
 
 
 train_args:
+    turn_based_training: True
     observation: False
     gamma: 0.8
     forward_steps: 16
