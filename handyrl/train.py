@@ -66,53 +66,62 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
+        p = np.array([[m['policy'][m['turn']]] for m in moments])
         v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
-        pmsk = np.array([[m['pmask'][m['turn']]] for m in moments])
-        tmsk = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-        vmsk = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+
+        emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
+        amask = np.array([[m['action_mask'][m['turn']]] for m in moments])
+        tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         act = np.array([[m['action']] for m in moments])[..., np.newaxis]
-        p = np.array([[m['policy'][m['turn']]] for m in moments])
+
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
-        if len(tmsk) < args['forward_steps']:
-            pad_len = args['forward_steps'] - len(tmsk)
+        if len(tmask) < args['forward_steps']:
+            pad_len = args['forward_steps'] - len(tmask)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
+            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            tmsk = np.pad(tmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            pmsk = np.pad(pmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
-            vmsk = np.pad(vmsk, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((tmsk, pmsk, vmsk, act, p, v, rew, ret, oc, progress))
+        datum.append((p, v, act, oc, rew, ret, tmask, omask, amask, progress))
 
-    tmsk, pmsk, vmsk, act, p, v, rew, ret, oc, progress = zip(*datum)
+    p, v, act, oc, rew, ret, tmask, omask, amask, progress = zip(*datum)
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    tmsk = to_torch(np.array(tmsk))
-    pmsk = to_torch(np.array(pmsk))
-    vmsk = to_torch(np.array(vmsk))
-    act = to_torch(np.array(act))
     p = to_torch(np.array(p))
     v = to_torch(np.array(v))
+    act = to_torch(np.array(act))
+    oc = to_torch(np.array(oc))
     rew = to_torch(np.array(rew))
     ret = to_torch(np.array(ret))
-    oc = to_torch(np.array(oc))
+    emask = to_torch(np.array(emask))
+    tmask = to_torch(np.array(tmask))
+    omask = to_torch(np.array(omask))
+    amask = to_torch(np.array(amask))
     progress = to_torch(np.array(progress))
 
     return {
-        'observation': obs, 'tmask': tmsk, 'pmask': pmsk, 'vmask': vmsk,
-        'action': act, 'policy': p, 'value': v,
-        'reward': rew, 'return': ret, 'outcome': oc,
+        'observation': obs,
+        'policy': p, 'value': v,
+        'action': act, 'outcome': oc,
+        'reward': rew, 'return': ret,
+        'episode_mask': emask,
+        'turn_mask': tmask, 'observation_mask': omask,
+        'action_mask': amask,
         'progress': progress,
     }
 
@@ -137,13 +146,12 @@ def forward_prediction(model, hidden, batch, obs_mode):
         outputs = model(obs, None)
     else:
         # sequential computation with RNN
-        bmasks = torch.clamp(batch['tmask'] + batch['vmask'], 0, 1)  # (B, T, P)
         outputs = {}
-        for t in range(batch['tmask'].size(1)):
+        for t in range(batch['turn_mask'].size(1)):
             obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
-            bmask_ = bmasks[:, t]
-            bmask = map_r(hidden, lambda h: bmask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
-            hidden_ = bimap_r(hidden, bmask, lambda h, m: h * m)  # (..., B, P, ...)
+            omask_ = batch['observation_mask'][:, t]
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if obs_mode:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             else:
@@ -155,17 +163,17 @@ def forward_prediction(model, hidden, batch, obs_mode):
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
-            hidden = trimap_r(hidden, next_hidden, bmask, lambda h, nh, m: h * (1 - m) + nh * m)
+            hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['tmask'].size()[:2], -1, o.size(-1))
+        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
             # gather turn player's policies
-            outputs[k] = o.mul(batch['tmask']).sum(2, keepdim=True) - batch['pmask']
+            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True) - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
-            outputs[k] = o.mul(batch['vmask'])
+            outputs[k] = o.mul(batch['observation_mask'])
 
     return outputs
 
@@ -177,16 +185,18 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
         tuple: losses and statistic values and the number of training data
     """
 
+    tmasks = batch['turn_mask']
+    omasks = batch['observation_mask']
+
     losses = {}
-    tmasks, vmasks = batch['tmask'], batch['vmask']
     dcnt = tmasks.sum().item()
     turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
     if 'value' in outputs:
-        losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(vmasks).sum() / 2
+        losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
     if 'return' in outputs:
-        losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(vmasks).sum()
+        losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(omasks).sum()
 
     entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
@@ -201,11 +211,11 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args['observation'])
     actions = batch['action']
-    gmasks = batch['tmask'].sum(2, keepdim=True)
+    emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * gmasks
-    log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * gmasks
+    log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * emasks
+    log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * emasks
 
     # thresholds of importance sampling
     log_rhos = log_selected_t_policies.detach() - log_selected_b_policies
@@ -222,9 +232,7 @@ def compute_loss(batch, model, hidden, args):
                 values_nograd = (values_nograd + values_nograd_opponent) / 2
             else:
                 values_nograd = values_nograd + values_nograd_opponent
-                # Be careful, vmask in batch is changed here
-                batch['vmask'] = batch['vmask'].sum(2, keepdim=True)
-        outputs_nograd['value'] = values_nograd * gmasks + batch['outcome'] * (1 - gmasks)
+        outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
 
     # compute targets and advantage
     targets = {}
