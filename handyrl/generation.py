@@ -65,7 +65,6 @@ class Generator:
 
             moment['turn'] = self.env.turn()
             moment['action'] = action
-            moments.append(moment)
 
             err = self.env.play(action)
             if err:
@@ -74,6 +73,8 @@ class Generator:
             reward = self.env.reward()
             for player in self.env.players():
                 moment['reward'][player] = reward.get(player, None)
+
+            moments.append(moment)
 
         if len(moments) < 1:
             return None

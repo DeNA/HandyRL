@@ -13,7 +13,7 @@ from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 
 
-io_match_port = 9876
+network_match_port = 9876
 
 
 class RandomAgent:
@@ -130,7 +130,7 @@ class SoftAgent(Agent):
         super().__init__(model, observation=observation, temperature=1.0)
 
 
-class IOAgentClient:
+class NetworkAgentClient:
     def __init__(self, agent, env, conn):
         self.conn = conn
         self.agent = agent
@@ -155,7 +155,7 @@ class IOAgentClient:
             self.conn.send(ret)
 
 
-class IOAgent:
+class NetworkAgent:
     def __init__(self, conn):
         self.conn = conn
 
@@ -207,24 +207,24 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     return outcome
 
 
-def exec_io_match(env, io_agents, critic, show=False, game_args={}):
+def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
-    for p, agent in io_agents.items():
+    for p, agent in network_agents.items():
         info = env.diff_info(p)
         agent.reset(info)
     while not env.terminal():
         if env.chance():
             return None
-        for p, agent in io_agents.items():
+        for p, agent in network_agents.items():
             info = env.diff_info(p)
             agent.chance(info)
         if env.terminal():
             break
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
-        for p, agent in io_agents.items():
+        for p, agent in network_agents.items():
             if p == env.turn():
                 action_ = agent.action(p)
                 action = env.str2action(action_, p)
@@ -232,11 +232,11 @@ def exec_io_match(env, io_agents, critic, show=False, game_args={}):
                 agent.observe(p)
         if env.play(action):
             return None
-        for p, agent in io_agents.items():
+        for p, agent in network_agents.items():
             info = env.diff_info(p)
             agent.play(info)
     outcome = env.outcome()
-    for p, agent in io_agents.items():
+    for p, agent in network_agents.items():
         agent.outcome(outcome[p])
     return outcome
 
@@ -279,8 +279,8 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         g, agent_ids, pat_idx, game_args = args
         print('*** Game %d ***' % g)
         agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
-        if isinstance(list(agent_map.values())[0], IOAgent):
-            outcome = exec_io_match(env, agent_map, critic, show=show, game_args=game_args)
+        if isinstance(list(agent_map.values())[0], NetworkAgent):
+            outcome = exec_network_match(env, agent_map, critic, show=show, game_args=game_args)
         else:
             outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
         out_queue.put((pat_idx, agent_ids, outcome))
@@ -307,9 +307,9 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
                 result_map[p][tmp_pat_idx] = {}
             args_cnt += 1
 
-    io_mode = agents[0] is None
-    if io_mode:  # network battle mode
-        agents = io_match_acception(num_process, env_args, len(agents), io_match_port)
+    network_mode = agents[0] is None
+    if network_mode:  # network battle mode
+        agents = network_match_acception(num_process, env_args, len(agents), network_match_port)
     else:
         agents = [agents] * num_process
 
@@ -318,7 +318,7 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
         args = agents[i], critic, env_args, i, in_queue, out_queue, seed
         if num_process > 1:
             mp.Process(target=eval_process_mp_child, args=args).start()
-            if io_mode:
+            if network_mode:
                 for agent in agents[i]:
                     agent.conn.close()
         else:
@@ -345,7 +345,7 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
         print('total', {k: total_results[p][k] for k in sorted(total_results[p].keys(), reverse=True)}, wp_func(total_results[p]))
 
 
-def io_match_acception(n, env_args, num_agents, port):
+def network_match_acception(n, env_args, num_agents, port):
     waiting_conns = []
     accepted_conns = []
 
@@ -361,7 +361,7 @@ def io_match_acception(n, env_args, num_agents, port):
             conn.send(env_args)  # send accpept with environment arguments
 
     agents_list = [
-        [IOAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
+        [NetworkAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
         for i in range(n)
     ]
 
@@ -380,7 +380,7 @@ def get_model(env, model_path):
 def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
     model = get_model(env, model_path)
-    IOAgentClient(Agent(model), env, conn).run()
+    NetworkAgentClient(Agent(model), env, conn).run()
 
 
 def eval_main(args, argv):
@@ -427,7 +427,7 @@ def eval_client_main(args, argv):
     while True:
         try:
             host = argv[1] if len(argv) >= 2 else 'localhost'
-            conn = connect_socket_connection(host, io_match_port)
+            conn = connect_socket_connection(host, network_match_port)
             env_args = conn.recv()
         except EOFError:
             break

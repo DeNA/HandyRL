@@ -27,16 +27,6 @@ def trimap_r(x, y, z, callback_fn=None):
     return callback_fn(x, y, z) if callback_fn is not None else None
 
 
-def type_r(x):
-    type_s = str(type(x))
-    print(type(x))
-    if isinstance(x, (list, tuple, set)):
-        return {type_s: type_r(xx) for xx in x}
-    elif isinstance(x, dict):
-        return {type_s: type_r(xx) for xx in x.values()}
-    return type_s
-
-
 def rotate(x, max_depth=1024):
     if max_depth == 0:
         return x
