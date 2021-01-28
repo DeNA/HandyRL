@@ -42,11 +42,6 @@ def to_gpu_or_not(data, gpu):
     return to_gpu(data) if gpu else data
 
 
-def softmax(x):
-    x = np.exp(x - np.max(x, axis=-1))
-    return x / x.sum(axis=-1)
-
-
 class Conv(nn.Module):
     def __init__(self, filters0, filters1, kernel_size, bn, bias=True):
         super().__init__()

@@ -75,6 +75,8 @@ class Generator:
             for player in self.env.players():
                 moment['reward'][player] = reward.get(player, None)
 
+            moments.append(moment)
+
         if len(moments) < 1:
             return None
 
