@@ -64,9 +64,6 @@ class Generator:
                         moment['action_mask'][player] = action_mask
                         moment['action'][player] = action
 
-            moment['turn'] = turn_players
-            moments.append(moment)
-
             err = self.env.plays(moment['action'])
             if err:
                 return None
@@ -75,6 +72,7 @@ class Generator:
             for player in self.env.players():
                 moment['reward'][player] = reward.get(player, None)
 
+            moment['turn'] = turn_players
             moments.append(moment)
 
         if len(moments) < 1:
