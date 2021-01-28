@@ -97,9 +97,9 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((p, v, act, oc, rew, ret, tmask, omask, amask, progress))
+        datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
-    p, v, act, oc, rew, ret, tmask, omask, amask, progress = zip(*datum)
+    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
     p = to_torch(np.array(p))
