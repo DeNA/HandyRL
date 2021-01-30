@@ -77,7 +77,7 @@ def make_batch(episodes, args):
         tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
         omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
-        act = np.array([[m['action']] for m in moments])[..., np.newaxis]
+        act = np.array([[m['action']] for m in moments], dtype=np.int64)[..., np.newaxis]
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
