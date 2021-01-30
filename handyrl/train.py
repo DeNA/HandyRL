@@ -63,12 +63,12 @@ def make_batch(episodes, args):
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
-            act = np.array([[m['action'][m['turn'][0]]] for m in moments])[..., np.newaxis]
+            act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
             p = np.array([[replace_none(m['policy'][player], p_zeros) for player in players] for m in moments])
-            act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments])[..., np.newaxis]
+            act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[replace_none(m['action_mask'][player], p_zeros + 1e32) for player in players] for m in moments])
 
         # reshape observation
