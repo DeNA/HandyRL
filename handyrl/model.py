@@ -28,12 +28,7 @@ def to_torch(x, transpose=False, unsqueeze=None):
     if unsqueeze is not None:
         a = np.expand_dims(a, unsqueeze)
 
-    if a.dtype == np.int32 or a.dtype == np.int64:
-        t = torch.LongTensor(a)
-    else:
-        t = torch.FloatTensor(a)
-
-    return t.contiguous()
+    return torch.from_numpy(a).contiguous()
 
 
 def to_numpy(x):
@@ -46,11 +41,6 @@ def to_gpu(data):
 
 def to_gpu_or_not(data, gpu):
     return to_gpu(data) if gpu else data
-
-
-def softmax(x):
-    x = np.exp(x - np.max(x, axis=-1))
-    return x / x.sum(axis=-1)
 
 
 class Conv(nn.Module):
@@ -248,7 +238,7 @@ class BaseModel(nn.Module):
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length)}
+        return {'policy': np.zeros(self.action_length), 'value': np.zeros(2)}
 
 
 class SimpleConv2DModel(BaseModel):

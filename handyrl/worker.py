@@ -181,7 +181,7 @@ class Workers(QueueCommunicator):
         else:
             # open local connections
             for i in range(self.args['worker']['num_gather']):
-                conn0, conn1 = mp.connection.Pipe(duplex=True)
+                conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
                 self.add(conn0)

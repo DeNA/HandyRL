@@ -13,9 +13,9 @@ train_args:
     compress_steps: 4
     entropy_regularization: 1.0e-1
     entropy_regularization_decay: 0.1
-    update_episodes: 2000
+    update_episodes: 200
     batch_size: 128
-    minimum_episodes: 20000
+    minimum_episodes: 200
     maximum_episodes: 200000
     num_batchers: 2
     eval_rate: 0.1
@@ -25,6 +25,7 @@ train_args:
     lambda: 0.7
     policy_target: 'TD' # 'UGPO' 'VTRACE' 'TD' 'MC'
     value_target: 'TD' # 'VTRACE' 'TD' 'MC'
+    policy_decay: 0.9
     seed: 0
     restart_epoch: 0
 

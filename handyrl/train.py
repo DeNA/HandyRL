@@ -20,7 +20,7 @@ import torch.distributions as dist
 import torch.optim as optim
 
 from .environment import prepare_env, make_env
-from .util import map_r, bimap_r, trimap_r, rotate, type_r
+from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import SimpleConv2DModel as DefaultModel
 from .losses import compute_target
@@ -58,7 +58,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
         if args['observation']:
             # replace None with zeros
-            obs = [[(lambda x: (x if x is not None else obs_zeros))(m['observation'][pl]) for pl in players] for m in moments]
+            obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
         else:
             obs = [[m['observation'][m['turn']]] for m in moments]
         obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
@@ -66,55 +66,44 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        p = np.array([m['policy'] for m in moments])
-        sp = np.array([m['supervised_policy'] for m in moments])
-        v = np.array(
-            [replace_none(m['value'][m['turn']], [0, 0]) for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        rew = np.array(
-            [[m['reward'][player] or 0 for player in players] for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        ret = np.array(
-            [[m['return'][player] for player in players] for m in moments],
-            dtype=np.float32
-        ).reshape(-1, len(players))
-        oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(-1, len(players))
+        p = np.array([[m['policy'][m['turn']]] for m in moments])
+        v = np.array([replace_none(m['value'][m['turn']], [0, 0]) for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
-        emask = np.ones((len(moments), 1), dtype=np.float32)  # episode mask
-        tmask = np.array([[pl == m['turn'] for pl in players] for m in moments], dtype=np.float32)  # turn mask
-        omask = np.ones_like(tmask) if args['observation'] else tmask  # observation mask
-        amask = np.array([m['action_mask'] for m in moments])  # action mask
+        emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
+        amask = np.array([[m['action_mask'][m['turn']]] for m in moments])
+        tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
-        act = np.array([m['action'] for m in moments]).reshape(-1, 1)
-        progress = np.arange(ep['start'], ep['end'], dtype=np.float32) / ep['total']
+        act = np.array([[m['action']] for m in moments])[..., np.newaxis]
+
+        progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
         if len(tmask) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmask)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            p = np.pad(p, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1])])
-            sp = np.pad(sp, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            act = np.concatenate([act, [[random.randrange(len(p[0]))] for _ in range(pad_len)]])
-            rew = np.pad(rew, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            ret = np.pad(ret, [(0, pad_len), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
-            omask = np.pad(omask, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
-            amask = np.pad(amask, [(0, pad_len), (0, 0)], 'constant', constant_values=1e32)
-            progress = np.pad(progress, [(0, pad_len)], 'constant', constant_values=1)
+            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
+            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
+            progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((p, v, sp, act, oc, rew, ret, tmask, omask, amask, progress))
+        datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
-    p, v, sp, act, oc, rew, ret, tmask, omask, amask, progress = zip(*datum)
+    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
     p = to_torch(np.array(p))
     v = to_torch(np.array(v))
-    sp = to_torch(np.array(sp))
     act = to_torch(np.array(act))
     oc = to_torch(np.array(oc))
     rew = to_torch(np.array(rew))
@@ -128,7 +117,6 @@ def make_batch(episodes, args):
     return {
         'observation': obs,
         'policy': p, 'value': v,
-        'supervised_policy': sp,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -183,13 +171,14 @@ def forward_prediction(model, hidden, batch, obs_mode):
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
+        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
             # gather turn player's policies
-            o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
-            outputs[k] = o.mul(batch['turn_mask'].unsqueeze(-1)).sum(-2)# - batch['action_mask']
+            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)# - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
-            outputs[k] = o.view(*batch['turn_mask'].size()[:2], -1).mul(batch['observation_mask'])
+            o = o.view(*batch['turn_mask'].size()[:2], -1, 1)
+            outputs[k] = o.mul(batch['observation_mask'])
 
     return outputs
 
@@ -206,14 +195,14 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     losses = {}
     dcnt = tmasks.sum().item()
-    turn_advantages = total_advantages.mul(tmasks).sum(-1, keepdim=True)
+    turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    spolicies = batch['supervised_policy'] - batch['action_mask']
-    losses['sp'] = (F.softmax(spolicies, -1) * (F.log_softmax(spolicies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
+    spolicies = batch['policy'] - batch['action_mask']
+    losses['pp'] = (F.softmax(spolicies, -1) * (F.log_softmax(spolicies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
-        losses['sv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2
+        losses['pv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2
     if 'return' in outputs:
         losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(omasks).sum()
 
@@ -222,8 +211,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     teacher_weight = 1
     reinforce_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
-    supervised_loss = losses['sp'] + losses.get('sv', 0)
-    base_loss = (1 - teacher_weight) * reinforce_loss + teacher_weight * supervised_loss
+    planning_loss = losses['pp'] + losses.get('pv', 0)
+    base_loss = (1 - teacher_weight) * reinforce_loss + teacher_weight * planning_loss
     entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
@@ -249,7 +238,7 @@ def compute_loss(batch, model, hidden, args):
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
         if values_nograd.size(2) == 2:  # two player zerosum game
-            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=-1)
+            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
             if args['observation']:
                 values_nograd = (values_nograd + values_nograd_opponent) / 2
             else:
