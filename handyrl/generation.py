@@ -53,7 +53,7 @@ class Generator:
                         legal_actions = self.env.legal_actions()
                         action_mask = np.ones_like(p_) * 1e32
                         action_mask[legal_actions] = 0
-                        p = p_ / temperature
+                        p = p_ / temperature - action_mask
 
                         moment['policy'][player] = p
                         moment['action_mask'][player] = action_mask

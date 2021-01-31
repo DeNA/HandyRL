@@ -198,8 +198,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    target_policies = batch['policy'] - batch['action_mask']
-    losses['pp'] = (F.softmax(target_policies, -1) * (F.log_softmax(target_policies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
+    losses['pp'] = (F.softmax(batch['policy'], -1) * (F.log_softmax(batch['policy'], -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
         losses['pv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2
