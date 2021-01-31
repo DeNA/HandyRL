@@ -73,7 +73,7 @@ def make_batch(episodes, args):
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        amask = np.array([[m['action_mask'][m['turn']]] for m in moments])
+        amask = np.array([[m['action_mask'][m['turn']]] for m in moments], dtype=np.int64)
         tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
         omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
@@ -87,12 +87,12 @@ def make_batch(episodes, args):
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
-            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            act = np.concatenate([act, [[[random.randrange(len(p[0]))]] for _ in range(pad_len)]])
             rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
+            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
+            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
             amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
