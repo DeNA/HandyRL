@@ -20,7 +20,7 @@ class Node:
         self.p, self.v = p, v
         self.n = np.zeros_like(p)
         self.q_sum = np.zeros((*p.shape, 2))
-        self.n_all, self.q_sum_all = 1, v / 2 # prior
+        self.n_all, self.q_sum_all = 1, v / 2  # prior
 
     def update(self, action, q_new):
         # Update
@@ -36,8 +36,8 @@ class MonteCarloTree:
     '''Monte Carlo Tree Search'''
     def __init__(self, model, args):
         self.model = model
+        self.args = args
         self.nodes = {}
-        self.args = {}
 
     def search(self, rp, path):
         # Return predicted value from new state
@@ -48,12 +48,13 @@ class MonteCarloTree:
             self.nodes[key] = Node(p, v)
             return v
 
-        # State transition by an action selected from bandit
+        # Choose action with bandit
         node = self.nodes[key]
         p = node.p
         if len(path) == 0:
             # Add noise to policy on the root node
-            p = 0.75 * p + 0.25 * np.random.dirichlet([0.15] * np.prod(p.shape)).reshape(*p.shape)
+            noise = np.random.dirichlet([self.args['root_noise_alpha']] * np.prod(p.shape)).reshape(*p.shape)
+            p = (1 - self.args['root_noise_coef']) * p + self.args['root_noise_coef'] * noise
             # On the root node, we choose action only from legal actions
             p /= p.sum() + 1e-16
 
@@ -62,17 +63,17 @@ class MonteCarloTree:
         adv = (q_sum / n.reshape(-1, 1) - q_mean_all).reshape(2, -1, 2)
         adv = np.concatenate([adv[0, :, 0], adv[1, :, 1]])
         ucb = adv + 2.0 * np.sqrt(node.n_all) * p / n  # PUCB formula
-        best_action = np.argmax(ucb)
+        selected_action = np.argmax(ucb)
 
         # Search next state by recursively calling this function
-        next_rp = self.model['dynamics'].inference(rp, np.array([best_action]))
-        path.append(best_action)
+        next_rp = self.model['dynamics'].inference(rp, np.array([selected_action]))
+        path.append(selected_action)
         q_new = self.search(next_rp, path)
-        node.update(best_action, q_new)
+        node.update(selected_action, q_new)
 
         return q_new
 
-    def think(self, root_obs, num_simulations, temperature=1.0, env=None, show=False):
+    def think(self, root_obs, num_simulations, env=None, show=False):
         # End point of MCTS
         start, prev_time = time.time(), 0
         for _ in range(num_simulations):
@@ -90,9 +91,9 @@ class MonteCarloTree:
 
         #  Return probability distribution weighted by the number of simulations
         root = self.nodes['|']
-        n = root.n + 1
-        p = np.log(n / n.sum()) * (1 / (temperature + 1e-8))
-        v = root.q_sum_all / root.n_all
+        n = root.n + 0.1
+        p = np.log(n / n.sum())
+        v = (root.q_sum * p.reshape(-1, 1)).sum(0)
         return p, v
 
     def pv(self, env_):

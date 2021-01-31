@@ -281,7 +281,7 @@ class MuZero(BaseModel):
         def inference(self, x):
             self.eval()
             with torch.no_grad():
-                rp = self(torch.from_numpy(x).unsqueeze(0))
+                rp = self(to_torch(x, unsqueeze=0))
             return rp.cpu().numpy().squeeze(0)
 
     class Prediction(nn.Module):
@@ -299,17 +299,17 @@ class MuZero(BaseModel):
         def inference(self, rp):
             self.eval()
             with torch.no_grad():
-                p, v = self(torch.from_numpy(rp).unsqueeze(0))
+                p, v = self(to_torch(rp, unsqueeze=0))
             return p.cpu().numpy().squeeze(0), v.cpu().numpy().squeeze(0)
 
     class Dynamics(nn.Module):
         '''Abstract state transition'''
-        def __init__(self, rp_shape, action_length, action_filters, layers):
+        def __init__(self, rp_shape, layers, action_length, action_filters):
             super().__init__()
             self.action_shape = action_filters, rp_shape[1], rp_shape[2]
             filters = rp_shape[0]
             self.action_embedding = nn.Embedding(action_length, embedding_dim=np.prod(self.action_shape))
-            self.layer0 = Conv(rp_shape[0] + self.action_shape[0], filters, 3, bn=True)
+            self.layer0 = Conv(filters + action_filters, filters, 3, bn=True)
             self.blocks = nn.ModuleList([WideResidualBlock(filters, 3, bn=True) for _ in range(layers)])
 
         def forward(self, rp, a):
@@ -323,7 +323,7 @@ class MuZero(BaseModel):
         def inference(self, rp, a):
             self.eval()
             with torch.no_grad():
-                rp = self(torch.from_numpy(rp).unsqueeze(0), torch.from_numpy(a).unsqueeze(0))
+                rp = self(to_torch(rp, unsqueeze=0), to_torch(a, unsqueeze=0))
             return rp.cpu().numpy().squeeze(0)
 
     def __init__(self, env, args={}):
@@ -331,11 +331,12 @@ class MuZero(BaseModel):
         self.input_size = env.observation().shape
         layers, filters = args.get('layers', 3), args.get('filters', 32)
         internal_size = (filters, *self.input_size[1:])
+        self.planning_args = args['planning']
 
         self.nets = nn.ModuleDict({
             'representation': self.Representation(self.input_size[0], layers, filters),
             'prediction': self.Prediction(internal_size, self.action_length, len(env.players())),
-            'dynamics': self.Dynamics(internal_size, self.action_length, 2, layers),
+            'dynamics': self.Dynamics(internal_size, layers, self.action_length, 2),
         })
 
     def init_hidden(self, batch_size=None):
@@ -355,6 +356,6 @@ class MuZero(BaseModel):
         return outputs
 
     def inference(self, x, hidden=None, num_simulations=30):
-        tree = MonteCarloTree(self.nets, {})
+        tree = MonteCarloTree(self.nets, self.planning_args)
         p, v = tree.think(x, num_simulations)
         return {'policy': p, 'value': v}
