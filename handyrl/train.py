@@ -198,8 +198,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
-    spolicies = batch['policy'] - batch['action_mask']
-    losses['pp'] = (F.softmax(spolicies, -1) * (F.log_softmax(spolicies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
+    target_policies = batch['policy'] - batch['action_mask']
+    losses['pp'] = (F.softmax(target_policies, -1) * (F.log_softmax(target_policies, -1) - F.log_softmax(outputs['policy'], -1))).sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
         losses['pv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2
@@ -209,10 +209,10 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     entropy = dist.Categorical(logits=outputs['policy'] - batch['action_mask']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
-    teacher_weight = 1
+    planning_weight = 1
     reinforce_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
     planning_loss = losses['pp'] + losses.get('pv', 0)
-    base_loss = (1 - teacher_weight) * reinforce_loss + teacher_weight * planning_loss
+    base_loss = (1 - planning_weight) * reinforce_loss + planning_weight * planning_loss
     entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
