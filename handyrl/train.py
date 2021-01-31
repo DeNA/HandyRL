@@ -73,11 +73,11 @@ def make_batch(episodes, args):
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        amask = np.array([[m['action_mask'][m['turn']]] for m in moments], dtype=np.int64)
+        amask = np.array([[m['action_mask'][m['turn']]] for m in moments])
         tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
         omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
-        act = np.array([[m['action']] for m in moments])[..., np.newaxis]
+        act = np.array([[m['action']] for m in moments], dtype=np.int64)[..., np.newaxis]
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
