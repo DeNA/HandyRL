@@ -40,8 +40,8 @@ def make_batch(episodes, args):
         dict: PyTorch input and target tensors
 
     Note:
-        Basic data shape is (T, B, P, ...) .
-        (T is time length, B is batch size, P is player count)
+        Basic data shape is (B, T, P, ...) .
+        (B is batch size, T is time length, P is player count)
     """
 
     obss, datum = [], []
@@ -141,7 +141,7 @@ def forward_prediction(model, hidden, batch, args):
         batch (dict): training batch (output of make_batch() function)
 
     Returns:
-        tuple: calculated policy and value
+        tuple: batch outputs of newral network
     """
 
     observations = batch['observation']  # (B, T, P, ...)
