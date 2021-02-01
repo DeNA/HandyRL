@@ -5,9 +5,28 @@ import sys
 import yaml
 
 
+default_config = {
+    'train_args': {
+        'observation': False,
+        'compress_steps': 4,
+        'eval_rate': 0.1,
+    },
+}
+
+
 if __name__ == '__main__':
+    def recursive_update(dct, merge_dct):
+        for k, v in merge_dct.items():
+            if k in dct and isinstance(dct[k], dict) and isinstance(v, dict):
+                recursive_update(dct[k], v)
+            elif not k in dct:
+                dct[k] = v
+        return dct
+
     with open('config.yaml') as f:
-        args = yaml.safe_load(f)
+        config_args = yaml.safe_load(f)
+    args = default_config
+    recursive_update(args, config_args)
     print(args)
 
     if len(sys.argv) < 2:
