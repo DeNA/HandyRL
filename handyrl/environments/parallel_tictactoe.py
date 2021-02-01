@@ -61,4 +61,4 @@ if __name__ == '__main__':
                 action_map[p] = random.choice(actions)
             e.plays(action_map)
         print(e)
-        print(e.reward())
+        print(e.outcome())
