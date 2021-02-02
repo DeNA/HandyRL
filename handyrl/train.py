@@ -436,6 +436,7 @@ class Learner:
 
         # evaluated datum
         self.results = {}
+        self.results_per_opponent = {}
         self.num_results = 0
 
         # multiprocess or remote connection
@@ -493,6 +494,12 @@ class Learner:
                 n, r, r2 = self.results.get(model_id, (0, 0, 0))
                 self.results[model_id] = n + 1, r + res, r2 + res ** 2
 
+                if model_id not in self.results_per_opponent:
+                    self.results_per_opponent[model_id] = {}
+                opponent = result['opponent']
+                n, r, r2 = self.results_per_opponent[model_id].get(opponent, (0, 0, 0))
+                self.results_per_opponent[model_id][opponent] = n + 1, r + res, r2 + res ** 2
+
     def update(self):
         # call update to every component
         print()
@@ -501,9 +508,14 @@ class Learner:
         if self.model_era not in self.results:
             print('win rate = Nan (0)')
         else:
-            n, r, r2 = self.results[self.model_era]
-            mean = r / (n + 1e-6)
-            print('win rate = %.3f (%.1f / %d)' % ((mean + 1) / 2, (r + n) / 2, n))
+            def output_wp(name, results):
+                n, r, r2 = results
+                mean = r / (n + 1e-6)
+                print('win rate (%s) = %.3f (%.1f / %d)' % (name, (mean + 1) / 2, (r + n) / 2, n))
+
+            output_wp("total", self.results[self.model_era])
+            for key in sorted(list(self.results_per_opponent[self.model_era])):
+                output_wp(key, self.results_per_opponent[self.model_era][key])
 
         if self.model_era not in self.generation_results:
             print('generation stats = Nan (0)')

@@ -245,20 +245,28 @@ class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_agent = RuleBasedAgent()
+        self.opponent_agents = {
+            'rulebase': (RuleBasedAgent, 1)  # selection weight
+        }
 
     def execute(self, models, args):
+        weights_ = [w for _, w in self.opponent_agents.values()]
+        sum_weights = sum(weights_)
+        weights = [w / sum_weights for w in weights_]
+        opponent_name = random.choices(list(self.opponent_agents.keys()), k=1, weights=weights)[0]
+
         agents = {}
         for p, model in models.items():
-            if model is None:
-                agents[p] = self.default_agent
-            else:
+            if model is not None:
                 agents[p] = Agent(model, self.args['observation'])
+            else:
+                agents[p] = self.opponent_agents[opponent_name][0]()
+
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome}
+        return {'args': args, 'result': outcome, 'opponent': opponent_name}
 
 
 def wp_func(results):
