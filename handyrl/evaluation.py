@@ -21,7 +21,7 @@ class RandomAgent:
         pass
 
     def action(self, env, player, show=False):
-        actions = env.legal_actions()
+        actions = env.legal_actions(player)
         return random.choice(actions)
 
     def observe(self, env, player, show=False):
@@ -31,9 +31,9 @@ class RandomAgent:
 class RuleBasedAgent(RandomAgent):
     def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
-            return env.rule_based_action()
+            return env.rule_based_action(player)
         else:
-            return random.choice(env.legal_actions())
+            return random.choice(env.legal_actions(player))
 
 
 def view(env, player=None):
@@ -76,7 +76,7 @@ class Agent:
 
     def action(self, env, player, show=False):
         outputs = self.plan(env.observation(player))
-        actions = env.legal_actions()
+        actions = env.legal_actions(player)
         p = outputs['policy']
         v = outputs.get('value', None)
         mask = np.ones_like(p)
@@ -192,12 +192,14 @@ def exec_match(env, agents, critic, show=False, game_args={}):
             break
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
+        turn_players = env.turns()
+        actions = {}
         for p, agent in agents.items():
-            if p == env.turn():
-                action = agent.action(env, p, show=show)
+            if p in turn_players:
+                actions[p] = agent.action(env, p, show=show)
             else:
                 agent.observe(env, p, show=show)
-        if env.play(action):
+        if env.plays(actions):
             return None
         if show:
             view_transition(env)
@@ -224,13 +226,15 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
             break
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
+        turn_players = env.turns()
+        actions = {}
         for p, agent in network_agents.items():
-            if p == env.turn():
-                action_ = agent.action(p)
-                action = env.str2action(action_, p)
+            if p in turn_players:
+                action = agent.action(p)
+                actions[p] = env.str2action(action, p)
             else:
                 agent.observe(p)
-        if env.play(action):
+        if env.plays(actions):
             return None
         for p, agent in network_agents.items():
             info = env.diff_info(p)

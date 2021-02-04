@@ -52,16 +52,30 @@ class BaseEnvironment:
         pass
 
     #
-    # Should be defined in all games
+    # Should be defined in all games except you implement original plays() function
     #
-    def play(self, action):
+    def play(self, action, player):
         raise NotImplementedError()
 
     #
-    # Should be defined if you use multiplayer game
+    # Should be defined in games which has simultaneous trainsition
+    #
+    def plays(self, actions):
+        for p, action in actions.items():
+            if action is not None:
+                self.play(action, p)
+
+    #
+    # Should be defined if you use multiplayer sequential action game
     #
     def turn(self):
         return 0
+
+    #
+    # Should be defined if you use multiplayer simultaneous action game
+    #
+    def turns(self):
+        return [self.turn()]
 
     #
     # Should be defined in all games
@@ -84,7 +98,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def legal_actions(self):
+    def legal_actions(self, player):
         raise NotImplementedError()
 
     #

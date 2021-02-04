@@ -50,34 +50,40 @@ def make_batch(episodes, args):
         return a if a is not None else b
 
     for ep in episodes:
-        # target player and turn index
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = list(moments[0]['observation'].keys())
+        if not args['turn_based_training']:  # solo tarnining
+            players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn']], lambda o: np.zeros_like(o))  # template for padding
-        if args['observation']:
-            # replace None with zeros
-            obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
+        p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
+
+        # data that is chainge by training configurration
+        if args['turn_based_training'] and not args['observation']:
+            obs = [[m['observation'][m['turn'][0]]] for m in moments]
+            p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
+            act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
+            amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
-            obs = [[m['observation'][m['turn']]] for m in moments]
-        obs = rotate(obs)  # (T, P, ..., ...) -> (P, ..., T, ...)
-        obs = rotate(obs)  # (P, ..., T, ...) -> (..., T, P, ...)
+            obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
+            p = np.array([[replace_none(m['policy'][player], p_zeros) for player in players] for m in moments])
+            act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
+            amask = np.array([[replace_none(m['action_mask'][player], p_zeros + 1e32) for player in players] for m in moments])
+
+        # reshape observation
+        obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        p = np.array([[m['policy'][m['turn']]] for m in moments])
         v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        amask = np.array([[m['action_mask'][m['turn']]] for m in moments])
         tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
         omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-
-        act = np.array([[m['action']] for m in moments], dtype=np.int64)[..., np.newaxis]
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
@@ -126,7 +132,7 @@ def make_batch(episodes, args):
     }
 
 
-def forward_prediction(model, hidden, batch, obs_mode):
+def forward_prediction(model, hidden, batch, args):
     """Forward calculation via neural network
 
     Args:
@@ -152,10 +158,10 @@ def forward_prediction(model, hidden, batch, obs_mode):
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
-            if obs_mode:
-                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
-            else:
+            if args['turn_based_tranining'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
+            else:
+                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             outputs_ = model(obs, hidden_)
             for k, o in outputs_.items():
                 if k == 'hidden':
@@ -209,7 +215,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
 
 def compute_loss(batch, model, hidden, args):
-    outputs = forward_prediction(model, hidden, batch, args['observation'])
+    outputs = forward_prediction(model, hidden, batch, args)
     actions = batch['action']
     emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
@@ -226,12 +232,9 @@ def compute_loss(batch, model, hidden, args):
 
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
-        if values_nograd.size(2) == 2:  # two player zerosum game
+        if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
-            if args['observation']:
-                values_nograd = (values_nograd + values_nograd_opponent) / 2
-            else:
-                values_nograd = values_nograd + values_nograd_opponent
+            values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
         outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
 
     # compute targets and advantage
