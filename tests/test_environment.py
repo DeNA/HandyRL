@@ -12,6 +12,7 @@ def environment_path():
 @pytest.mark.parametrize('env', [
     'tictactoe',
     'geister',
+    'parallel_tictactoe',
 ])
 def test_environment(environment_path, env):
     """Test battle loop of environments"""
@@ -23,9 +24,12 @@ def test_environment(environment_path, env):
         for _ in range(100):
             e.reset()
             while not e.terminal():
-                actions = e.legal_actions()
-                e.play(random.choice(actions))
-            _ = e.reward()
+                actions = {}
+                for player in e.turns():
+                    actions[player] = random.choice(e.legal_actions(player))
+                e.plays(actions)
+                e.reward()    
+            e.outcome()
         no_error_loop = True
     except Exception:
         traceback.print_exc()
