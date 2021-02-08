@@ -1,11 +1,11 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.environments.tictactoe'
+    source: 'handyrl.envs.tictactoe'
     #env: 'Geister'
-    #source: 'handyrl.environments.geister'
+    #source: 'handyrl.envs.geister'
     #env: 'HungryGeese'
-    #source: 'handyrl.environments.kaggle.hungry_geese'
+    #source: 'handyrl.envs.kaggle.hungry_geese'
 
 
 train_args:
