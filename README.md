@@ -40,7 +40,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](https://github.com/DeNA/HandyRL/tree/master/handyrl/environments). When you use your own environment, set the name of the environment to `env` and script path to `source`.
+NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). When you use your own environment, set the name of the environment to `env` and script path to `source`.
 
 
 ### Step 2: Train!
@@ -124,10 +124,10 @@ python main.py --eval models/1.pth 100 4
 
 Write a wrapper class named `Environment` following the format of the sample environments.
 The kind of your games are:
-* turn-based game: see `handyrl/envs/tictactoe.py`, `handyrl/envs/geister.py`
-* simultaneous game: see `kaggle/geese.py`
+* turn-based game: see [tictactoe.py](handyrl/envs/tictactoe.py), [geister.py](handyrl/envs/geister.py)
+* simultaneous game: see [geese.py](handyrl/envs/kaggle/geese.py)
 
-To see all methods of environment, check [environment.py](https://github.com/DeNA/HandyRL/blob/master/handyrl/environment.py).
+To see all methods of environment, check [environment.py](handyrl/environment.py).
 
 
 
