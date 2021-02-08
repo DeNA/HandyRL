@@ -4,8 +4,8 @@ env_args:
     source: 'handyrl.environments.tictactoe'
     #env: 'Geister'
     #source: 'handyrl.environments.geister'
-    #env: 'ParallelTicTacToe'
-    #source: 'handyrl.environments.parallel_tictactoe'
+    #env: 'HungryGeese'
+    #source: 'handyrl.environments.kaggle.hungry_geese'
 
 
 train_args:
