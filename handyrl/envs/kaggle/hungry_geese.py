@@ -69,10 +69,11 @@ class Environment(BaseEnvironment):
 
     def reset(self, args={}):
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
-        self.obs_list = [obs]
+        self.reset_info(obs)
 
     def reset_info(self, obs):
         self.obs_list = [obs]
+        self.last_actions = {}
 
     def action2str(self, a, player=None):
         return self.ACTION[a]
@@ -151,13 +152,15 @@ class Environment(BaseEnvironment):
     def plays(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
-        self.obs_list.append(obs)
+        self.play_info((obs, actions))
 
     def diff_info(self, _):
-        return self.obs_list[-1]
+        return self.obs_list[-1], self.last_actions
 
-    def play_info(self, obs):
+    def play_info(self, info):
+        obs, actions = info
         self.obs_list.append(obs)
+        self.last_actions = actions
 
     def turns(self):
         # players to move
@@ -194,6 +197,16 @@ class Environment(BaseEnvironment):
 
     def players(self):
         return list(range(self.NUM_AGENTS))
+
+    def rule_based_action(self, player):
+        from kaggle_environments.envs.hungry_geese.hungry_geese import Observation, Configuration, Action, GreedyAgent
+        action_map = {'N': Action.NORTH, 'S': Action.SOUTH, 'W': Action.WEST, 'E': Action.EAST}
+
+        agent = GreedyAgent(Configuration({'rows': 7, 'columns': 11}))
+        agent.last_action = action_map[self.ACTION[self.last_actions[player]][0]] if player in self.last_actions else None
+        obs = {**self.obs_list[-1][0]['observation'], **self.obs_list[-1][player]['observation']}
+        action = agent(Observation(obs))
+        return self.ACTION.index(action)
 
     def net(self):
         return GeeseNet
