@@ -99,17 +99,19 @@ class Environment(BaseEnvironment):
     def __str__(self):
         # output state
         obs = self.obs_list[-1][0]['observation']
+        colors = ['\033[33m', '\033[34m', '\033[32m', '\033[31m']
+        color_end = '\033[0m'
 
         def check_cell(pos):
-            for i, pos_list in enumerate(obs['geese']):
-                if pos in pos_list:
-                    if pos == pos_list[0]:
+            for i, geese in enumerate(obs['geese']):
+                if pos in geese:
+                    if pos == geese[0]:
                         return i, 'h'
-                    if pos == pos_list[-1]:
+                    if pos == geese[-1]:
                         return i, 't'
-                    index = pos_list.index(pos)
-                    pos_prev = pos_list[index - 1] if index > 0 else None
-                    pos_next = pos_list[index + 1] if index < len(pos_list) - 1 else None
+                    index = geese.index(pos)
+                    pos_prev = geese[index - 1] if index > 0 else None
+                    pos_next = geese[index + 1] if index < len(geese) - 1 else None
                     directions = [self.direction(pos, pos_prev), self.direction(pos, pos_next)]
                     return i, directions
             if pos in obs['food']:
@@ -123,8 +125,6 @@ class Environment(BaseEnvironment):
                 return 'f'
             else:
                 index, directions = cell
-                colors = ['\033[33m', '\033[34m', '\033[32m', '\033[31m']
-                color_end = '\033[0m'
                 if directions == 'h':
                     return colors[index] + '@' + color_end
                 elif directions == 't':
@@ -144,6 +144,8 @@ class Environment(BaseEnvironment):
                 pos = x * 11 + y
                 s += cell_string(cell_status[pos])
             s += '\n'
+        for i, geese in enumerate(obs['geese']):
+            s += colors[i] + str(len(geese) or '-') + color_end + ' '
         return s
 
     def plays(self, actions):
@@ -203,22 +205,22 @@ class Environment(BaseEnvironment):
         b = np.zeros((self.NUM_AGENTS * 4 + 1, 7 * 11), dtype=np.float32)
         obs = self.obs_list[-1][0]['observation']
 
-        for p, pos_list in enumerate(obs['geese']):
+        for p, geese in enumerate(obs['geese']):
             # head position
-            for pos in pos_list[:1]:
+            for pos in geese[:1]:
                 b[0 + (p - player) % self.NUM_AGENTS, pos] = 1
             # tip position
-            for pos in pos_list[-1:]:
+            for pos in geese[-1:]:
                 b[4 + (p - player) % self.NUM_AGENTS, pos] = 1
             # whole position
-            for pos in pos_list:
+            for pos in geese:
                 b[8 + (p - player) % self.NUM_AGENTS, pos] = 1
 
         # previous head position
         if len(self.obs_list) > 1:
             obs_prev = self.obs_list[-2][0]['observation']
-            for p, pos_list in enumerate(obs_prev['geese']):
-                for pos in pos_list[:1]:
+            for p, geese in enumerate(obs_prev['geese']):
+                for pos in geese[:1]:
                     b[12 + (p - player) % self.NUM_AGENTS, pos] = 1
 
         # food
