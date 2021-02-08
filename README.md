@@ -4,66 +4,143 @@
 
 **HandyRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
 
-Note: Python2 is not supported.
 
-## Dependencies
-```shell
-pip install -r requirements.txt
-```
+# Quick Start Easy to Win
+
+*   Prepare your own environment
+*   Let’s start large-scale distributed training
+*   Get your great model!
 
 ## How to use
 
-### configuration
 
-Set `config.yaml` for your own configuration.
+### Step 0: Install dependencies
 
-### Training
+HandyRL supports Python3.7+.
+You need to install additional libraries (e.g. numpy, pytorch).
+```
+pip3 install -r requirements.txt
+```
 
-```shell
+
+### Step 1: Set up configuration
+
+Set `config.yaml` for your training configuration.
+If you run a training with TicTacToe and batch size 64, set like the following:
+
+
+```
+env_args:
+    env: 'TicTacToe'
+    source: 'handyrl.envs.tictactoe'
+
+train_args:
+    ...
+    batch_size: 64
+    ...
+```
+
+NOTE: TicTacToe is used as a default game. [Here is the list of games](https://github.com/DeNA/HandyRL/tree/master/handyrl/environments). When you use your own environment, set the name of the environment to `env` and script path to `source`.
+
+
+### Step 2: Train!
+
+
+```
 python main.py --train
 ```
 
-### Evaluation
+NOTE: Trained model is saved in `models` folder.
 
-```shell
-python main.py --eval
+
+### Step 3: Evaluate
+
+After training, you can evaluate the model against any models. The below code runs the evaluation for 100 games with 4 processes.
+
+
+```
+python main.py --eval models/1.pth 100 4
 ```
 
-## How to use (for large scale training)
 
-If you use remote machines as worker clients, you can set worker configuation in each client.
+NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You can change the agent with any of your agents.
 
-```shell
+
+## Distributed Training!
+
+HandyRL allows you to learn a model remotely on a large scale.
+
+
+### Step 1: Remote configuration
+
+If you will use remote machines as worker clients(actors), you need to set server(learner) address configuration in each client:
+
+
+```
+entry_args:
+    remote_host: '127.0.0.1'  # Set training server address to be connected from worker
+    num_gather: 2
+    num_process: 6
+```
+
+
+NOTE: When you train a model on cloud(e.g. GCP, AWS), the internal/external IP can be set here.
+
+
+### Step 2: Start training server
+
+
+```
 python main.py --train-server
 ```
 
-In another window,
-```shell
+
+NOTE: The server listens to connections from workers. The trained models are saved in `models` folder.
+
+
+### Step 3: Start workers
+
+After starting the training server, you can start the workers for data generation and evaluation.
+
+
+```
 python main.py --worker
 ```
 
-## Using your own environments
 
-Write wrapper class named `Environment` following the format of the sample environment code `environments/tictactoe.py` or `environments/geister.py`.
 
-```python
-from environment import BaseEnvironment
+### Step 4: Evaluate
 
-class Environment(BaseEnvironment):
-    def reset(self, args):
-        ...
-    def play(self, action, player):
-        ...
-    def terminal(self):
-        ...
-    def reward(self):
-        ...
-    def legal_actions(self, player):
-        ...
-    def action_length(self):
-        ...
-    def observation(self, player):
-        ...
+After training, you can evaluate the model against any models. The below code runs the evaluation for 100 games with 4 processes.
+
+
+```
+python main.py --eval models/1.pth 100 4
 ```
 
-Set `'env'` and `'source'` variables in `config.yaml` as the name and path of your own environment.
+
+
+## Custom environment
+
+Write a wrapper class named `Environment` following the format of the sample environments.
+The kind of your games are:
+* turn-based game: see `handyrl/envs/tictactoe.py`, `handyrl/envs/geister.py`
+* simultaneous game: see `kaggle/geese.py`
+
+To see all methods of environment, check [environment.py](https://github.com/DeNA/HandyRL/blob/master/handyrl/environment.py).
+
+
+
+## Frequently Asked Questions
+
+
+*   How to use rule-based AI as an opponent?
+    *   You can easily use it by creating a rule-based AI method `rule_based_action()` in a class `Environment`.
+*   How to change the opponent in evaluation?
+    *   Set your agent in `environment.py` like `agents = [agent1, YourOpponentAgent()]`
+
+
+## Use case
+
+*   [The 5th solution in Google Research Football with Manchester City F.C.](https://www.kaggle.com/c/google-football/discussion/203412) (Kaggle)
+*   [Baseline RL AI in Hungry Geese](https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning) (Kaggle)
