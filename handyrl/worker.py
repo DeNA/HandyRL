@@ -180,6 +180,8 @@ class WorkerCluster(QueueCommunicator):
             self.threads[-1].start()
         else:
             # open local connections
+            if 'num_gathers' not in self.args['worker']:
+                self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
             for i in range(self.args['worker']['num_gathers']):
                 conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
@@ -199,6 +201,8 @@ def worker_main(args):
     # offline generation worker
     worker_args = args['worker_args']
     worker_args['address'] = gethostname()
+    if 'num_gathers' not in worker_args:
+        worker_args['num_gathers'] = 1 + max(0, worker_args['num_parallel'] - 1) // 16
 
     args = entry(worker_args)
     print(args)

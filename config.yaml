@@ -24,7 +24,6 @@ train_args:
     eval_rate: 0.1
     worker:
         num_parallel: 6
-        num_gathers: 1
     lambda: 0.7
     policy_target: 'TD' # 'UGPO' 'VTRACE' 'TD' 'MC'
     value_target: 'TD' # 'VTRACE' 'TD' 'MC'
@@ -35,5 +34,4 @@ train_args:
 worker_args:
     server_address: ''
     num_parallel: 8
-    num_gathers: 1
 
