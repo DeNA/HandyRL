@@ -249,7 +249,7 @@ class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_agent = RuleBasedAgent()
+        self.default_agent = RandomAgent()  # RuleBasedAgent, trained agent, etc.
 
     def execute(self, models, args):
         agents = {}
@@ -362,7 +362,7 @@ def network_match_acception(n, env_args, num_agents, port):
             conn = waiting_conns[0]
             accepted_conns.append(conn)
             waiting_conns = waiting_conns[1:]
-            conn.send(env_args)  # send accpept with environment arguments
+            conn.send(env_args)  # send accept with environment arguments
 
     agents_list = [
         [NetworkAgent(accepted_conns[i * num_agents + j]) for j in range(num_agents)]
@@ -404,7 +404,7 @@ def eval_main(args, argv):
     seed = random.randrange(1e8)
     print('seed = %d' % seed)
 
-    agents = [agent1, RandomAgent()]
+    agents = [agent1] + [RandomAgent() for _ in range(len(env.players()) - 1)]
 
     evaluate_mp(env, agents, critic, env_args, {'default': {}}, num_process, num_games, seed)
 
