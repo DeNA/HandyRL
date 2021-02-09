@@ -192,7 +192,7 @@ class Environment(BaseEnvironment):
         return list(range(len(self.ACTION)))
 
     def action_length(self):
-        # maximul action label (it determines output size of policy function)
+        # maximum action label (it determines output size of policy function)
         return len(self.ACTION)
 
     def players(self):

@@ -117,9 +117,9 @@ class Gather(QueueCommunicator):
         while True:
             conn, (command, args) = self.recv()
             if command == 'args':
-                # When requested argsments, return buffered outputs
+                # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:
-                    # get muptilple arguments from server and store them
+                    # get multiple arguments from server and store them
                     self.server_conn.send((command, [None] * self.args_buf_len))
                     self.args_queue += self.server_conn.recv()
 

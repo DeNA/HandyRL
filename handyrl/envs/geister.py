@@ -253,7 +253,7 @@ class Environment(BaseEnvironment):
         else:
             piece_cap = self.board[nx, ny]
             if piece_cap != -1:
-                # captupe opponent piece
+                # capture opponent piece
                 self.remove_piece(piece_cap, (nx, ny))
                 if self.piece_cnt[piece_cap] == 0:
                     if self.piece2type(piece_cap) == self.BLUE:
@@ -361,7 +361,7 @@ class Environment(BaseEnvironment):
         return actions
 
     def action_length(self):
-        # maximul action label (it determines output size of policy function)
+        # maximum action label (it determines output size of policy function)
         return 4 * 6 * 6 + 70 * 2
 
     def players(self):
