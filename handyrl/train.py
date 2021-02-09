@@ -53,13 +53,13 @@ def make_batch(episodes, args):
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = list(moments[0]['observation'].keys())
-        if not args['turn_based_training']:  # solo tarnining
+        if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
         p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
 
-        # data that is chainge by training configurration
+        # data that is chainge by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
@@ -141,7 +141,7 @@ def forward_prediction(model, hidden, batch, args):
         batch (dict): training batch (output of make_batch() function)
 
     Returns:
-        tuple: batch outputs of newral network
+        tuple: batch outputs of neural network
     """
 
     observations = batch['observation']  # (B, T, P, ...)
@@ -158,7 +158,7 @@ def forward_prediction(model, hidden, batch, args):
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
-            if args['turn_based_tranining'] and not args['observation']:
+            if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
@@ -317,10 +317,10 @@ class Trainer:
         self.args = args
         self.gpu = torch.cuda.device_count()
         self.model = model
-        self.defalut_lr = 3e-8
+        self.default_lr = 3e-8
         self.data_cnt_ema = self.args['batch_size'] * self.args['forward_steps']
         self.params = list(self.model.parameters())
-        lr = self.defalut_lr * self.data_cnt_ema
+        lr = self.default_lr * self.data_cnt_ema
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
@@ -394,7 +394,7 @@ class Trainer:
 
         self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.defalut_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
+            param_group['lr'] = self.default_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
         self.model.cpu()
         self.model.eval()
         return copy.deepcopy(self.model)
@@ -527,7 +527,7 @@ class Learner:
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
         while True:
-            # no update call before storings minimum number of episodes + 1 age
+            # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
             while not self.shutdown_flag and self.num_episodes < next_update_episodes:
                 conn, (req, data) = self.worker.recv()
