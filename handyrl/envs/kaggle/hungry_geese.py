@@ -249,8 +249,8 @@ if __name__ == '__main__':
         e.reset()
         while not e.terminal():
             print(e)
-            actions = [e.legal_actions(p) for p in e.players()]
-            print([[e.action2str(a, e.turn()) for a in alist] for a in actions])
-            e.plays([random.choice(alist) for alist in action])
+            actions = {p: e.legal_actions(p) for p in e.turns()}
+            print([[e.action2str(a, p) for a in alist] for p, alist in actions.items()])
+            e.plays({p: random.choice(alist) for p, alist in actions.items()})
         print(e)
-        print(e.reward())
+        print(e.outcome())
