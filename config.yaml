@@ -1,11 +1,11 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.environments.tictactoe'
+    source: 'handyrl.envs.tictactoe'
     #env: 'Geister'
-    #source: 'handyrl.environments.geister'
+    #source: 'handyrl.envs.geister'
     #env: 'ParallelTicTacToe'
-    #source: 'handyrl.environments.parallel_tictactoe'
+    #source: 'handyrl.envs.parallel_tictactoe'
 
 
 train_args:

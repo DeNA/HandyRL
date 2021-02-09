@@ -6,7 +6,7 @@ import traceback
 
 @pytest.fixture
 def environment_path():
-    return 'handyrl.environments'
+    return 'handyrl.envs'
 
 
 @pytest.mark.parametrize('env', [
