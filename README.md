@@ -5,7 +5,7 @@
 **HandyRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments.**
 
 
-# Quick Start Easy to Win
+# Quick Start, Easy to Win
 
 *   Prepare your own environment
 *   Let’s start large-scale distributed training
@@ -22,6 +22,10 @@ You need to install additional libraries (e.g. numpy, pytorch).
 pip3 install -r requirements.txt
 ```
 
+To use games of kaggle environments (e.g. Hungry Geese) you can install also additional dependencies.
+```
+pip3 install -r handyrl/envs/kaggle/requirements.txt
+```
 
 ### Step 1: Set up configuration
 
@@ -29,7 +33,7 @@ Set `config.yaml` for your training configuration.
 If you run a training with TicTacToe and batch size 64, set like the following:
 
 
-```
+```yaml
 env_args:
     env: 'TicTacToe'
     source: 'handyrl.envs.tictactoe'
@@ -73,18 +77,17 @@ HandyRL allows you to learn a model remotely on a large scale.
 
 ### Step 1: Remote configuration
 
-If you will use remote machines as worker clients(actors), you need to set server(learner) address configuration in each client:
+If you will use remote machines as worker clients(actors), you need to set training server(learner) address in each client:
 
 
+```yaml
+worker_args:
+    server_address: '127.0.0.1'  # Set training server address to be connected from worker
+    ...
 ```
-entry_args:
-    remote_host: '127.0.0.1'  # Set training server address to be connected from worker
-    num_gather: 2
-    num_process: 6
-```
 
 
-NOTE: When you train a model on cloud(e.g. GCP, AWS), the internal/external IP can be set here.
+NOTE: When you train a model on cloud(e.g. GCP, AWS), the internal/external IP of virtual machine can be set here.
 
 
 ### Step 2: Start training server
@@ -140,7 +143,7 @@ To see all methods of environment, check [environment.py](handyrl/environment.py
     *   Set your agent in `environment.py` like `agents = [agent1, YourOpponentAgent()]`
 
 
-## Use case
+## Use cases
 
 *   [The 5th solution in Google Research Football with Manchester City F.C.](https://www.kaggle.com/c/google-football/discussion/203412) (Kaggle)
 *   [Baseline RL AI in Hungry Geese](https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning) (Kaggle)
