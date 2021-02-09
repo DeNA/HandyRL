@@ -104,6 +104,7 @@ NOTE: The server listens to connections from workers. The trained models are sav
 ### Step 3: Start workers
 
 After starting the training server, you can start the workers for data generation and evaluation.
+In HandyRL, (multi-node) multiple workers can connect to the server.
 
 
 ```
@@ -128,7 +129,7 @@ python main.py --eval models/1.pth 100 4
 Write a wrapper class named `Environment` following the format of the sample environments.
 The kind of your games are:
 * turn-based game: see [tictactoe.py](handyrl/envs/tictactoe.py), [geister.py](handyrl/envs/geister.py)
-* simultaneous game: see [geese.py](handyrl/envs/kaggle/geese.py)
+* simultaneous game: see [geese.py](handyrl/envs/kaggle/hungry_geese.py)
 
 To see all methods of environment, check [environment.py](handyrl/environment.py).
 
