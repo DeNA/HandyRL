@@ -24,9 +24,9 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu_or_not, RandomModel
 from .model import SimpleConv2DModel as DefaultModel
 from .losses import compute_target
-from .connection import MultiProcessWorkers
+from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
-from .worker import Workers
+from .worker import WorkerCluster
 
 
 def make_batch(episodes, args):
@@ -263,7 +263,7 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        self.workers = MultiProcessWorkers(
+        self.executor = MultiProcessJobExecutor(
             self._worker, self._selector(), self.args['num_batchers'],
             buffer_length=3, num_receivers=2
         )
@@ -281,7 +281,7 @@ class Batcher:
         print('finished batcher %d' % bid)
 
     def run(self):
-        self.workers.start()
+        self.executor.start()
 
     def select_episode(self):
         while True:
@@ -304,11 +304,11 @@ class Batcher:
         return ep_minimum
 
     def batch(self):
-        return self.workers.recv()
+        return self.executor.recv()
 
     def shutdown(self):
         self.shutdown_flag = True
-        self.workers.shutdown()
+        self.executor.shutdown()
 
 
 class Trainer:
@@ -442,7 +442,7 @@ class Learner:
         self.num_results = 0
 
         # multiprocess or remote connection
-        self.workers = Workers(args)
+        self.worker = WorkerCluster(args)
 
         # thread connection
         self.trainer = Trainer(args, train_model)
@@ -450,7 +450,7 @@ class Learner:
     def shutdown(self):
         self.shutdown_flag = True
         self.trainer.shutdown()
-        self.workers.shutdown()
+        self.worker.shutdown()
         for thread in self.threads:
             thread.join()
 
@@ -530,7 +530,7 @@ class Learner:
             # no update call before storings minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
             while not self.shutdown_flag and self.num_episodes < next_update_episodes:
-                conn, (req, data) = self.workers.recv()
+                conn, (req, data) = self.worker.recv()
                 multi_req = isinstance(data, list)
                 if not multi_req:
                     data = [data]
@@ -594,7 +594,7 @@ class Learner:
 
                 if not multi_req and len(send_data) == 1:
                     send_data = send_data[0]
-                self.workers.send(conn, send_data)
+                self.worker.send(conn, send_data)
             prev_update_episodes = next_update_episodes
             self.update()
         print('finished server')
@@ -606,10 +606,10 @@ class Learner:
         while not self.shutdown_flag:
             conn = next(conn_acceptor)
             if conn is not None:
-                entry_args = conn.recv()
-                print('accepted entry from %s!' % entry_args['host'])
+                worker_args = conn.recv()
+                print('accepted connection from %s!' % worker_args['address'])
                 args = copy.deepcopy(self.args)
-                args['worker'] = entry_args
+                args['worker'] = worker_args
                 conn.send(args)
                 conn.close()
         print('finished entry server')
@@ -623,7 +623,7 @@ class Learner:
             for thread in self.threads:
                 thread.start()
             # open generator, evaluator
-            self.workers.run()
+            self.worker.run()
             self.server()
 
         finally:

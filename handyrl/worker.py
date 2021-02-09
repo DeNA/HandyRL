@@ -95,7 +95,7 @@ class Gather(QueueCommunicator):
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        n_pro, n_ga = args['worker']['num_process'], args['worker']['num_gather']
+        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
@@ -159,7 +159,7 @@ def gather_loop(args, conn, gaid):
         gather.shutdown()
 
 
-class Workers(QueueCommunicator):
+class WorkerCluster(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -180,16 +180,18 @@ class Workers(QueueCommunicator):
             self.threads[-1].start()
         else:
             # open local connections
-            for i in range(self.args['worker']['num_gather']):
+            if 'num_gathers' not in self.args['worker']:
+                self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
+            for i in range(self.args['worker']['num_gathers']):
                 conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
                 self.add(conn0)
 
 
-def entry(entry_args):
-    conn = connect_socket_connection(entry_args['remote_host'], 9999)
-    conn.send(entry_args)
+def entry(worker_args):
+    conn = connect_socket_connection(worker_args['server_address'], 9999)
+    conn.send(worker_args)
     args = conn.recv()
     conn.close()
     return args
@@ -197,18 +199,20 @@ def entry(entry_args):
 
 def worker_main(args):
     # offline generation worker
-    entry_args = args['entry_args']
-    entry_args['host'] = gethostname()
+    worker_args = args['worker_args']
+    worker_args['address'] = gethostname()
+    if 'num_gathers' not in worker_args:
+        worker_args['num_gathers'] = 1 + max(0, worker_args['num_parallel'] - 1) // 16
 
-    args = entry(entry_args)
+    args = entry(worker_args)
     print(args)
     prepare_env(args['env'])
 
     # open workers
     process = []
     try:
-        for i in range(args['worker']['num_gather']):
-            conn = connect_socket_connection(args['worker']['remote_host'], 9998)
+        for i in range(args['worker']['num_gathers']):
+            conn = connect_socket_connection(args['worker']['server_address'], 9998)
             p = mp.Process(target=gather_loop, args=(args, conn, i))
             p.start()
             conn.close()
