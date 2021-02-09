@@ -23,7 +23,7 @@ train_args:
     num_batchers: 2
     eval_rate: 0.1
     worker:
-        num_workers: 6
+        num_parallel: 6
         num_gathers: 1
     lambda: 0.7
     policy_target: 'TD' # 'UGPO' 'VTRACE' 'TD' 'MC'
@@ -34,6 +34,6 @@ train_args:
 
 worker_args:
     server_address: ''
-    num_workers: 8
+    num_parallel: 8
     num_gathers: 1
 

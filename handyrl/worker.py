@@ -95,7 +95,7 @@ class Gather(QueueCommunicator):
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        n_pro, n_ga = args['worker']['num_workers'], args['worker']['num_gathers']
+        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
