@@ -131,7 +131,7 @@ The kind of your games are:
 * turn-based game: see [tictactoe.py](handyrl/envs/tictactoe.py), [geister.py](handyrl/envs/geister.py)
 * simultaneous game: see [hungry_geese.py](handyrl/envs/kaggle/hungry_geese.py)
 
-To see all methods of environment, check [environment.py](handyrl/environment.py).
+To see all interfaces of environment, check [environment.py](handyrl/environment.py).
 
 
 
