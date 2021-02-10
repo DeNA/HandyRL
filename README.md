@@ -129,7 +129,7 @@ python main.py --eval models/1.pth 100 4
 Write a wrapper class named `Environment` following the format of the sample environments.
 The kind of your games are:
 * turn-based game: see [tictactoe.py](handyrl/envs/tictactoe.py), [geister.py](handyrl/envs/geister.py)
-* simultaneous game: see [geese.py](handyrl/envs/kaggle/hungry_geese.py)
+* simultaneous game: see [hungry_geese.py](handyrl/envs/kaggle/hungry_geese.py)
 
 To see all methods of environment, check [environment.py](handyrl/environment.py).
 
@@ -141,7 +141,7 @@ To see all methods of environment, check [environment.py](handyrl/environment.py
 *   How to use rule-based AI as an opponent?
     *   You can easily use it by creating a rule-based AI method `rule_based_action()` in a class `Environment`.
 *   How to change the opponent in evaluation?
-    *   Set your agent in `environment.py` like `agents = [agent1, YourOpponentAgent()]`
+    *   Set your agent in `evaluation.py` like `agents = [agent1, YourOpponentAgent()]`
 
 
 ## Use cases
