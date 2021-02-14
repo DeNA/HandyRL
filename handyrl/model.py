@@ -222,6 +222,7 @@ class BaseModel(nn.Module):
     def __init__(self, env, args=None, action_length=None):
         super().__init__()
         self.action_length = env.action_length() if action_length is None else action_length
+        self.num_players = len(env.players())
 
     def init_hidden(self, batch_size=None):
         return None
