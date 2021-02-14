@@ -45,7 +45,7 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action):
+    def play(self, action, _=None):
         # state transition function
         # action is integer (0 ~ 8) or string (sequence)
         if isinstance(action, str):
@@ -94,7 +94,7 @@ class Environment(BaseEnvironment):
             outcomes = [-1, 1]
         return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
-    def legal_actions(self):
+    def legal_actions(self, _=None):
         # legal action list
         player = self.turn()
         return [pos + 9 * player for pos in range(3 * 3) if self.board[pos // 3, pos % 3] == 0]
