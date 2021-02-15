@@ -226,7 +226,7 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action):
+    def play(self, action, _=None):
         # state transition
         if isinstance(action, str):
             for astr in action.split():
@@ -253,7 +253,7 @@ class Environment(BaseEnvironment):
         else:
             piece_cap = self.board[nx, ny]
             if piece_cap != -1:
-                # captupe opponent piece
+                # capture opponent piece
                 self.remove_piece(piece_cap, (nx, ny))
                 if self.piece_cnt[piece_cap] == 0:
                     if self.piece2type(piece_cap) == self.BLUE:
@@ -344,7 +344,7 @@ class Environment(BaseEnvironment):
             # can move to my goal
             return t == self.BLUE and self.goal(c, pos_to)
 
-    def legal_actions(self):
+    def legal_actions(self, _=None):
         # return legal action list
         if self.turn_count < 0:
             return [4 * 6 * 6 + 70 * self.color + i for i in range(70)]
@@ -361,7 +361,7 @@ class Environment(BaseEnvironment):
         return actions
 
     def action_length(self):
-        # maximul action label (it determines output size of policy function)
+        # maximum action label (it determines output size of policy function)
         return 4 * 6 * 6 + 70 * 2
 
     def players(self):
