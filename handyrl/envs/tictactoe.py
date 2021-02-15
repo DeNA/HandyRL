@@ -42,12 +42,12 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action, _=None):
+    def step(self, action, _=None):
         # state transition function
         # action is integer (0 ~ 8) or string (sequence)
         if isinstance(action, str):
             for astr in action.split():
-                self.play(self.str2action(astr))
+                self.step(self.str2action(astr))
             return
 
         x, y = action // 3, action % 3
@@ -70,9 +70,9 @@ class Environment(BaseEnvironment):
             return ""
         return self.action2str(self.record[-1])
 
-    def play_info(self, info):
+    def step_info(self, info):
         if info != "":
-            self.play(info)
+            self.step(info)
 
     def turn(self):
         return self.players()[len(self.record) % 2]
@@ -121,6 +121,6 @@ if __name__ == '__main__':
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a) for a in actions])
-            e.play(random.choice(actions))
+            e.step(random.choice(actions))
         print(e)
         print(e.outcome())

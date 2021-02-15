@@ -199,7 +199,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
                 actions[p] = agent.action(env, p, show=show)
             else:
                 agent.observe(env, p, show=show)
-        if env.plays(actions):
+        if env.steps(actions):
             return None
         if show:
             view_transition(env)
