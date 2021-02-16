@@ -11,6 +11,7 @@ import numpy as np
 
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
+from .util import softmax
 
 
 network_match_port = 9876
@@ -82,10 +83,6 @@ class Agent:
         mask = np.ones_like(p)
         mask[actions] = 0
         p -= mask * 1e32
-
-        def softmax(x):
-            x = np.exp(x - np.max(x, axis=-1))
-            return x / x.sum(axis=-1)
 
         if show:
             view(env, player=player)
