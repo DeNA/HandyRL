@@ -1,4 +1,4 @@
-![HandyRL Logo](logo.png))
+![HandyRL Logo](logo.png)
 
 ![](https://github.com/DeNA/HandyRL/workflows/pytest/badge.svg?branch=master)
 
