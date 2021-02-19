@@ -15,6 +15,10 @@ HandyRL is a handy and simple framework for distributed reinforcement learning t
 * [Getting Started](#Getting-Started)
     * [Train AI Model for Tic-Tac-Toe](#Train-AI-Model-for-Tic-Tac-Toe)
 * [Documentation](#Documentation)
+    * [**Config Parameters**](docs/parameters.md)
+    * [**Large Scale Training**](docs/large_scale_training.md)
+    * [**Train with Customized Environment**](docs/custom_environment.md)
+    * [**API**](docs/api.md)
 * [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
 
@@ -77,6 +81,7 @@ train_args:
 ```
 
 NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs).
+NOTE: all parameters are shown in [Config Parameters](docs/parameters.md).
 
 
 #### Step 2: Train!
