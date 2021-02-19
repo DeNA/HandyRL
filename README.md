@@ -13,7 +13,7 @@ HandyRL is a handy and simple framework for distributed reinforcement learning t
 * [More About HandyRL](#More-About-HandyRL)
 * [Installation](#Installation)
 * [Getting Started](#Getting-Started)
-    * [Tutorial: Train Tic-Tac-Toe AI Model](#Tutorial:-Train-TicTacToe-AI-Model)
+    * [Train AI Model for Tic-Tac-Toe](#Train-AI-Model-for-Tic-Tac-Toe)
 * [Documentation](#Documentation)
 * [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
@@ -56,7 +56,7 @@ pip3 install -r handyrl/envs/kaggle/requirements.txt
 ## Getting Started
 
 
-### Tutorial: Train TicTacToe AI Model
+### Train AI Model for Tic-Tac-Toe
 
 This section shows the training a model for [Tic-Tac-Toe](https://en.wikipedia.org/wiki/Tic-tac-toe). Tic-Tac-Toe is a very simple game. You can play by googling "Tic-Tac-Toe".
 
