@@ -13,7 +13,7 @@ HandyRL is a handy and simple framework for distributed reinforcement learning t
 * [More About HandyRL](#More-About-HandyRL)
 * [Installation](#Installation)
 * [Getting Started](#Getting-Started)
-    * [Tutorial: Train Tic-Tac-Toe AI Model](#Tutorial:-Train-Tic\-Tac\-Toe\-AI-Model)
+    * [Tutorial: Train Tic-Tac-Toe AI Model](#Tutorial:-Train-TicTacToe-AI-Model)
 * [Documentation](#Documentation)
 * [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
@@ -34,7 +34,7 @@ In episode generation, self-play is conducted as default.
 
 ## Installation
 
-### Step 0: Install dependencies
+### Install dependencies
 
 HandyRL supports Python3.7+. At first, copy or fork HandyRL repository to your environment. If you want to use this script in your private project, just copy the files to your project directory and modify it there.
 ```
@@ -56,7 +56,7 @@ pip3 install -r handyrl/envs/kaggle/requirements.txt
 ## Getting Started
 
 
-### Tutorial: Train Tic-Tac-Toe AI Model
+### Tutorial: Train TicTacToe AI Model
 
 This section shows the training a model for [Tic-Tac-Toe](https://en.wikipedia.org/wiki/Tic-tac-toe). Tic-Tac-Toe is a very simple game. You can play by googling "Tic-Tac-Toe".
 
@@ -81,7 +81,7 @@ NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/e
 
 #### Step 2: Train!
 
-After creating the configuration, you can start training by running the following command. The trained models are saved in `models` folder every period set in `update_episodes` of `config.yaml`.
+After creating the configuration, you can start training by running the following command. The trained models are saved in `models` folder every `update_episodes` described in `config.yaml`.
 
 ```
 python main.py --train
@@ -102,10 +102,10 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 ## Documentation
 
-* [API](docs/api.md)
-* [Large Scale Training](docs/large_scale_training.md) is a procedure for large scale training remotely.
-* [Config Parameters](docs/parameters.md) show a list of parameters of `config.yaml`.
-* [Train with Customized Environment](docs/custom_environment.md) explain an interface of environment to create your own game.
+* [**Config Parameters**](docs/parameters.md) shows a list of parameters of `config.yaml`.
+* [**Large Scale Training**](docs/large_scale_training.md) is a procedure for large scale training remotely.
+* [**Train with Customized Environment**](docs/custom_environment.md) explain an interface of environment to create your own game.
+* [**API**](docs/api.md) shows API of `main.py`
 
 
 ## Frequently Asked Questions
