@@ -80,8 +80,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs).
-NOTE: all parameters are shown in [Config Parameters](docs/parameters.md).
+NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
 
 
 #### Step 2: Train!
