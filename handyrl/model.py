@@ -218,9 +218,9 @@ class DRC(nn.Module):
 # simple model
 
 class BaseModel(nn.Module):
-    def __init__(self, env, args=None, action_length=None):
+    def __init__(self, env, args=None):
         super().__init__()
-        self.action_length = env.action_length() if action_length is None else action_length
+        self.action_length = env.action_length()
 
     def init_hidden(self, batch_size=None):
         return None

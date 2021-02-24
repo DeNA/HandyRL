@@ -69,11 +69,12 @@ class Environment(BaseEnvironment):
 
     def reset(self, args={}):
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
-        self.reset_info(obs)
+        self.reset_info((obs, {}))
 
-    def reset_info(self, obs):
+    def reset_info(self, info):
+        obs, last_actions = info
         self.obs_list = [obs]
-        self.last_actions = {}
+        self.last_actions = last_actions
 
     def action2str(self, a, player=None):
         return self.ACTION[a]

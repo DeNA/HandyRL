@@ -244,6 +244,8 @@ class QueueCommunicator:
                 continue
             try:
                 conn.send(send_data)
+            except ConnectionResetError:
+                self.disconnect(conn)
             except BrokenPipeError:
                 self.disconnect(conn)
 
