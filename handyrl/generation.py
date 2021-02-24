@@ -9,6 +9,8 @@ import pickle
 
 import numpy as np
 
+from .util import softmax
+
 
 class Generator:
     def __init__(self, env, args):
@@ -29,10 +31,6 @@ class Generator:
         while not self.env.terminal():
             moment_keys = ['observation', 'policy', 'action_mask', 'action', 'value', 'reward', 'return']
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
-
-            def softmax(x):
-                x = np.exp(x - np.max(x, axis=-1))
-                return x / x.sum(axis=-1)
 
             turn_players = self.env.turns()
             for player in self.env.players():
