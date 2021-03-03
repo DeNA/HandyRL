@@ -64,13 +64,13 @@ This parameters are used for training (`python main.py --train`, `python main.py
     * `MC`, monte carlo
     * `TD`, TD(λ)
     * `VTRACE`, [V-Trace described in IMPALA paper](https://arxiv.org/abs/1802.01561)
-    * `UGPO`, [UPGO described in AlphaStar paper](https://www.nature.com/articles/s41586-019-1724-z)
+    * `UPGO`, [UPGO described in AlphaStar paper](https://www.nature.com/articles/s41586-019-1724-z)
 * `value_target`, type = enum
     * value target for value loss
     * `MC`, monte carlo
     * `TD`, TD(λ)
     * `VTRACE`, [V-Trace described in IMPALA paper](https://arxiv.org/abs/1802.01561)
-    * `UGPO`, [UPGO described in AlphaStar paper](https://www.nature.com/articles/s41586-019-1724-z)
+    * `UPGO`, [UPGO described in AlphaStar paper](https://www.nature.com/articles/s41586-019-1724-z)
 * `seed`, type = int
     * used to set seed in learner and actor
     * **NOTE** this seed cannot guarantee the reproducibility for now
