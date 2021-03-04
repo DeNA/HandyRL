@@ -182,12 +182,18 @@ class Environment(BaseEnvironment):
         return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
+        if a >= 4 * 6 * 6:
+            return 's' + str((a - 4 * 6 * 6) % 70)
+
         c = player
         pos_from = self.action2from(a, c)
         pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
+        if s[0] == 's':
+            return 4 * 6 * 6 + 70 * player + int(s[1:])
+
         c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
@@ -226,6 +232,14 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
+    def _set(self, layout):
+        if layout < 0:
+            layout = random.randrange(70)
+        self.layouts[self.color] = layout
+        self.set_pieces(self.color, layout)
+        self.color = self.opponent(self.color)
+        self.turn_count += 1
+
     def step(self, action, _=None):
         # state transition
         if isinstance(action, str):
@@ -235,11 +249,7 @@ class Environment(BaseEnvironment):
 
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6 - 70 * self.color
-            self.layouts[self.color] = layout
-            self.set_pieces(self.color, layout)
-            self.color = self.opponent(self.color)
-            self.turn_count += 1
-            return
+            return self._set(layout)
 
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
@@ -277,17 +287,22 @@ class Environment(BaseEnvironment):
     def diff_info(self, player):
         color = player
         played_color = (self.turn_count - 1) % 2
+        info = {}
         if len(self.record) == 0:
-            return {}
-        info = {'move': self.action2str(self.record[-1], played_color)}
-        if color == played_color and self.captured_type is not None:
-            info['captured'] = self.T[self.captured_type]
+            if self.turn_count > -2:
+                info['set'] = self.layouts[played_color] if color == played_color else -1
+        else:
+            info['move'] = self.action2str(self.record[-1], played_color)
+            if color == played_color and self.captured_type is not None:
+                info['captured'] = self.T[self.captured_type]
         return info
 
     def update(self, info, reset):
         if reset:
             self.args = {**self.args, **info}
             self.reset(info)
+        elif 'set' in info:
+            self._set(info['set'])
         elif 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
