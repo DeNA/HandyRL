@@ -147,7 +147,7 @@ class NetworkAgentClient:
                     ret = self.env.action2str(ret, player)
             else:
                 ret = getattr(self.env, command)(*args)
-                if command == 'play_info':
+                if command == 'step_info':
                     view_transition(self.env)
             self.conn.send(ret)
 
@@ -213,7 +213,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
                 actions[p] = env.str2action(action, p)
             else:
                 agent.observe(p)
-        if env.plays(actions):
+        if env.steps(actions):
             return None
         for p, agent in network_agents.items():
             info = env.diff_info(p)
