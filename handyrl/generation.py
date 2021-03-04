@@ -56,7 +56,7 @@ class Generator:
                         moment['action_mask'][player] = action_mask
                         moment['action'][player] = action
 
-            err = self.env.plays(moment['action'])
+            err = self.env.steps(moment['action'])
             if err:
                 return None
 

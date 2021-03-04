@@ -226,11 +226,11 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action, _=None):
+    def step(self, action, _=None):
         # state transition
         if isinstance(action, str):
             for astr in action.split():
-                self.play(self.str2action(astr, self.turn()))
+                self.step(self.str2action(astr, self.turn()))
             return
 
         if self.turn_count < 0:
@@ -288,7 +288,7 @@ class Environment(BaseEnvironment):
         self.args = {**self.args, **info}
         self.reset(info)
 
-    def play_info(self, info):
+    def step_info(self, info):
         if 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
@@ -297,7 +297,7 @@ class Environment(BaseEnvironment):
                 t = self.T.index(info['captured'])
                 piece = self.colortype2piece(self.opponent(self.color), t)
                 self.board[pos_to[0], pos_to[1]] = piece
-            self.play(action)
+            self.step(action)
 
     def turn(self):
         return self.players()[self.turn_count % 2]
@@ -424,6 +424,6 @@ if __name__ == '__main__':
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a, e.turn()) for a in actions])
-            e.play(random.choice(actions))
+            e.step(random.choice(actions))
         print(e)
         print(e.outcome())

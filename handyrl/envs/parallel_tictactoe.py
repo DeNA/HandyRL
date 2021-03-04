@@ -17,7 +17,7 @@ class Environment(TicTacToe):
             s += self.X[i] + ' ' + ' '.join([self.C[self.board[i, j]] for j in range(3)]) + '\n'
         return s
 
-    def plays(self, actions):
+    def steps(self, actions):
         # state transition function
         # action is integer (0 ~ 8) or string (sequence)
 
@@ -59,6 +59,6 @@ if __name__ == '__main__':
                 actions = e.legal_actions(p)
                 print([e.action2str(a) for a in actions])
                 action_map[p] = random.choice(actions)
-            e.plays(action_map)
+            e.steps(action_map)
         print(e)
         print(e.outcome())
