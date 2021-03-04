@@ -156,12 +156,8 @@ class NetworkAgent:
     def __init__(self, conn):
         self.conn = conn
 
-    def reset(self, data):
-        send_recv(self.conn, ('reset_info', [data]))
-        return send_recv(self.conn, ('reset', []))
-
-    def play(self, data):
-        return send_recv(self.conn, ('play_info', [data]))
+    def update(self, data, reset):
+        return send_recv(self.conn, ('update', [data, reset]))
 
     def outcome(self, outcome):
         return send_recv(self.conn, ('outcome', [outcome]))
@@ -205,7 +201,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         return None
     for p, agent in network_agents.items():
         info = env.diff_info(p)
-        agent.reset(info)
+        agent.update(info, True)
     while not env.terminal():
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
@@ -221,7 +217,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
             return None
         for p, agent in network_agents.items():
             info = env.diff_info(p)
-            agent.play(info)
+            agent.update(info, False)
     outcome = env.outcome()
     for p, agent in network_agents.items():
         agent.outcome(outcome[p])

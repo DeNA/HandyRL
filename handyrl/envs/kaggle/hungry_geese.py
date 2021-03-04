@@ -69,12 +69,14 @@ class Environment(BaseEnvironment):
 
     def reset(self, args={}):
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
-        self.reset_info((obs, {}))
+        self.update((obs, {}), True)
 
-    def reset_info(self, info):
+    def update(self, info, reset):
         obs, last_actions = info
-        self.obs_list = [obs]
-        self.last_actions = last_actions
+        if reset:
+            self.obs_list = []
+        self.obs_list.append(obs)
+        self.last_actions = actions
 
     def action2str(self, a, player=None):
         return self.ACTION[a]
@@ -157,11 +159,6 @@ class Environment(BaseEnvironment):
 
     def diff_info(self, _):
         return self.obs_list[-1], self.last_actions
-
-    def step_info(self, info):
-        obs, actions = info
-        self.obs_list.append(obs)
-        self.last_actions = actions
 
     def turns(self):
         # players to move
