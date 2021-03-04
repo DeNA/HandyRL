@@ -121,6 +121,6 @@ if __name__ == '__main__':
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a) for a in actions])
-            e.step(random.choice(actions))
+            e.play(random.choice(actions))
         print(e)
         print(e.outcome())
