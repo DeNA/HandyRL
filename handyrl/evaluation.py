@@ -189,7 +189,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
                 actions[p] = agent.action(env, p, show=show)
             else:
                 agent.observe(env, p, show=show)
-        if env.steps(actions):
+        if env.step(actions):
             return None
         if show:
             view_transition(env)
@@ -217,7 +217,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
                 actions[p] = env.str2action(action, p)
             else:
                 agent.observe(p)
-        if env.plays(actions):
+        if env.step(actions):
             return None
         for p, agent in network_agents.items():
             info = env.diff_info(p)

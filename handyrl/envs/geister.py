@@ -226,11 +226,11 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def step(self, action, _=None):
+    def play(self, action, _=None):
         # state transition
         if isinstance(action, str):
             for astr in action.split():
-                self.step(self.str2action(astr, self.turn()))
+                self.play(self.str2action(astr, self.turn()))
             return
 
         if self.turn_count < 0:

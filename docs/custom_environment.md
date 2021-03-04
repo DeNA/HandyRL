@@ -111,12 +111,12 @@ Finally, the features to feed neural network is implemented in `observation()`. 
 
 In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
 
-`plays()` method is required to handle the actions of multi players.
+`step()` method is required to handle the actions of multi players.
 ```py
     #
     # Should be defined in games which has simultaneous transition
     #
-    def plays(self, actions):
+    def step(self, actions):
         ...
 ```
 
