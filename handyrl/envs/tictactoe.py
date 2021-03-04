@@ -70,8 +70,10 @@ class Environment(BaseEnvironment):
             return ""
         return self.action2str(self.record[-1])
 
-    def step_info(self, info):
-        if info != "":
+    def update(self, info, reset):
+        if reset:
+            self.reset()
+        elif info != "":
             self.step(info)
 
     def turn(self):

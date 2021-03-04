@@ -134,11 +134,5 @@ class BaseEnvironment:
     #
     # Should be defined if you use network battle mode
     #
-    def reset_info(self, _):
-        self.reset()
-
-    #
-    # Should be defined if you use network battle mode
-    #
-    def step_info(self, info):
-        self.step(info)
+    def update(self, info, reset):
+        raise NotImplementedError()
