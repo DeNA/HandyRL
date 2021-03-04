@@ -57,8 +57,8 @@ def test_environment2(environment_path, env):
             while not e.terminal():
                 actions = {}
                 for player in e.turns():
-                    action = random.choice(es[p].legal_actions(player))
-                    actions[player] = es[p].action2str(action, p)
+                    action = random.choice(es[player].legal_actions(player))
+                    actions[player] = es[player].action2str(action, player)
                 actions = {p: e.str2action(a, p) for p, a in actions.items()}
                 e.steps(actions)
                 for p, e_ in es.items():
