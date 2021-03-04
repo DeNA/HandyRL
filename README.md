@@ -7,7 +7,7 @@
 * Let’s start large-scale distributed reinforcement learning
 * Get your strong AI agent!
 
-HandyRL is a handy and simple framework for distributed reinforcement learning that is applicable to your own environments. HandyRL focuses on a practicable algorithm and implementation to create a strong and winning AI in competitive games. For large scale training, HandyRL provides a controllable high parallelism power according to your environment.
+HandyRL is a handy and simple framework based on Python and PyTorch for distributed reinforcement learning that is applicable to your own environments. HandyRL focuses on a practicable algorithm and implementation to create a strong and winning AI in competitive games. For large scale training, HandyRL provides a controllable high parallelism power according to your environment.
 
 
 * [More About HandyRL](#More-About-HandyRL)
