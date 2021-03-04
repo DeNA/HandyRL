@@ -13,6 +13,7 @@ def environment_path():
     'tictactoe',
     'geister',
     'parallel_tictactoe',
+    'kaggle.hungry_geese',
 ])
 def test_environment(environment_path, env):
     """Test battle loop of environments"""
@@ -28,7 +29,7 @@ def test_environment(environment_path, env):
                 for player in e.turns():
                     actions[player] = random.choice(e.legal_actions(player))
                 e.steps(actions)
-                e.reward()    
+                e.reward()
             e.outcome()
         no_error_loop = True
     except Exception:
