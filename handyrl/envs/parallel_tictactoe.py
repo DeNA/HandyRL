@@ -19,23 +19,27 @@ class Environment(TicTacToe):
 
     def steps(self, actions):
         # state transition function
-        # action is integer (0 ~ 8) or string (sequence)
-
         selected_player = random.choice(list(actions.keys()))
-        selected_color = [self.BLACK, self.WHITE][selected_player]
         action = actions[selected_player]
+        self._step(action, selected_player)
 
-        x, y = action // 3, action % 3
-        self.board[x, y] = selected_color
+    def _step(self, action, player):
+        self.step(action, player)
+        self.record[-1] = [self.BLACK, self.WHITE][player], action
 
-        # check winning condition
-        if self.board[x, :].sum() == 3 * selected_color \
-          or self.board[:, y].sum() == 3 * selected_color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * selected_color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * selected_color):
-            self.win_color = selected_color
+    def diff_info(self, _):
+        if len(self.record) == 0:
+            return ""
+        color, action = self.record[-1]
+        return self.action2str(action) + ":" + self.C[color]
 
-        self.record.append((selected_color, action))
+    def update(self, info, reset):
+        if reset:
+            self.reset()
+        else:
+            saction, scolor = info.split(":")
+            action, player = self.str2action(saction), 'OX'.index(scolor)
+            self._step(action, player)
 
     def turn(self):
         return NotImplementedError()
