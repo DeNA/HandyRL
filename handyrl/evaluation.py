@@ -160,9 +160,6 @@ class NetworkAgent:
         send_recv(self.conn, ('reset_info', [data]))
         return send_recv(self.conn, ('reset', []))
 
-    def chance(self, data):
-        return send_recv(self.conn, ('chance_info', [data]))
-
     def play(self, data):
         return send_recv(self.conn, ('play_info', [data]))
 
@@ -183,10 +180,6 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     for agent in agents.values():
         agent.reset(env, show=show)
     while not env.terminal():
-        if env.chance():
-            return None
-        if env.terminal():
-            break
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -214,13 +207,6 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         info = env.diff_info(p)
         agent.reset(info)
     while not env.terminal():
-        if env.chance():
-            return None
-        for p, agent in network_agents.items():
-            info = env.diff_info(p)
-            agent.chance(info)
-        if env.terminal():
-            break
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()

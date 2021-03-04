@@ -46,12 +46,6 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
-    # Should be defined in all games which has stochastic state transition before deciding action
-    #
-    def chance(self):
-        pass
-
-    #
     # Should be defined in all games except you implement original steps() function
     #
     def step(self, action, player):
@@ -142,12 +136,6 @@ class BaseEnvironment:
     #
     def reset_info(self, _):
         self.reset()
-
-    #
-    # Should be defined if you use network battle mode
-    #
-    def chance_info(self, _):
-        pass
 
     #
     # Should be defined if you use network battle mode
