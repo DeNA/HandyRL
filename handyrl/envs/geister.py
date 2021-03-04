@@ -228,11 +228,6 @@ class Environment(BaseEnvironment):
 
     def step(self, action, _=None):
         # state transition
-        if isinstance(action, str):
-            for astr in action.split():
-                self.step(self.str2action(astr, self.turn()))
-            return
-
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6 - 70 * self.color
             self.layouts[self.color] = layout
