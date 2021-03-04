@@ -153,7 +153,7 @@ class Environment(BaseEnvironment):
     def step(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
-        self.play_info((obs, actions))
+        self.step_info((obs, actions))
 
     def diff_info(self, _):
         return self.obs_list[-1], self.last_actions

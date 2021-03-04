@@ -38,7 +38,7 @@ Next, implement `reset()` and `play()` methods. `reset()` resets the game and `p
         ...
 
     #
-    # Should be defined in all games except you implement original plays() function
+    # Should be defined in all games except you implement original step() function
     #
     def play(self, action, player):
         ...
