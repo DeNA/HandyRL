@@ -279,12 +279,11 @@ class Environment(BaseEnvironment):
             info['captured'] = self.T[self.captured_type]
         return info
 
-    def reset_info(self, info):
-        self.args = {**self.args, **info}
-        self.reset(info)
-
-    def step_info(self, info):
-        if 'move' in info:
+    def update(self, info, reset):
+        if reset:
+            self.args = {**self.args, **info}
+            self.reset(info)
+        elif 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
                 # set color to captured piece
