@@ -147,7 +147,7 @@ class NetworkAgentClient:
                     ret = self.env.action2str(ret, player)
             else:
                 ret = getattr(self.env, command)(*args)
-                if command == 'step_info':
+                if command == 'update':
                     view_transition(self.env)
             self.conn.send(ret)
 
