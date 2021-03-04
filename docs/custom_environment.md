@@ -12,14 +12,14 @@ The basic steps are as below:
 To use the customized environment, write a wrapper class named `Environment` in `my_env.py` according to the HandyRL's format
 
 **NOTE**: the games HandyRL supports are as below:
-* turn-based game (alternating game) ([tictactoe.py](handyrl/envs/tictactoe.py), [geister.py](handyrl/envs/geister.py))
-* simultaneous game ([hungry_geese.py](handyrl/envs/kaggle/hungry_geese.py))
+* turn-based game (alternating game) ([tictactoe.py](/handyrl/envs/tictactoe.py), [geister.py](/handyrl/envs/geister.py))
+* simultaneous game ([hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py))
 
-To see all interfaces of environment, check [environment.py](handyrl/environment.py).
+To see all interfaces of environment, check [environment.py](/handyrl/environment.py).
 
 #### Turn-Based Game
 
-Let's create a class `Environment`. We recommend to check compared with the implementation of sample environment like sample game [Tic-Tac-Toe](handyrl/envs/tictactoe.py).
+Let's create a class `Environment`. We recommend to check compared with the implementation of sample environment like sample game [Tic-Tac-Toe](/handyrl/envs/tictactoe.py).
 
 ```python
 # my_env.py
@@ -109,7 +109,7 @@ Finally, the features to feed neural network is implemented in `observation()`. 
 
 #### Simultaneous Game
 
-In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](handyrl/envs/kaggle/hungry_geese.py).
+In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
 
 `plays()` method is required to handle the actions of multi players.
 ```py
