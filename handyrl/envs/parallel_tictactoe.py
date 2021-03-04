@@ -23,9 +23,19 @@ class Environment(TicTacToe):
         action = actions[selected_player]
         self._step(action, selected_player)
 
-    def _step(self, action, player):
-        self.step(action, player)
-        self.record[-1] = [self.BLACK, self.WHITE][player], action
+    def _step(self, action, selected_player):
+        selected_color = [self.BLACK, self.WHITE][selected_player]
+        x, y = action // 3, action % 3
+        self.board[x, y] = selected_color
+
+        # check winning condition
+        if self.board[x, :].sum() == 3 * selected_color \
+          or self.board[:, y].sum() == 3 * selected_color \
+          or (x == y and np.diag(self.board, k=0).sum() == 3 * selected_color) \
+          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * selected_color):
+            self.win_color = selected_color
+
+        self.record.append((selected_color, action))
 
     def diff_info(self, _):
         if len(self.record) == 0:
