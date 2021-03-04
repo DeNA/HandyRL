@@ -1,6 +1,8 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
 
+import numpy as np
+
 
 def map_r(x, callback_fn=None):
     # recursive map function
@@ -54,3 +56,8 @@ def rotate(x, max_depth=1024):
                 for key2 in x_front
             )
     return x
+
+
+def softmax(x):
+    x = np.exp(x - np.max(x, axis=-1))
+    return x / x.sum(axis=-1)
