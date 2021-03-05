@@ -19,7 +19,7 @@ def environment_path():
 
 @pytest.mark.parametrize('env', ENVS)
 def test_environment_local(environment_path, env):
-    """Test battle loop of environments"""
+    """Test battle loop using local battle interface of environment"""
     no_error_loop = False
     try:
         env_path = '.'.join([environment_path, env])
@@ -43,7 +43,7 @@ def test_environment_local(environment_path, env):
 
 @pytest.mark.parametrize('env', ENVS)
 def test_environment_network(environment_path, env):
-    """Test battle loop of environments"""
+    """Test battle loop using network battle interface of environment"""
     no_error_loop = False
     try:
         env_path = '.'.join([environment_path, env])
