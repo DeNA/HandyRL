@@ -13,6 +13,7 @@ def environment_path():
     'tictactoe',
     'geister',
     'parallel_tictactoe',
+    'kaggle.hungry_geese',
 ])
 def test_environment(environment_path, env):
     """Test battle loop of environments"""
