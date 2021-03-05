@@ -152,7 +152,7 @@ class Environment(BaseEnvironment):
             s += colors[i] + str(len(geese) or '-') + color_end + ' '
         return s
 
-    def steps(self, actions):
+    def step(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
         self.step_info((obs, actions))
@@ -249,6 +249,6 @@ if __name__ == '__main__':
             print(e)
             actions = {p: e.legal_actions(p) for p in e.turns()}
             print([[e.action2str(a, p) for a in alist] for p, alist in actions.items()])
-            e.steps({p: random.choice(alist) for p, alist in actions.items()})
+            e.step({p: random.choice(alist) for p, alist in actions.items()})
         print(e)
         print(e.outcome())
