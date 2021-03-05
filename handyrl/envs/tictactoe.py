@@ -44,12 +44,7 @@ class Environment(BaseEnvironment):
 
     def play(self, action, _=None):
         # state transition function
-        # action is integer (0 ~ 8) or string (sequence)
-        if isinstance(action, str):
-            for astr in action.split():
-                self.play(self.str2action(astr))
-            return
-
+        # action is integer (0 ~ 8)
         x, y = action // 3, action % 3
         self.board[x, y] = self.color
 
@@ -74,7 +69,8 @@ class Environment(BaseEnvironment):
         if reset:
             self.reset()
         elif info != "":
-            self.step(info)
+            action = self.str2action(info)
+            self.step(action)
 
     def turn(self):
         return self.players()[len(self.record) % 2]
