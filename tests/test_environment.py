@@ -8,6 +8,7 @@ ENVS = [
     'tictactoe',
     'geister',
     'parallel_tictactoe',
+    'kaggle.hungry_geese',
 ]
 
 
@@ -30,8 +31,8 @@ def test_environment(environment_path, env):
                 actions = {}
                 for player in e.turns():
                     actions[player] = random.choice(e.legal_actions(player))
-                e.steps(actions)
-                e.reward()    
+                e.step(actions)
+                e.reward()
             e.outcome()
         no_error_loop = True
     except Exception:
@@ -60,7 +61,7 @@ def test_environment2(environment_path, env):
                     action = random.choice(es[player].legal_actions(player))
                     actions[player] = es[player].action2str(action, player)
                 actions = {p: e.str2action(a, p) for p, a in actions.items()}
-                e.steps(actions)
+                e.step(actions)
                 for p, e_ in es.items():
                     info = e.diff_info(p)
                     e_.update(info, False)
@@ -69,6 +70,6 @@ def test_environment2(environment_path, env):
         no_error_loop = True
     except Exception:
         traceback.print_exc()
-    
+
     assert no_error_loop
 
