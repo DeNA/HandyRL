@@ -76,7 +76,7 @@ class Environment(BaseEnvironment):
         if reset:
             self.obs_list = []
         self.obs_list.append(obs)
-        self.last_actions = actions
+        self.last_actions = last_actions
 
     def action2str(self, a, player=None):
         return self.ACTION[a]
@@ -155,7 +155,7 @@ class Environment(BaseEnvironment):
     def step(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
-        self.step_info((obs, actions))
+        self.update((obs, actions), False)
 
     def diff_info(self, _):
         return self.obs_list[-1], self.last_actions
