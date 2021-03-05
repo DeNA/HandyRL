@@ -28,7 +28,7 @@ def test_environment(environment_path, env):
                 actions = {}
                 for player in e.turns():
                     actions[player] = random.choice(e.legal_actions(player))
-                e.steps(actions)
+                e.step(actions)
                 e.reward()
             e.outcome()
         no_error_loop = True

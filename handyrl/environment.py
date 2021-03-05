@@ -46,18 +46,18 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
-    # Should be defined in all games except you implement original steps() function
+    # Should be defined in all games except you implement original step() function
     #
-    def step(self, action, player):
+    def play(self, action, player):
         raise NotImplementedError()
 
     #
     # Should be defined in games which has simultaneous trainsition
     #
-    def steps(self, actions):
+    def step(self, actions):
         for p, action in actions.items():
             if action is not None:
-                self.step(action, p)
+                self.play(action, p)
 
     #
     # Should be defined if you use multiplayer sequential action game

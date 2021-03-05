@@ -226,13 +226,8 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def step(self, action, _=None):
+    def play(self, action, _=None):
         # state transition
-        if isinstance(action, str):
-            for astr in action.split():
-                self.step(self.str2action(astr, self.turn()))
-            return
-
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6 - 70 * self.color
             self.layouts[self.color] = layout
@@ -423,6 +418,6 @@ if __name__ == '__main__':
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a, e.turn()) for a in actions])
-            e.step(random.choice(actions))
+            e.play(random.choice(actions))
         print(e)
         print(e.outcome())
