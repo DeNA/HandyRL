@@ -68,7 +68,7 @@ class Environment(BaseEnvironment):
     def update(self, info, reset):
         if reset:
             self.reset()
-        elif info != "":
+        else:
             action = self.str2action(info)
             self.play(action)
 
