@@ -57,10 +57,6 @@ class Environment(TicTacToe):
     def turns(self):
         return self.players()
 
-    def legal_actions(self, player):
-        # legal action list
-        return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
-
 
 if __name__ == '__main__':
     e = Environment()
