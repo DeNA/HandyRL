@@ -73,6 +73,7 @@ def test_environment_network(environment_path, env):
             while not e.terminal():
                 actions = {}
                 for player in e.turns():
+                    assert set(e.legal_actions(player)) == set(es[player].legal_actions(player))
                     action = random.choice(es[player].legal_actions(player))
                     actions[player] = es[player].action2str(action, player)
                 actions = {p: e.str2action(a, p) for p, a in actions.items()}
