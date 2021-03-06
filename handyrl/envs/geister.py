@@ -60,7 +60,7 @@ class Environment(BaseEnvironment):
     BLUE, RED = 0, 1
     C = 'BW'
     T = 'BR'
-    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
+    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r', 4: '*'}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -225,17 +225,20 @@ class Environment(BaseEnvironment):
 
     def __str__(self):
         # output state
+        def _piece(p):
+            return p if p == -1 or self.layouts[self.piece2color(p)] >= 0 else 4
+
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[self.board[i, j]] for j in range(6)]) + '\n'
+            s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
         s += 'color = ' + self.C[self.color] + '\n'
         s += 'record = ' + self.record_string()
         return s
 
     def _set(self, layout):
+        self.layouts[self.color] = layout
         if layout < 0:
             layout = random.randrange(70)
-        self.layouts[self.color] = layout
         self.set_pieces(self.color, layout)
         self.color = self.opponent(self.color)
         self.turn_count += 1
@@ -339,7 +342,7 @@ class Environment(BaseEnvironment):
         piece = self.board[pos_from[0], pos_from[1]]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
-            # no piece on destination position
+            # no self piece on original position
             return False
 
         return self._legal(c, t, pos_from, pos_to)
