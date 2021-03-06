@@ -18,6 +18,21 @@ def environment_path():
 
 
 @pytest.mark.parametrize('env', ENVS)
+def test_environment_property(environment_path, env):
+    """Test properties of environment"""
+    try:
+        env_path = '.'.join([environment_path, env])
+        env_module = importlib.import_module(env_path)
+        e = env_module.Environment()
+        e.players()
+        e.action_length()
+        str(e)
+    except Exception:
+        traceback.print_exc()
+        assert False
+
+
+@pytest.mark.parametrize('env', ENVS)
 def test_environment_local(environment_path, env):
     """Test battle loop using local battle interface of environment"""
     no_error_loop = False
@@ -72,4 +87,3 @@ def test_environment_network(environment_path, env):
         traceback.print_exc()
 
     assert no_error_loop
-
