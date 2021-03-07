@@ -33,17 +33,6 @@ class Conv(nn.Module):
         return h
 
 
-class Encoder(nn.Module):
-    def __init__(self, input_size, filters):
-        super().__init__()
-
-        self.input_size = input_size
-        self.conv = Conv(input_size[0], filters, 3, bn=False)
-
-    def forward(self, x):
-        return F.relu(self.conv(x))
-
-
 class Head(nn.Module):
     def __init__(self, input_size, out_filters, outputs):
         super().__init__()
@@ -65,18 +54,18 @@ class SimpleConv2dModel(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
-        self.input_size = env.observation().shape
+        self.input_shape = env.observation().shape
 
         layers, filters = args.get('layers', 3), args.get('filters', 32)
-        internal_size = (filters, *self.input_size[1:])
+        internal_size = (filters, *self.input_shape[1:])
 
-        self.encoder = Encoder(self.input_size, filters)
+        self.conv = nn.Conv2d(self.input_shape[0], filters, 3, stride=1, padding=1)
         self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
         self.head_p = Head(internal_size, 2, self.action_length)
         self.head_v = Head(internal_size, 1, 1)
 
     def forward(self, x, hidden=None):
-        h = self.encoder(x)
+        h = F.relu(self.conv(x))
         for block in self.blocks:
             h = F.relu(block(h))
         h_p = self.head_p(h)
