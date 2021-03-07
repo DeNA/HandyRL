@@ -353,8 +353,7 @@ def network_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    from .model import SimpleConv2DModel as DefaultModel
-    model = env.net()(env) if hasattr(env, 'net') else DefaultModel(env)
+    model = env.net()(env)
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return model
