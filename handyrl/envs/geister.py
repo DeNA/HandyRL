@@ -28,7 +28,7 @@ class GeisterNet(BaseModel):
         self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
         self.activation_p = nn.LeakyReLU(0.1)
         self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
-        self.head_p_set = nn.Linear(1, 70 * 2, bias=True)
+        self.head_p_set = nn.Linear(1, 70, bias=True)
         self.head_v = Head((filters * 2, 6, 6), 1, 1)
         self.head_r = Head((filters * 2, 6, 6), 1, 1)
 
@@ -46,7 +46,8 @@ class GeisterNet(BaseModel):
         h = torch.cat([h_e, h], -3)
         h_p = self.activation_p(self.head_p1(h))
         h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
-        h_p_set = self.head_p_set(s.sum(-1, keepdim=True).mul(0))
+        turn_color = s[:, :1]
+        h_p_set = self.head_p_set(turn_color)
         h_p = torch.cat([h_p, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
@@ -183,7 +184,7 @@ class Environment(BaseEnvironment):
 
     def action2str(self, a, player):
         if a >= 4 * 6 * 6:
-            return 's' + str((a - 4 * 6 * 6) % 70)
+            return 's' + str(a - 4 * 6 * 6)
 
         c = player
         pos_from = self.action2from(a, c)
@@ -192,7 +193,7 @@ class Environment(BaseEnvironment):
 
     def str2action(self, s, player):
         if s[0] == 's':
-            return 4 * 6 * 6 + 70 * player + int(s[1:])
+            return 4 * 6 * 6 + int(s[1:])
 
         c = player
         pos_from = self.str2position(s[:2])
@@ -246,7 +247,7 @@ class Environment(BaseEnvironment):
     def play(self, action, _=None):
         # state transition
         if self.turn_count < 0:
-            layout = action - 4 * 6 * 6 - 70 * self.color
+            layout = action - 4 * 6 * 6
             return self._set(layout)
 
         ox, oy = self.action2from(action, self.color)
@@ -333,7 +334,7 @@ class Environment(BaseEnvironment):
 
     def legal(self, action):
         if self.turn_count < 0:
-            layout = action - 4 * 6 * 6 - 70 * self.color
+            layout = action - 4 * 6 * 6
             return 0 <= layout < 70
 
         pos_from = self.action2from(action, self.color)
@@ -359,7 +360,7 @@ class Environment(BaseEnvironment):
     def legal_actions(self, _=None):
         # return legal action list
         if self.turn_count < 0:
-            return [4 * 6 * 6 + 70 * self.color + i for i in range(70)]
+            return [4 * 6 * 6 + i for i in range(70)]
         actions = []
         for pos in self.piece_position[self.color*8:(self.color+1)*8]:
             if pos[0] == -1:
@@ -374,7 +375,7 @@ class Environment(BaseEnvironment):
 
     def action_length(self):
         # maximum action label (it determines output size of policy function)
-        return 4 * 6 * 6 + 70 * 2
+        return 4 * 6 * 6 + 70
 
     def players(self):
         return [0, 1]
@@ -391,8 +392,9 @@ class Environment(BaseEnvironment):
         nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
 
         s = np.array([
-            1 if turn_view           else 0,  # view point is turn player
-            1 if color == self.BLACK else 0,  # my color is black
+            1 if self.color == self.BLACK else 0,  # turn color is black
+            1 if color == self.BLACK      else 0,  # my color is black
+            1 if turn_view                else 0,  # view point is turn player
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],
