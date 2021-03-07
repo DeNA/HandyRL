@@ -22,7 +22,7 @@ if __name__ == '__main__':
     if mode == '--train' or mode == '-t':
         from handyrl.train import train_main as main
         main(args)
-    if mode == '--train-server' or mode == '-ts':
+    elif mode == '--train-server' or mode == '-ts':
         from handyrl.train import train_server_main as main
         main(args)
     elif mode == '--worker' or mode == '-w':

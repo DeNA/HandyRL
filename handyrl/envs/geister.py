@@ -174,7 +174,7 @@ class Environment(BaseEnvironment):
     BLUE, RED = 0, 1
     C = 'BW'
     T = 'BR'
-    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
+    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r', 4: '*'}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -296,12 +296,18 @@ class Environment(BaseEnvironment):
         return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
+        if a >= 4 * 6 * 6:
+            return 's' + str((a - 4 * 6 * 6) % 70)
+
         c = player
         pos_from = self.action2from(a, c)
         pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
+        if s[0] == 's':
+            return 4 * 6 * 6 + 70 * player + int(s[1:])
+
         c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
@@ -333,27 +339,29 @@ class Environment(BaseEnvironment):
 
     def __str__(self):
         # output state
+        def _piece(p):
+            return p if p == -1 or self.layouts[self.piece2color(p)] >= 0 else 4
+
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[self.board[i, j]] for j in range(6)]) + '\n'
+            s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
         s += 'color = ' + self.C[self.color] + '\n'
         s += 'record = ' + self.record_string()
         return s
 
-    def step(self, action, _=None):
-        # state transition
-        if isinstance(action, str):
-            for astr in action.split():
-                self.step(self.str2action(astr, self.turn()))
-            return
+    def _set(self, layout):
+        self.layouts[self.color] = layout
+        if layout < 0:
+            layout = random.randrange(70)
+        self.set_pieces(self.color, layout)
+        self.color = self.opponent(self.color)
+        self.turn_count += 1
 
+    def play(self, action, _=None):
+        # state transition
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6 - 70 * self.color
-            self.layouts[self.color] = layout
-            self.set_pieces(self.color, layout)
-            self.color = self.opponent(self.color)
-            self.turn_count += 1
-            return
+            return self._set(layout)
 
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
@@ -391,17 +399,22 @@ class Environment(BaseEnvironment):
     def diff_info(self, player):
         color = player
         played_color = (self.turn_count - 1) % 2
+        info = {}
         if len(self.record) == 0:
-            return {}
-        info = {'move': self.action2str(self.record[-1], played_color)}
-        if color == played_color and self.captured_type is not None:
-            info['captured'] = self.T[self.captured_type]
+            if self.turn_count > -2:
+                info['set'] = self.layouts[played_color] if color == played_color else -1
+        else:
+            info['move'] = self.action2str(self.record[-1], played_color)
+            if color == played_color and self.captured_type is not None:
+                info['captured'] = self.T[self.captured_type]
         return info
 
     def update(self, info, reset):
         if reset:
             self.args = {**self.args, **info}
             self.reset(info)
+        elif 'set' in info:
+            self._set(info['set'])
         elif 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
@@ -410,7 +423,7 @@ class Environment(BaseEnvironment):
                 t = self.T.index(info['captured'])
                 piece = self.colortype2piece(self.opponent(self.color), t)
                 self.board[pos_to[0], pos_to[1]] = piece
-            self.step(action)
+            self.play(action)
 
     def turn(self):
         return self.players()[self.turn_count % 2]
@@ -443,7 +456,7 @@ class Environment(BaseEnvironment):
         piece = self.board[pos_from[0], pos_from[1]]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
-            # no piece on destination position
+            # no self piece on original position
             return False
 
         return self._legal(c, t, pos_from, pos_to)
@@ -537,6 +550,6 @@ if __name__ == '__main__':
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a, e.turn()) for a in actions])
-            e.step(random.choice(actions))
+            e.play(random.choice(actions))
         print(e)
         print(e.outcome())

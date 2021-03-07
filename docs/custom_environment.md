@@ -28,7 +28,7 @@ class Environment:
         ...
 ```
 
-Next, implement `reset()` and `step()` methods. `reset()` resets the game and `step()` steps the game state with one step.
+Next, implement `reset()` and `play()` methods. `reset()` resets the game and `play()` steps the game state with one step.
 
 ```python
     #
@@ -38,9 +38,9 @@ Next, implement `reset()` and `step()` methods. `reset()` resets the game and `s
         ...
 
     #
-    # Should be defined in all games except you implement original steps() function
+    # Should be defined in all games except you implement original step() function
     #
-    def step(self, action, player):
+    def play(self, action, player):
         ...
 ```
 
@@ -111,12 +111,12 @@ Finally, the features to feed neural network is implemented in `observation()`. 
 
 In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
 
-`steps()` method is required to handle the actions of multi players.
+`step()` method is required to handle the actions of multi players.
 ```py
     #
     # Should be defined in games which has simultaneous transition
     #
-    def steps(self, actions):
+    def step(self, actions):
         ...
 ```
 
