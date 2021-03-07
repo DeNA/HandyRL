@@ -392,9 +392,8 @@ class Environment(BaseEnvironment):
         nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
 
         s = np.array([
-            1 if self.color == self.BLACK else 0,  # turn color is black
-            1 if color == self.BLACK      else 0,  # my color is black
-            1 if turn_view                else 0,  # view point is turn player
+            1 if color == self.BLACK else 0,  # my color is black
+            1 if turn_view           else 0,  # view point is turn player
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],
