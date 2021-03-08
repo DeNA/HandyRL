@@ -17,14 +17,14 @@ class Environment(TicTacToe):
             s += self.X[i] + ' ' + ' '.join([self.C[self.board[i, j]] for j in range(3)]) + '\n'
         return s
 
-    def plays(self, actions):
+    def step(self, actions):
         # state transition function
-        # action is integer (0 ~ 8) or string (sequence)
-
         selected_player = random.choice(list(actions.keys()))
-        selected_color = [self.BLACK, self.WHITE][selected_player]
         action = actions[selected_player]
+        self._step(action, selected_player)
 
+    def _step(self, action, selected_player):
+        selected_color = [self.BLACK, self.WHITE][selected_player]
         x, y = action // 3, action % 3
         self.board[x, y] = selected_color
 
@@ -37,15 +37,25 @@ class Environment(TicTacToe):
 
         self.record.append((selected_color, action))
 
+    def diff_info(self, _):
+        if len(self.record) == 0:
+            return ""
+        color, action = self.record[-1]
+        return self.action2str(action) + ":" + self.C[color]
+
+    def update(self, info, reset):
+        if reset:
+            self.reset()
+        else:
+            saction, scolor = info.split(":")
+            action, player = self.str2action(saction), 'OX'.index(scolor)
+            self._step(action, player)
+
     def turn(self):
         return NotImplementedError()
 
     def turns(self):
         return self.players()
-
-    def legal_actions(self, player):
-        # legal action list
-        return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
 
 if __name__ == '__main__':
@@ -59,6 +69,6 @@ if __name__ == '__main__':
                 actions = e.legal_actions(p)
                 print([e.action2str(a) for a in actions])
                 action_map[p] = random.choice(actions)
-            e.plays(action_map)
+            e.step(action_map)
         print(e)
         print(e.outcome())

@@ -69,11 +69,13 @@ class Environment(BaseEnvironment):
 
     def reset(self, args={}):
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
-        self.reset_info((obs, {}))
+        self.update((obs, {}), True)
 
-    def reset_info(self, info):
+    def update(self, info, reset):
         obs, last_actions = info
-        self.obs_list = [obs]
+        if reset:
+            self.obs_list = []
+        self.obs_list.append(obs)
         self.last_actions = last_actions
 
     def action2str(self, a, player=None):
@@ -150,18 +152,13 @@ class Environment(BaseEnvironment):
             s += colors[i] + str(len(geese) or '-') + color_end + ' '
         return s
 
-    def plays(self, actions):
+    def step(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
-        self.play_info((obs, actions))
+        self.update((obs, actions), False)
 
     def diff_info(self, _):
         return self.obs_list[-1], self.last_actions
-
-    def play_info(self, info):
-        obs, actions = info
-        self.obs_list.append(obs)
-        self.last_actions = actions
 
     def turns(self):
         # players to move
@@ -252,6 +249,6 @@ if __name__ == '__main__':
             print(e)
             actions = {p: e.legal_actions(p) for p in e.turns()}
             print([[e.action2str(a, p) for a in alist] for p, alist in actions.items()])
-            e.plays({p: random.choice(alist) for p, alist in actions.items()})
+            e.step({p: random.choice(alist) for p, alist in actions.items()})
         print(e)
         print(e.outcome())
