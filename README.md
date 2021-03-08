@@ -22,6 +22,7 @@ HandyRL is a handy and simple framework based on Python and PyTorch for distribu
 * [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
 
+HandyRL is updated at the beginning of every month except for important updates. We appreciate all contributions. Please let us know if you find a bug or have a suggestion by creating an issue and a PR.
 
 ## More About HandyRL
 
