@@ -160,12 +160,13 @@ def gather_loop(args, conn, gaid):
 
 
 class WorkerCluster(QueueCommunicator):
-    def __init__(self, args):
+    def __init__(self, args, remote=False):
         super().__init__()
         self.args = args
+        self.remote = remote
 
     def run(self):
-        if self.args['remote']:
+        if self.remote:
             # prepare listening connections
             def worker_server(port):
                 conn_acceptor = accept_socket_connections(port=port, timeout=0.5)

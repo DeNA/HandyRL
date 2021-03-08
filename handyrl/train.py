@@ -414,11 +414,17 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, args):
+    def __init__(self, env, net, args, remote=False):
+        train_args = args['train_args']
+        env_args = args['env_args']
+        train_args['env'] = env_args
+        args = train_args
+
         self.args = args
+        self.remote = remote
         random.seed(args['seed'])
 
-        self.env = make_env(args['env'])
+        self.env = env(args['env'])
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
@@ -442,7 +448,7 @@ class Learner:
         self.num_results = 0
 
         # multiprocess or remote connection
-        self.worker = WorkerCluster(args)
+        self.worker = WorkerCluster(args, remote=remote)
 
         # thread connection
         self.trainer = Trainer(args, train_model)
@@ -618,7 +624,7 @@ class Learner:
         try:
             # open threads
             self.threads = [threading.Thread(target=self.trainer.run)]
-            if self.args['remote']:
+            if self.remote:
                 self.threads.append(threading.Thread(target=self.entry_server))
             for thread in self.threads:
                 thread.start()
@@ -631,23 +637,11 @@ class Learner:
 
 
 def train_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = False
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
     prepare_env(env_args)  # preparing environment is needed in stand-alone mode
     learner = Learner(train_args)
     learner.run()
 
 
 def train_server_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = True
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
-    learner = Learner(train_args)
+    learner = Learner(train_args, remote=True)
     learner.run()
