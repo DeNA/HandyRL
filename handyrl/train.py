@@ -22,7 +22,7 @@ import torch.optim as optim
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu_or_not, RandomModel
-from .model import SimpleConv2DModel as DefaultModel
+from .model import SimpleConv2dModel as DefaultModel
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections

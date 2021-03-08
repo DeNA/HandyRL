@@ -242,7 +242,7 @@ class RandomModel(BaseModel):
         return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(2, dtype=np.float32)}
 
 
-class SimpleConv2DModel(BaseModel):
+class SimpleConv2dModel(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
