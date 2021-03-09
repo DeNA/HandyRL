@@ -59,8 +59,8 @@ class Environment(BaseEnvironment):
     def step(self, actions):
         self.update(self.env.step(actions[0]), False)
 
-    def diff_info(self):
-        return self.latest_obs, self.latest_reward, self.done, self.info
+    def diff_info(self, _=None):
+        return self.obses[-1], self.latest_reward, self.done, self.latest_info
 
     def terminal(self):
         return self.done
