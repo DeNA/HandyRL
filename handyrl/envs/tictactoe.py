@@ -73,7 +73,7 @@ class Environment(BaseEnvironment):
         if reset:
             self.reset()
         else:
-            action = self.str2action(info)
+            action = self.str2action(info, self.turn())
             self.play(action)
 
     def turn(self):
