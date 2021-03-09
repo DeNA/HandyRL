@@ -66,8 +66,6 @@ class Environment(BaseEnvironment):
         return self.done
 
     def reward(self):
-        if self.latest_reward != -1.0:
-            print(self.latest_reward)
         return {0: self.latest_reward}
 
     def outcome(self):
