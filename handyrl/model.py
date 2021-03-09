@@ -239,7 +239,10 @@ class BaseModel(nn.Module):
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(2, dtype=np.float32)}
+        return {
+            'policy': np.zeros(self.num_players * self.action_length, dtype=np.float32),
+            'value': np.zeros(self.num_players, dtype=np.float32)
+        }
 
 
 class SimpleConv2dModel(BaseModel):
@@ -287,10 +290,10 @@ class MuZero(BaseModel):
 
     class Prediction(nn.Module):
         ''' Policy and value prediction from inner abstract state '''
-        def __init__(self, internal_size, action_length, player_count):
+        def __init__(self, internal_size, num_players, action_length):
             super().__init__()
-            self.head_p = Head(internal_size, 4, action_length)
-            self.head_v = Head(internal_size, 2, player_count)
+            self.head_p = Head(internal_size, 4, num_players * action_length)
+            self.head_v = Head(internal_size, 2, num_players)
 
         def forward(self, rp):
             p = self.head_p(rp)
@@ -305,11 +308,11 @@ class MuZero(BaseModel):
 
     class Dynamics(nn.Module):
         '''Abstract state transition'''
-        def __init__(self, rp_shape, layers, action_length, action_filters):
+        def __init__(self, rp_shape, layers, num_players, action_length, action_filters):
             super().__init__()
             self.action_shape = action_filters, rp_shape[1], rp_shape[2]
             filters = rp_shape[0]
-            self.action_embedding = nn.Embedding(action_length, embedding_dim=np.prod(self.action_shape))
+            self.action_embedding = nn.Embedding(num_players * action_length, embedding_dim=np.prod(self.action_shape))
             self.layer0 = Conv(filters + action_filters, filters, 3, bn=True)
             self.blocks = nn.ModuleList([WideResidualBlock(filters, 3, bn=True) for _ in range(layers)])
 
@@ -336,8 +339,8 @@ class MuZero(BaseModel):
 
         self.nets = nn.ModuleDict({
             'representation': self.Representation(self.input_size[0], layers, filters),
-            'prediction': self.Prediction(internal_size, self.action_length, len(env.players())),
-            'dynamics': self.Dynamics(internal_size, layers, self.action_length, 2),
+            'prediction': self.Prediction(internal_size, self.num_players, self.action_length),
+            'dynamics': self.Dynamics(internal_size, layers, self.num_players, self.action_length, 2),
         })
 
     def init_hidden(self, batch_size=None):

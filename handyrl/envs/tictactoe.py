@@ -99,7 +99,7 @@ class Environment(BaseEnvironment):
 
     def action_length(self):
         # maximum size of policy (it determines output size of policy function)
-        return 3 * 3 * 2
+        return 3 * 3
 
     def players(self):
         return [0, 1]

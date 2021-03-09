@@ -19,7 +19,7 @@ class Node:
     def __init__(self, p, v):
         self.p, self.v = p, v
         self.n = np.zeros_like(p)
-        self.q_sum = np.zeros((*p.shape, 2))
+        self.q_sum = np.zeros((*p.shape, v.shape[-1]), dtype=np.float32)
         self.n_all, self.q_sum_all = 1, v / 2  # prior
 
     def update(self, action, q_new):
@@ -60,7 +60,7 @@ class MonteCarloTree:
 
         q_mean_all = node.q_sum_all.reshape(1, -1) / node.n_all
         n, q_sum = 1 + node.n, q_mean_all + node.q_sum
-        adv = (q_sum / n.reshape(-1, 1) - q_mean_all).reshape(2, -1, 2)
+        adv = (q_sum / n.reshape(-1, 1) - q_mean_all).reshape(q_sum.shape[-1], -1, q_sum.shape[-1])
         adv = np.concatenate([adv[0, :, 0], adv[1, :, 1]])
         ucb = adv + 2.0 * np.sqrt(node.n_all) * p / n  # PUCB formula
         selected_action = np.argmax(ucb)
