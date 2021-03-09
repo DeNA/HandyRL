@@ -1,6 +1,8 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
 
+import numpy as np
+
 
 def map_r(x, callback_fn=None):
     # recursive map function
@@ -25,16 +27,6 @@ def trimap_r(x, y, z, callback_fn=None):
     elif isinstance(x, dict):
         return type(x)((key, trimap_r(xx, y[key], z[key], callback_fn)) for key, xx in x.items())
     return callback_fn(x, y, z) if callback_fn is not None else None
-
-
-def type_r(x):
-    type_s = str(type(x))
-    print(type(x))
-    if isinstance(x, (list, tuple, set)):
-        return {type_s: type_r(xx) for xx in x}
-    elif isinstance(x, dict):
-        return {type_s: type_r(xx) for xx in x.values()}
-    return type_s
 
 
 def rotate(x, max_depth=1024):
@@ -64,3 +56,8 @@ def rotate(x, max_depth=1024):
                 for key2 in x_front
             )
     return x
+
+
+def softmax(x):
+    x = np.exp(x - np.max(x, axis=-1))
+    return x / x.sum(axis=-1)

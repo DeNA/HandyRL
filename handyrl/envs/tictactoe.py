@@ -42,14 +42,9 @@ class Environment(BaseEnvironment):
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action):
+    def play(self, action, _=None):
         # state transition function
-        # action is integer (0 ~ 8) or string (sequence)
-        if isinstance(action, str):
-            for astr in action.split():
-                self.play(self.str2action(astr))
-            return
-
+        # action is integer (0 ~ 8)
         x, y = action // 3, action % 3
         self.board[x, y] = self.color
 
@@ -70,9 +65,12 @@ class Environment(BaseEnvironment):
             return ""
         return self.action2str(self.record[-1])
 
-    def play_info(self, info):
-        if info != "":
-            self.play(info)
+    def update(self, info, reset):
+        if reset:
+            self.reset()
+        else:
+            action = self.str2action(info)
+            self.play(action)
 
     def turn(self):
         return self.players()[len(self.record) % 2]
@@ -90,7 +88,7 @@ class Environment(BaseEnvironment):
             outcomes = [-1, 1]
         return {p: outcomes[idx] for idx, p in enumerate(self.players())}
 
-    def legal_actions(self):
+    def legal_actions(self, _=None):
         # legal action list
         return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
@@ -123,4 +121,4 @@ if __name__ == '__main__':
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward())
+        print(e.outcome())

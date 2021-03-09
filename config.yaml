@@ -1,35 +1,37 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.environments.tictactoe'
+    source: 'handyrl.envs.tictactoe'
     #env: 'Geister'
-    #source: 'handyrl.environments.geister'
+    #source: 'handyrl.envs.geister'
+    #env: 'HungryGeese'
+    #source: 'handyrl.envs.kaggle.hungry_geese'
 
 
 train_args:
+    turn_based_training: True
     observation: False
     gamma: 0.8
     forward_steps: 16
     compress_steps: 4
-    lambda: 0.7
-    entropy_regularization: 3.0e-1
+    entropy_regularization: 1.0e-1
     entropy_regularization_decay: 0.1
-    update_episodes: 2000
+    update_episodes: 200
     batch_size: 128
-    minimum_episodes: 20000
-    maximum_episodes: 200000
+    minimum_episodes: 400
+    maximum_episodes: 100000
     num_batchers: 2
     eval_rate: 0.1
     worker:
-        num_gather: 2
-        num_process: 6
-    algorithm: 'TDLAMBDA' # 'VTRACE' 'MC'
+        num_parallel: 6
+    lambda: 0.7
+    policy_target: 'TD' # 'UPGO' 'VTRACE' 'TD' 'MC'
+    value_target: 'TD' # 'VTRACE' 'TD' 'MC'
     seed: 0
     restart_epoch: 0
 
 
-entry_args:
-    remote_host: ''
-    num_gather: 2
-    num_process: 6
+worker_args:
+    server_address: ''
+    num_parallel: 8
 

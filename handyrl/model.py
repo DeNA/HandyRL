@@ -27,12 +27,7 @@ def to_torch(x, transpose=False, unsqueeze=None):
     if unsqueeze is not None:
         a = np.expand_dims(a, unsqueeze)
 
-    if a.dtype == np.int32 or a.dtype == np.int64:
-        t = torch.LongTensor(a)
-    else:
-        t = torch.FloatTensor(a)
-
-    return t.contiguous()
+    return torch.from_numpy(a).contiguous()
 
 
 def to_numpy(x):
@@ -45,11 +40,6 @@ def to_gpu(data):
 
 def to_gpu_or_not(data, gpu):
     return to_gpu(data) if gpu else data
-
-
-def softmax(x):
-    x = np.exp(x - np.max(x, axis=-1))
-    return x / x.sum(axis=-1)
 
 
 class Conv(nn.Module):
@@ -228,9 +218,9 @@ class DRC(nn.Module):
 # simple model
 
 class BaseModel(nn.Module):
-    def __init__(self, env, args=None, action_length=None):
+    def __init__(self, env, args=None):
         super().__init__()
-        self.action_length = env.action_length() if action_length is None else action_length
+        self.action_length = env.action_length()
 
     def init_hidden(self, batch_size=None):
         return None
@@ -242,19 +232,15 @@ class BaseModel(nn.Module):
             xt = to_torch(x, unsqueeze=0)
             ht = to_torch(hidden, unsqueeze=0)
             outputs = self.forward(xt, ht, **kwargs)
-
-        return tuple(
-            [(to_numpy(o).squeeze(0) if o is not None else None) for o in outputs[:-1]] +
-            [map_r(outputs[-1], lambda o: to_numpy(o).squeeze(0)) if outputs[-1] is not None else None]
-        )
+        return map_r(outputs, lambda o: o.detach().numpy().squeeze(0) if o is not None else None)
 
 
 class RandomModel(BaseModel):
     def inference(self, x=None, hidden=None):
-        return np.zeros(self.action_length), np.zeros(1), None, None
+        return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(1, dtype=np.float32)}
 
 
-class SimpleConv2DModel(BaseModel):
+class SimpleConv2dModel(BaseModel):
     def __init__(self, env, args={}):
         super().__init__(env, args)
 
@@ -274,4 +260,4 @@ class SimpleConv2DModel(BaseModel):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return h_p, torch.tanh(h_v), None, None
+        return {'policy': h_p, 'value': torch.tanh(h_v)}

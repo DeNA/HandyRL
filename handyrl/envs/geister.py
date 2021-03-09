@@ -28,6 +28,7 @@ class GeisterNet(BaseModel):
         self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
         self.activation_p = nn.LeakyReLU(0.1)
         self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
+        self.head_p_set = nn.Linear(1, 70, bias=True)
         self.head_v = Head((filters * 2, 6, 6), 1, 1)
         self.head_r = Head((filters * 2, 6, 6), 1, 1)
 
@@ -35,8 +36,9 @@ class GeisterNet(BaseModel):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
-        s = x['scalar'].reshape(*x['scalar'].size(), 1, 1).repeat(1, 1, 6, 6)
-        h = torch.cat([s, x['board']], -3)
+        b, s = x['board'], x['scalar']
+        h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
+        h = torch.cat([h_s, b], -3)
 
         h_e = self.encoder(h)
         h, hidden = self.body(h_e, hidden, num_repeats=3)
@@ -44,10 +46,13 @@ class GeisterNet(BaseModel):
         h = torch.cat([h_e, h], -3)
         h_p = self.activation_p(self.head_p1(h))
         h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
+        turn_color = s[:, :1]
+        h_p_set = self.head_p_set(turn_color)
+        h_p = torch.cat([h_p, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return h_p, torch.tanh(h_v), h_r, hidden
+        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
 
 
 class Environment(BaseEnvironment):
@@ -56,7 +61,7 @@ class Environment(BaseEnvironment):
     BLUE, RED = 0, 1
     C = 'BW'
     T = 'BR'
-    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
+    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r', 4: '*'}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -79,20 +84,14 @@ class Environment(BaseEnvironment):
         self.args = args
         self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
         self.color = self.BLACK
-        self.turn_count = 0  # -2 before setting original positions
+        self.turn_count = -2  # before setting original positions
         self.win_color = None
         self.piece_cnt = np.zeros(4, dtype=np.int32)
         self.board_index = -np.ones((6, 6), dtype=np.int32)
         self.piece_position = np.zeros((2 * 8, 2), dtype=np.int32)
         self.record = []
         self.captured_type = None
-
         self.layouts = {}
-        for c, cs in enumerate(self.C):
-            self.layouts[c] = self.args[cs] if cs in self.args else random.randrange(70)
-
-        self.set_pieces(self.BLACK, self.layouts[self.BLACK])
-        self.set_pieces(self.WHITE, self.layouts[self.WHITE])
 
     def put_piece(self, piece, pos, piece_idx):
         self.board[pos[0], pos[1]] = piece
@@ -184,12 +183,18 @@ class Environment(BaseEnvironment):
         return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
+        if a >= 4 * 6 * 6:
+            return 's' + str(a - 4 * 6 * 6)
+
         c = player
         pos_from = self.action2from(a, c)
         pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
+        if s[0] == 's':
+            return 4 * 6 * 6 + int(s[1:])
+
         c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
@@ -221,24 +226,29 @@ class Environment(BaseEnvironment):
 
     def __str__(self):
         # output state
+        def _piece(p):
+            return p if p == -1 or self.layouts[self.piece2color(p)] >= 0 else 4
+
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[self.board[i, j]] for j in range(6)]) + '\n'
+            s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
         s += 'color = ' + self.C[self.color] + '\n'
         s += 'record = ' + self.record_string()
         return s
 
-    def play(self, action):
-        # state transition
-        if isinstance(action, str):
-            for astr in action.split():
-                self.play(self.str2action(astr, self.turn()))
-            return
+    def _set(self, layout):
+        self.layouts[self.color] = layout
+        if layout < 0:
+            layout = random.randrange(70)
+        self.set_pieces(self.color, layout)
+        self.color = self.opponent(self.color)
+        self.turn_count += 1
 
+    def play(self, action, _=None):
+        # state transition
         if self.turn_count < 0:
-            self.set_pieces(self.color, action)
-            self.color = self.opponent(self.color)
-            self.turn_count += 1
+            layout = action - 4 * 6 * 6
+            return self._set(layout)
 
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
@@ -252,7 +262,7 @@ class Environment(BaseEnvironment):
         else:
             piece_cap = self.board[nx, ny]
             if piece_cap != -1:
-                # captupe opponent piece
+                # capture opponent piece
                 self.remove_piece(piece_cap, (nx, ny))
                 if self.piece_cnt[piece_cap] == 0:
                     if self.piece2type(piece_cap) == self.BLUE:
@@ -276,21 +286,23 @@ class Environment(BaseEnvironment):
     def diff_info(self, player):
         color = player
         played_color = (self.turn_count - 1) % 2
+        info = {}
         if len(self.record) == 0:
-            args = {**self.args}
-            args[self.C[color]] = self.layouts[color]
-            return args
-        info = {'move': self.action2str(self.record[-1], played_color)}
-        if color == played_color and self.captured_type is not None:
-            info['captured'] = self.T[self.captured_type]
+            if self.turn_count > -2:
+                info['set'] = self.layouts[played_color] if color == played_color else -1
+        else:
+            info['move'] = self.action2str(self.record[-1], played_color)
+            if color == played_color and self.captured_type is not None:
+                info['captured'] = self.T[self.captured_type]
         return info
 
-    def reset_info(self, info):
-        self.args = {**self.args, **info}
-        self.reset(info)
-
-    def play_info(self, info):
-        if 'move' in info:
+    def update(self, info, reset):
+        if reset:
+            self.args = {**self.args, **info}
+            self.reset(info)
+        elif 'set' in info:
+            self._set(info['set'])
+        elif 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
                 # set color to captured piece
@@ -322,14 +334,16 @@ class Environment(BaseEnvironment):
 
     def legal(self, action):
         if self.turn_count < 0:
-            return 0 <= action and action < 70
+            layout = action - 4 * 6 * 6
+            return 0 <= layout < 70
+
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
 
         piece = self.board[pos_from[0], pos_from[1]]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
-            # no piece on destination position
+            # no self piece on original position
             return False
 
         return self._legal(c, t, pos_from, pos_to)
@@ -343,10 +357,10 @@ class Environment(BaseEnvironment):
             # can move to my goal
             return t == self.BLUE and self.goal(c, pos_to)
 
-    def legal_actions(self):
+    def legal_actions(self, _=None):
         # return legal action list
         if self.turn_count < 0:
-            return [i for i in range(70)]
+            return [4 * 6 * 6 + i for i in range(70)]
         actions = []
         for pos in self.piece_position[self.color*8:(self.color+1)*8]:
             if pos[0] == -1:
@@ -360,17 +374,14 @@ class Environment(BaseEnvironment):
         return actions
 
     def action_length(self):
-        # maximul action label (it determines output size of policy function)
-        return 70 if self.turn_count < 0 else 4 * 6 * 6
+        # maximum action label (it determines output size of policy function)
+        return 4 * 6 * 6 + 70
 
     def players(self):
         return [0, 1]
 
     def observation(self, player=None):
         # state representation to be fed into neural networks
-        if self.turn_count < 0:
-            return np.array([1 if self.color == self.BLACK else 0], dtype=np.float32)
-
         turn_view = player is None or player == self.turn()
         color = self.color if turn_view else self.opponent(self.color)
         opponent = self.opponent(color)
@@ -381,8 +392,8 @@ class Environment(BaseEnvironment):
         nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
 
         s = np.array([
-            1 if turn_view           else 0,  # view point is turn player
             1 if color == self.BLACK else 0,  # my color is black
+            1 if turn_view           else 0,  # view point is turn player
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],
@@ -428,4 +439,4 @@ if __name__ == '__main__':
             print([e.action2str(a, e.turn()) for a in actions])
             e.play(random.choice(actions))
         print(e)
-        print(e.reward())
+        print(e.outcome())

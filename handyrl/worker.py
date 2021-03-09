@@ -10,6 +10,7 @@ import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
+import pickle
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
@@ -47,7 +48,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = send_recv(self.conn, ('model', model_id))
+                    model_pool[model_id] = pickle.loads(send_recv(self.conn, ('model', model_id)))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]
@@ -95,7 +96,7 @@ class Gather(QueueCommunicator):
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        n_pro, n_ga = args['worker']['num_process'], args['worker']['num_gather']
+        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
@@ -117,9 +118,9 @@ class Gather(QueueCommunicator):
         while True:
             conn, (command, args) = self.recv()
             if command == 'args':
-                # When requested argsments, return buffered outputs
+                # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:
-                    # get muptilple arguments from server and store them
+                    # get multiple arguments from server and store them
                     self.server_conn.send((command, [None] * self.args_buf_len))
                     self.args_queue += self.server_conn.recv()
 
@@ -159,7 +160,7 @@ def gather_loop(args, conn, gaid):
         gather.shutdown()
 
 
-class Workers(QueueCommunicator):
+class WorkerCluster(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -180,16 +181,18 @@ class Workers(QueueCommunicator):
             self.threads[-1].start()
         else:
             # open local connections
-            for i in range(self.args['worker']['num_gather']):
-                conn0, conn1 = mp.connection.Pipe(duplex=True)
+            if 'num_gathers' not in self.args['worker']:
+                self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
+            for i in range(self.args['worker']['num_gathers']):
+                conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
                 self.add(conn0)
 
 
-def entry(entry_args):
-    conn = connect_socket_connection(entry_args['remote_host'], 9999)
-    conn.send(entry_args)
+def entry(worker_args):
+    conn = connect_socket_connection(worker_args['server_address'], 9999)
+    conn.send(worker_args)
     args = conn.recv()
     conn.close()
     return args
@@ -197,18 +200,20 @@ def entry(entry_args):
 
 def worker_main(args):
     # offline generation worker
-    entry_args = args['entry_args']
-    entry_args['host'] = gethostname()
+    worker_args = args['worker_args']
+    worker_args['address'] = gethostname()
+    if 'num_gathers' not in worker_args:
+        worker_args['num_gathers'] = 1 + max(0, worker_args['num_parallel'] - 1) // 16
 
-    args = entry(entry_args)
+    args = entry(worker_args)
     print(args)
     prepare_env(args['env'])
 
     # open workers
     process = []
     try:
-        for i in range(args['worker']['num_gather']):
-            conn = connect_socket_connection(args['worker']['remote_host'], 9998)
+        for i in range(args['worker']['num_gathers']):
+            conn = connect_socket_connection(args['worker']['server_address'], 9998)
             p = mp.Process(target=gather_loop, args=(args, conn, i))
             p.start()
             conn.close()
