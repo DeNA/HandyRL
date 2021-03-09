@@ -6,13 +6,14 @@
 import copy
 
 import gym
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..environment import BaseEnvironment
-from ..model import BaseModel
+from ...environment import BaseEnvironment
+from ...model import BaseModel
 
 
 class SimpleDenseNet(BaseModel):
@@ -72,10 +73,10 @@ class Environment(BaseEnvironment):
         return {0: self.total_reward / 200}
 
     def legal_actions(self, _=None):
-        return [0, 1]
+        return list(range(self.action_length()))
 
     def action_length(self):
-        return 2
+        return self.env.action_space.n
 
     def net(self):
         return SimpleDenseNet
