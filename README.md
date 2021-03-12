@@ -76,7 +76,7 @@ train_args:
     ...
 ```
 
-NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html).
+NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://DeNA.github.io/HandyRL/documentation/parameters.html).
 
 
 #### Step 2: Train!
@@ -102,16 +102,16 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 ## Documentation
 
-[Full documentation](https://ikki407.github.io/HandyRL)
+[Full documentation](https://DeNA.github.io/HandyRL)
 
-* [Tutorial](https://ikki407.github.io/HandyRL/tutorial.html)
-* [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html) shows a list of parameters of `config.yaml`.
-* [Large-Scale Training](https://ikki407.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
-* [Customized Environment](https://ikki407.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
-* [API](https://ikki407.github.io/HandyRL/documentation/api.html) shows API of `main.py`.
-* [Modules](https://ikki407.github.io/HandyRL/modules.html) lists handyrl modules.
-* [Environments](https://ikki407.github.io/HandyRL/environments.html) lists environments implemented in HandyRL.
-* [FAQ](https://ikki407.github.io/HandyRL/faq/faq.html)
+* [Tutorial](https://DeNA.github.io/HandyRL/tutorial.html)
+* [Config Parameters](https://DeNA.github.io/HandyRL/documentation/parameters.html) shows a list of parameters of `config.yaml`.
+* [Large-Scale Training](https://DeNA.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
+* [Customized Environment](https://DeNA.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
+* [API](https://DeNA.github.io/HandyRL/documentation/api.html) shows API of `main.py`.
+* [Modules](https://DeNA.github.io/HandyRL/modules.html) lists handyrl modules.
+* [Environments](https://DeNA.github.io/HandyRL/environments.html) lists environments implemented in HandyRL.
+* [FAQ](https://DeNA.github.io/HandyRL/faq/faq.html)
 
 
 ## Use Cases
