@@ -1,0 +1,468 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>handyrl.envs.kaggle.hungry_geese &mdash; HandyRL  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../../" src="../../../../_static/documentation_options.js"></script>
+        <script src="../../../../_static/jquery.js"></script>
+        <script src="../../../../_static/underscore.js"></script>
+        <script src="../../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../../index.html" class="icon icon-home"> HandyRL
+          
+
+          
+            
+            <img src="../../../../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/parameters.html">Config Parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/large_scale_training.html">Large-Scale Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/custom_environment.html">Customized Environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../modules.html">Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../faq/faq.html">FAQ</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">HandyRL</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../../index.html">Module code</a> &raquo;</li>
+        
+      <li>handyrl.envs.kaggle.hungry_geese</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for handyrl.envs.kaggle.hungry_geese</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2020 DeNA Co., Ltd.</span>
+<span class="c1"># Licensed under The MIT License [see LICENSE for details]</span>
+
+<span class="c1"># kaggle_environments licensed under Copyright 2020 Kaggle Inc. and the Apache License, Version 2.0</span>
+<span class="c1"># (see https://github.com/Kaggle/kaggle-environments/blob/master/LICENSE for details)</span>
+
+<span class="c1"># wrapper of Hungry Geese environment from kaggle</span>
+
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+
+<span class="c1"># You need to install kaggle_environments, requests</span>
+<span class="kn">from</span> <span class="nn">kaggle_environments</span> <span class="kn">import</span> <span class="n">make</span>
+
+<span class="kn">from</span> <span class="nn">...environment</span> <span class="kn">import</span> <span class="n">BaseEnvironment</span>
+<span class="kn">from</span> <span class="nn">...model</span> <span class="kn">import</span> <span class="n">BaseModel</span>
+
+
+<span class="k">class</span> <span class="nc">TorusConv2d</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_dim</span><span class="p">,</span> <span class="n">output_dim</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">bn</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edge_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conv</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">input_dim</span><span class="p">,</span> <span class="n">output_dim</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bn</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">output_dim</span><span class="p">)</span> <span class="k">if</span> <span class="n">bn</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x</span><span class="p">[:,:,:,</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]:],</span> <span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">[:,:,:,:</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">h</span><span class="p">[:,:,</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]:],</span> <span class="n">h</span><span class="p">,</span> <span class="n">h</span><span class="p">[:,:,:</span><span class="bp">self</span><span class="o">.</span><span class="n">edge_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">h</span>
+        <span class="k">return</span> <span class="n">h</span>
+
+
+<span class="k">class</span> <span class="nc">GeeseNet</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+        <span class="n">input_shape</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">layers</span><span class="p">,</span> <span class="n">filters</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">32</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conv0</span> <span class="o">=</span> <span class="n">TorusConv2d</span><span class="p">(</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">filters</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">TorusConv2d</span><span class="p">(</span><span class="n">filters</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">layers</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_p</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">filters</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_v</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">filters</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">_</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">relu_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conv0</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">:</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">relu_</span><span class="p">(</span><span class="n">h</span> <span class="o">+</span> <span class="n">block</span><span class="p">(</span><span class="n">h</span><span class="p">))</span>
+        <span class="n">h_head</span> <span class="o">=</span> <span class="p">(</span><span class="n">h</span> <span class="o">*</span> <span class="n">x</span><span class="p">[:,:</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">h_avg</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_p</span><span class="p">(</span><span class="n">h_head</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">head_v</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">h_head</span><span class="p">,</span> <span class="n">h_avg</span><span class="p">],</span> <span class="mi">1</span><span class="p">)))</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;policy&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="n">v</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="Environment"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment">[docs]</a><span class="k">class</span> <span class="nc">Environment</span><span class="p">(</span><span class="n">BaseEnvironment</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Hungry Geese Environment</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        args (dict): test</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ACTION</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;NORTH&#39;</span><span class="p">,</span> <span class="s1">&#39;SOUTH&#39;</span><span class="p">,</span> <span class="s1">&#39;WEST&#39;</span><span class="p">,</span> <span class="s1">&#39;EAST&#39;</span><span class="p">]</span>
+    <span class="n">NUM_AGENTS</span> <span class="o">=</span> <span class="mi">4</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="n">make</span><span class="p">(</span><span class="s2">&quot;hungry_geese&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Environment.reset"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">num_agents</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">obs</span><span class="p">,</span> <span class="p">{}),</span> <span class="kc">True</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">reset</span><span class="p">):</span>
+        <span class="n">obs</span><span class="p">,</span> <span class="n">last_actions</span> <span class="o">=</span> <span class="n">info</span>
+        <span class="k">if</span> <span class="n">reset</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_actions</span> <span class="o">=</span> <span class="n">last_actions</span>
+
+    <span class="k">def</span> <span class="nf">action2str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">player</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="p">[</span><span class="n">a</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">str2action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">player</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">direction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_from</span><span class="p">,</span> <span class="n">pos_to</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">pos_to</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">x_from</span><span class="p">,</span> <span class="n">y_from</span> <span class="o">=</span> <span class="n">pos_from</span> <span class="o">//</span> <span class="mi">11</span><span class="p">,</span> <span class="n">pos_from</span> <span class="o">%</span> <span class="mi">11</span>
+        <span class="n">x_to</span><span class="p">,</span> <span class="n">y_to</span> <span class="o">=</span> <span class="n">pos_to</span> <span class="o">//</span> <span class="mi">11</span><span class="p">,</span> <span class="n">pos_to</span> <span class="o">%</span> <span class="mi">11</span>
+        <span class="k">if</span> <span class="n">x_from</span> <span class="o">==</span> <span class="n">x_to</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">y_from</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">11</span> <span class="o">==</span> <span class="n">y_to</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">3</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">y_from</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">11</span> <span class="o">==</span> <span class="n">y_to</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">2</span>
+        <span class="k">if</span> <span class="n">y_from</span> <span class="o">==</span> <span class="n">y_to</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">x_from</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">7</span> <span class="o">==</span> <span class="n">x_to</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">x_from</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">7</span> <span class="o">==</span> <span class="n">x_to</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># output state</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;observation&#39;</span><span class="p">]</span>
+        <span class="n">colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[33m&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[34m&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[32m&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[31m&#39;</span><span class="p">]</span>
+        <span class="n">color_end</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[0m&#39;</span>
+
+        <span class="k">def</span> <span class="nf">check_cell</span><span class="p">(</span><span class="n">pos</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">geese</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs</span><span class="p">[</span><span class="s1">&#39;geese&#39;</span><span class="p">]):</span>
+                <span class="k">if</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">geese</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">pos</span> <span class="o">==</span> <span class="n">geese</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                        <span class="k">return</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;h&#39;</span>
+                    <span class="k">if</span> <span class="n">pos</span> <span class="o">==</span> <span class="n">geese</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                        <span class="k">return</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;t&#39;</span>
+                    <span class="n">index</span> <span class="o">=</span> <span class="n">geese</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+                    <span class="n">pos_prev</span> <span class="o">=</span> <span class="n">geese</span><span class="p">[</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+                    <span class="n">pos_next</span> <span class="o">=</span> <span class="n">geese</span><span class="p">[</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">geese</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">else</span> <span class="kc">None</span>
+                    <span class="n">directions</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">direction</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">pos_prev</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">direction</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">pos_next</span><span class="p">)]</span>
+                    <span class="k">return</span> <span class="n">i</span><span class="p">,</span> <span class="n">directions</span>
+            <span class="k">if</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">obs</span><span class="p">[</span><span class="s1">&#39;food&#39;</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="s1">&#39;f&#39;</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">def</span> <span class="nf">cell_string</span><span class="p">(</span><span class="n">cell</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">cell</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s1">&#39;.&#39;</span>
+            <span class="k">elif</span> <span class="n">cell</span> <span class="o">==</span> <span class="s1">&#39;f&#39;</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s1">&#39;f&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">index</span><span class="p">,</span> <span class="n">directions</span> <span class="o">=</span> <span class="n">cell</span>
+                <span class="k">if</span> <span class="n">directions</span> <span class="o">==</span> <span class="s1">&#39;h&#39;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">colors</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;@&#39;</span> <span class="o">+</span> <span class="n">color_end</span>
+                <span class="k">elif</span> <span class="n">directions</span> <span class="o">==</span> <span class="s1">&#39;t&#39;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">colors</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;*&#39;</span> <span class="o">+</span> <span class="n">color_end</span>
+                <span class="k">elif</span> <span class="nb">max</span><span class="p">(</span><span class="n">directions</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">colors</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;|&#39;</span> <span class="o">+</span> <span class="n">color_end</span>
+                <span class="k">elif</span> <span class="nb">min</span><span class="p">(</span><span class="n">directions</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">colors</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;-&#39;</span> <span class="o">+</span> <span class="n">color_end</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">colors</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;+&#39;</span> <span class="o">+</span> <span class="n">color_end</span>
+
+        <span class="n">cell_status</span> <span class="o">=</span> <span class="p">[</span><span class="n">check_cell</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span> <span class="o">*</span> <span class="mi">11</span><span class="p">)]</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="s1">&#39;turn </span><span class="si">%d</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">11</span><span class="p">):</span>
+                <span class="n">pos</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="mi">11</span> <span class="o">+</span> <span class="n">y</span>
+                <span class="n">s</span> <span class="o">+=</span> <span class="n">cell_string</span><span class="p">(</span><span class="n">cell_status</span><span class="p">[</span><span class="n">pos</span><span class="p">])</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">geese</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs</span><span class="p">[</span><span class="s1">&#39;geese&#39;</span><span class="p">]):</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">geese</span><span class="p">)</span> <span class="ow">or</span> <span class="s1">&#39;-&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">color_end</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">):</span>
+        <span class="c1"># state transition</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">action2str</span><span class="p">(</span><span class="n">actions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">()])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">obs</span><span class="p">,</span> <span class="n">actions</span><span class="p">),</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">diff_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_actions</span>
+
+    <span class="k">def</span> <span class="nf">turns</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># players to move</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">p</span><span class="p">][</span><span class="s1">&#39;status&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;ACTIVE&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># check whether terminal state or not</span>
+        <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">obs</span><span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;ACTIVE&#39;</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Environment.outcome"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment.outcome">[docs]</a>    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># return terminal outcomes</span>
+        <span class="c1"># 1st: 1.0 2nd: 0.33 3rd: -0.33 4th: -1.00</span>
+        <span class="n">rewards</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">[</span><span class="s1">&#39;observation&#39;</span><span class="p">][</span><span class="s1">&#39;index&#39;</span><span class="p">]:</span> <span class="n">o</span><span class="p">[</span><span class="s1">&#39;reward&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]}</span>
+        <span class="n">outcomes</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">()}</span>
+        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rewards</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">pp</span><span class="p">,</span> <span class="n">rr</span> <span class="ow">in</span> <span class="n">rewards</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">p</span> <span class="o">!=</span> <span class="n">pp</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">r</span> <span class="o">&gt;</span> <span class="n">rr</span><span class="p">:</span>
+                        <span class="n">outcomes</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="n">rr</span><span class="p">:</span>
+                        <span class="n">outcomes</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">outcomes</span></div>
+
+    <span class="k">def</span> <span class="nf">legal_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
+        <span class="c1"># return legal action list</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="p">)))</span>
+
+    <span class="k">def</span> <span class="nf">action_length</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># maximum action label (it determines output size of policy function)</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">players</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">rule_based_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">kaggle_environments.envs.hungry_geese.hungry_geese</span> <span class="kn">import</span> <span class="n">Observation</span><span class="p">,</span> <span class="n">Configuration</span><span class="p">,</span> <span class="n">Action</span><span class="p">,</span> <span class="n">GreedyAgent</span>
+        <span class="n">action_map</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;N&#39;</span><span class="p">:</span> <span class="n">Action</span><span class="o">.</span><span class="n">NORTH</span><span class="p">,</span> <span class="s1">&#39;S&#39;</span><span class="p">:</span> <span class="n">Action</span><span class="o">.</span><span class="n">SOUTH</span><span class="p">,</span> <span class="s1">&#39;W&#39;</span><span class="p">:</span> <span class="n">Action</span><span class="o">.</span><span class="n">WEST</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">:</span> <span class="n">Action</span><span class="o">.</span><span class="n">EAST</span><span class="p">}</span>
+
+        <span class="n">agent</span> <span class="o">=</span> <span class="n">GreedyAgent</span><span class="p">(</span><span class="n">Configuration</span><span class="p">({</span><span class="s1">&#39;rows&#39;</span><span class="p">:</span> <span class="mi">7</span><span class="p">,</span> <span class="s1">&#39;columns&#39;</span><span class="p">:</span> <span class="mi">11</span><span class="p">}))</span>
+        <span class="n">agent</span><span class="o">.</span><span class="n">last_action</span> <span class="o">=</span> <span class="n">action_map</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">last_actions</span><span class="p">[</span><span class="n">player</span><span class="p">]][</span><span class="mi">0</span><span class="p">]]</span> <span class="k">if</span> <span class="n">player</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_actions</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;observation&#39;</span><span class="p">],</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">player</span><span class="p">][</span><span class="s1">&#39;observation&#39;</span><span class="p">]}</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">agent</span><span class="p">(</span><span class="n">Observation</span><span class="p">(</span><span class="n">obs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ACTION</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">net</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">GeeseNet</span>
+
+    <span class="k">def</span> <span class="nf">observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">player</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">player</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">11</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;observation&#39;</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">geese</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs</span><span class="p">[</span><span class="s1">&#39;geese&#39;</span><span class="p">]):</span>
+            <span class="c1"># head position</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">geese</span><span class="p">[:</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="n">b</span><span class="p">[</span><span class="mi">0</span> <span class="o">+</span> <span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="n">player</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">,</span> <span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="c1"># tip position</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">geese</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="n">b</span><span class="p">[</span><span class="mi">4</span> <span class="o">+</span> <span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="n">player</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">,</span> <span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="c1"># whole position</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">geese</span><span class="p">:</span>
+                <span class="n">b</span><span class="p">[</span><span class="mi">8</span> <span class="o">+</span> <span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="n">player</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">,</span> <span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># previous head position</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">obs_prev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;observation&#39;</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">geese</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obs_prev</span><span class="p">[</span><span class="s1">&#39;geese&#39;</span><span class="p">]):</span>
+                <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">geese</span><span class="p">[:</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="n">b</span><span class="p">[</span><span class="mi">12</span> <span class="o">+</span> <span class="p">(</span><span class="n">p</span> <span class="o">-</span> <span class="n">player</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">,</span> <span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># food</span>
+        <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">obs</span><span class="p">[</span><span class="s1">&#39;food&#39;</span><span class="p">]:</span>
+            <span class="n">b</span><span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="n">b</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">11</span><span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">Environment</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="n">e</span><span class="o">.</span><span class="n">terminal</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="n">actions</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="p">:</span> <span class="n">e</span><span class="o">.</span><span class="n">legal_actions</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">e</span><span class="o">.</span><span class="n">turns</span><span class="p">()}</span>
+            <span class="nb">print</span><span class="p">([[</span><span class="n">e</span><span class="o">.</span><span class="n">action2str</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">alist</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">alist</span> <span class="ow">in</span> <span class="n">actions</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+            <span class="n">e</span><span class="o">.</span><span class="n">step</span><span class="p">({</span><span class="n">p</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">alist</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">alist</span> <span class="ow">in</span> <span class="n">actions</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">outcome</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, DeNA Co., Ltd..
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

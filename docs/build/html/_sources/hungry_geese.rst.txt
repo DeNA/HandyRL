@@ -1,0 +1,11 @@
+handyrl.envs.kaggle.hungry_geese
+================================
+
+.. currentmodule:: handyrl.envs.kaggle.hungry_geese
+
+.. autosummary::
+   :toctree: _gen
+   :nosignatures:
+   :template: classtemplate.rst
+
+      Environment

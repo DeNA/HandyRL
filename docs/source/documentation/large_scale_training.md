@@ -1,4 +1,4 @@
-## Large Scale Training
+## Large-Scale Training
 
 HandyRL allows you to train a model remotely on a large scale. This means that the lerner and the worker run separately on different machines. This is useful to efficiently use machine resources such as GPU and CPU because GPU becomes a bottleneck in the learner and CPU in the worker. GPU accelerates model update and many CPUs are required to step a game environment. Thus, you can train a model with a machine of 1 GPU (but small CPUs), and generate episode data with a machine of 64 CPUs (but no GPU).
 

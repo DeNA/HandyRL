@@ -1,4 +1,4 @@
-## Train with Customized Environment
+## Customized Environment
 
 In this page, you will know how to prepare the customized environment where you want to train an AI.
 

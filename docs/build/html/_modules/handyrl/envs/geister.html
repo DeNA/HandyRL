@@ -1,0 +1,650 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>handyrl.envs.geister &mdash; HandyRL  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> HandyRL
+          
+
+          
+            
+            <img src="../../../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/parameters.html">Config Parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/large_scale_training.html">Large Scale Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/custom_environment.html">Train with Customized Environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">handyrl</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../faq/faq.html">FAQ</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">HandyRL</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>handyrl.envs.geister</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for handyrl.envs.geister</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2020 DeNA Co., Ltd.</span>
+<span class="c1"># Licensed under The MIT License [see LICENSE for details]</span>
+
+<span class="c1"># implementation of Geister</span>
+
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+
+<span class="kn">from</span> <span class="nn">..environment</span> <span class="kn">import</span> <span class="n">BaseEnvironment</span>
+<span class="kn">from</span> <span class="nn">..model</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Encoder</span><span class="p">,</span> <span class="n">Head</span><span class="p">,</span> <span class="n">DRC</span><span class="p">,</span> <span class="n">Conv</span>
+
+
+<div class="viewcode-block" id="GeisterNet"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.GeisterNet">[docs]</a><span class="k">class</span> <span class="nc">GeisterNet</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+
+        <span class="n">layers</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="n">p_filters</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">8</span>
+        <span class="n">o</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation</span><span class="p">()</span>
+        <span class="n">input_channels</span> <span class="o">=</span> <span class="n">o</span><span class="p">[</span><span class="s1">&#39;scalar&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">o</span><span class="p">[</span><span class="s1">&#39;board&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">input_channels</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">Encoder</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_size</span><span class="p">,</span> <span class="n">filters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">DRC</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">filters</span><span class="p">,</span> <span class="n">filters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_p1</span> <span class="o">=</span> <span class="n">Conv</span><span class="p">(</span><span class="n">filters</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">p_filters</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">bn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">activation_p</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LeakyReLU</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_p2</span> <span class="o">=</span> <span class="n">Conv</span><span class="p">(</span><span class="n">p_filters</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">bn</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_p_set</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">70</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_v</span> <span class="o">=</span> <span class="n">Head</span><span class="p">((</span><span class="n">filters</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head_r</span> <span class="o">=</span> <span class="n">Head</span><span class="p">((</span><span class="n">filters</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GeisterNet.init_hidden"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.GeisterNet.init_hidden">[docs]</a>    <span class="k">def</span> <span class="nf">init_hidden</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">init_hidden</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_size</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">batch_size</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GeisterNet.forward"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.GeisterNet.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hidden</span><span class="p">):</span>
+        <span class="n">b</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;board&#39;</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;scalar&#39;</span><span class="p">]</span>
+        <span class="n">h_s</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">s</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">h_s</span><span class="p">,</span> <span class="n">b</span><span class="p">],</span> <span class="o">-</span><span class="mi">3</span><span class="p">)</span>
+
+        <span class="n">h_e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">h</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">body</span><span class="p">(</span><span class="n">h_e</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">num_repeats</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+        <span class="n">h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">h_e</span><span class="p">,</span> <span class="n">h</span><span class="p">],</span> <span class="o">-</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">h_p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activation_p</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">head_p1</span><span class="p">(</span><span class="n">h</span><span class="p">))</span>
+        <span class="n">h_p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_p2</span><span class="p">(</span><span class="n">h_p</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">()[:</span><span class="o">-</span><span class="mi">3</span><span class="p">],</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="n">turn_color</span> <span class="o">=</span> <span class="n">s</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">h_p_set</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_p_set</span><span class="p">(</span><span class="n">turn_color</span><span class="p">)</span>
+        <span class="n">h_p</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">h_p</span><span class="p">,</span> <span class="n">h_p_set</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">h_v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_v</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">h_r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_r</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;policy&#39;</span><span class="p">:</span> <span class="n">h_p</span><span class="p">,</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">h_v</span><span class="p">),</span> <span class="s1">&#39;return&#39;</span><span class="p">:</span> <span class="n">h_r</span><span class="p">,</span> <span class="s1">&#39;hidden&#39;</span><span class="p">:</span> <span class="n">hidden</span><span class="p">}</span></div></div>
+
+
+<div class="viewcode-block" id="Environment"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment">[docs]</a><span class="k">class</span> <span class="nc">Environment</span><span class="p">(</span><span class="n">BaseEnvironment</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="s1">&#39;ABCDEF&#39;</span><span class="p">,</span> <span class="s1">&#39;123456&#39;</span>
+    <span class="n">BLACK</span><span class="p">,</span> <span class="n">WHITE</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span>
+    <span class="n">BLUE</span><span class="p">,</span> <span class="n">RED</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="s1">&#39;BW&#39;</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="s1">&#39;BR&#39;</span>
+    <span class="n">P</span> <span class="o">=</span> <span class="p">{</span><span class="o">-</span><span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;R&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">:</span> <span class="s1">&#39;*&#39;</span><span class="p">}</span>
+    <span class="c1"># original positions to set pieces</span>
+    <span class="n">OPOS</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">[</span><span class="s1">&#39;B2&#39;</span><span class="p">,</span> <span class="s1">&#39;C2&#39;</span><span class="p">,</span> <span class="s1">&#39;D2&#39;</span><span class="p">,</span> <span class="s1">&#39;E2&#39;</span><span class="p">,</span> <span class="s1">&#39;B1&#39;</span><span class="p">,</span> <span class="s1">&#39;C1&#39;</span><span class="p">,</span> <span class="s1">&#39;D1&#39;</span><span class="p">,</span> <span class="s1">&#39;E1&#39;</span><span class="p">],</span>
+        <span class="p">[</span><span class="s1">&#39;E5&#39;</span><span class="p">,</span> <span class="s1">&#39;D5&#39;</span><span class="p">,</span> <span class="s1">&#39;C5&#39;</span><span class="p">,</span> <span class="s1">&#39;B5&#39;</span><span class="p">,</span> <span class="s1">&#39;E6&#39;</span><span class="p">,</span> <span class="s1">&#39;D6&#39;</span><span class="p">,</span> <span class="s1">&#39;C6&#39;</span><span class="p">,</span> <span class="s1">&#39;B6&#39;</span><span class="p">],</span>
+    <span class="p">]</span>
+    <span class="c1"># goal positions</span>
+    <span class="n">GPOS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="p">[(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+        <span class="p">[(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+    <span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="n">D</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">OSEQ</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">)],</span> <span class="mi">4</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Environment.reset"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="n">args</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>  <span class="c1"># (x, y) -1 is empty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLACK</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span>  <span class="c1"># before setting original positions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">record</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">captured_type</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">layouts</span> <span class="o">=</span> <span class="p">{}</span></div>
+
+<div class="viewcode-block" id="Environment.put_piece"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.put_piece">[docs]</a>    <span class="k">def</span> <span class="nf">put_piece</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">piece</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">piece_idx</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">piece</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span><span class="p">[</span><span class="n">piece_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">piece_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="n">piece</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+<div class="viewcode-block" id="Environment.remove_piece"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.remove_piece">[docs]</a>    <span class="k">def</span> <span class="nf">remove_piece</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">piece</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="n">piece_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span><span class="p">[</span><span class="n">piece_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="n">piece</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span></div>
+
+<div class="viewcode-block" id="Environment.move_piece"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.move_piece">[docs]</a>    <span class="k">def</span> <span class="nf">move_piece</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">piece</span><span class="p">,</span> <span class="n">pos_from</span><span class="p">,</span> <span class="n">pos_to</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos_from</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos_to</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_to</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">piece</span>
+        <span class="n">piece_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos_from</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos_from</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">board_index</span><span class="p">[</span><span class="n">pos_to</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_to</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">piece_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span><span class="p">[</span><span class="n">piece_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos_to</span></div>
+
+<div class="viewcode-block" id="Environment.set_pieces"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.set_pieces">[docs]</a>    <span class="k">def</span> <span class="nf">set_pieces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">seq_idx</span><span class="p">):</span>
+        <span class="c1"># decide original positions</span>
+        <span class="n">chosen_seq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">OSEQ</span><span class="p">[</span><span class="n">seq_idx</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">chosen_seq</span> <span class="k">else</span> <span class="mi">1</span>
+            <span class="n">piece</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2position</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">OPOS</span><span class="p">[</span><span class="n">c</span><span class="p">][</span><span class="n">idx</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">put_piece</span><span class="p">(</span><span class="n">piece</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">c</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">+</span> <span class="n">idx</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Environment.opponent"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.opponent">[docs]</a>    <span class="k">def</span> <span class="nf">opponent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">color</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLACK</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span> <span class="o">-</span> <span class="n">color</span></div>
+
+<div class="viewcode-block" id="Environment.onboard"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.onboard">[docs]</a>    <span class="k">def</span> <span class="nf">onboard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">and</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span></div>
+
+<div class="viewcode-block" id="Environment.goal"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.goal">[docs]</a>    <span class="k">def</span> <span class="nf">goal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="c1"># check whether pos is goal position for c</span>
+        <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">GPOS</span><span class="p">[</span><span class="n">c</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">g</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> <span class="n">g</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+<div class="viewcode-block" id="Environment.colortype2piece"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.colortype2piece">[docs]</a>    <span class="k">def</span> <span class="nf">colortype2piece</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">c</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">t</span></div>
+
+<div class="viewcode-block" id="Environment.piece2color"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.piece2color">[docs]</a>    <span class="k">def</span> <span class="nf">piece2color</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="k">else</span> <span class="n">p</span> <span class="o">//</span> <span class="mi">2</span></div>
+
+<div class="viewcode-block" id="Environment.piece2type"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.piece2type">[docs]</a>    <span class="k">def</span> <span class="nf">piece2type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="k">else</span> <span class="n">p</span> <span class="o">%</span> <span class="mi">2</span></div>
+
+<div class="viewcode-block" id="Environment.rotate"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.rotate">[docs]</a>    <span class="k">def</span> <span class="nf">rotate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="mi">5</span> <span class="o">-</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">5</span> <span class="o">-</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Environment.position2str"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.position2str">[docs]</a>    <span class="k">def</span> <span class="nf">position2str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">onboard</span><span class="p">(</span><span class="n">pos</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;**&#39;</span></div>
+
+<div class="viewcode-block" id="Environment.str2position"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.str2position">[docs]</a>    <span class="k">def</span> <span class="nf">str2position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">s</span> <span class="o">!=</span> <span class="s1">&#39;**&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">])),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="Environment.fromdirection2action"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.fromdirection2action">[docs]</a>    <span class="k">def</span> <span class="nf">fromdirection2action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_from</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span><span class="p">:</span>
+            <span class="n">pos_from</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">pos_from</span><span class="p">)</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">d</span>
+        <span class="k">return</span> <span class="n">d</span> <span class="o">*</span> <span class="mi">36</span> <span class="o">+</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">+</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Environment.action2from"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.action2from">[docs]</a>    <span class="k">def</span> <span class="nf">action2from</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="n">pos1d</span> <span class="o">=</span> <span class="n">a</span> <span class="o">%</span> <span class="mi">36</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">pos1d</span> <span class="o">/</span> <span class="mi">6</span><span class="p">,</span> <span class="n">pos1d</span> <span class="o">%</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span><span class="p">:</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pos</span></div>
+
+<div class="viewcode-block" id="Environment.action2direction"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.action2direction">[docs]</a>    <span class="k">def</span> <span class="nf">action2direction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">a</span> <span class="o">//</span> <span class="mi">36</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span><span class="p">:</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">d</span>
+        <span class="k">return</span> <span class="n">d</span></div>
+
+<div class="viewcode-block" id="Environment.action2to"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.action2to">[docs]</a>    <span class="k">def</span> <span class="nf">action2to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2from</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">D</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action2direction</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">)]</span></div>
+
+<div class="viewcode-block" id="Environment.action2str"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.action2str">[docs]</a>    <span class="k">def</span> <span class="nf">action2str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">a</span> <span class="o">&gt;=</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;s&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">a</span> <span class="o">-</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span><span class="p">)</span>
+
+        <span class="n">c</span> <span class="o">=</span> <span class="n">player</span>
+        <span class="n">pos_from</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2from</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+        <span class="n">pos_to</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2to</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">position2str</span><span class="p">(</span><span class="n">pos_from</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">position2str</span><span class="p">(</span><span class="n">pos_to</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Environment.str2action"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.str2action">[docs]</a>    <span class="k">def</span> <span class="nf">str2action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;s&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="n">c</span> <span class="o">=</span> <span class="n">player</span>
+        <span class="n">pos_from</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2position</span><span class="p">(</span><span class="n">s</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">pos_to</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2position</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span>
+
+        <span class="k">if</span> <span class="n">pos_to</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># it should arrive at a goal</span>
+            <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">GPOS</span><span class="p">[</span><span class="n">c</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="p">((</span><span class="n">pos_from</span> <span class="o">-</span> <span class="n">g</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">diff</span> <span class="o">=</span> <span class="n">g</span> <span class="o">-</span> <span class="n">pos_from</span>
+                    <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">dd</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">D</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">dd</span><span class="p">,</span> <span class="n">diff</span><span class="p">):</span>
+                            <span class="k">break</span>
+                    <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># check action direction</span>
+            <span class="n">diff</span> <span class="o">=</span> <span class="n">pos_to</span> <span class="o">-</span> <span class="n">pos_from</span>
+            <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">dd</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">D</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">dd</span><span class="p">,</span> <span class="n">diff</span><span class="p">):</span>
+                    <span class="k">break</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fromdirection2action</span><span class="p">(</span><span class="n">pos_from</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Environment.record_string"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.record_string">[docs]</a>    <span class="k">def</span> <span class="nf">record_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">action2str</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">2</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">record</span><span class="p">)])</span></div>
+
+<div class="viewcode-block" id="Environment.position_string"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.position_string">[docs]</a>    <span class="k">def</span> <span class="nf">position_string</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">poss</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">position2str</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span><span class="p">]</span>
+        <span class="k">return</span> <span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">poss</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># output state</span>
+        <span class="k">def</span> <span class="nf">_piece</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">p</span> <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">layouts</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">piece2color</span><span class="p">(</span><span class="n">p</span><span class="p">)]</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">4</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="s1">&#39;  &#39;</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span> <span class="o">+</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">P</span><span class="p">[</span><span class="n">_piece</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">])]</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">)])</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="s1">&#39;color = &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">C</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="s1">&#39;record = &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_string</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+    <span class="k">def</span> <span class="nf">_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layout</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">layouts</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">]</span> <span class="o">=</span> <span class="n">layout</span>
+        <span class="k">if</span> <span class="n">layout</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randrange</span><span class="p">(</span><span class="mi">70</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_pieces</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">,</span> <span class="n">layout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="Environment.play"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.play">[docs]</a>    <span class="k">def</span> <span class="nf">play</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">_</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># state transition</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">action</span> <span class="o">-</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span>
+
+        <span class="n">ox</span><span class="p">,</span> <span class="n">oy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2from</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="n">nx</span><span class="p">,</span> <span class="n">ny</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2to</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="n">piece</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">ox</span><span class="p">,</span> <span class="n">oy</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">captured_type</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">onboard</span><span class="p">((</span><span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">)):</span>
+            <span class="c1"># finish by goal</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">remove_piece</span><span class="p">(</span><span class="n">piece</span><span class="p">,</span> <span class="p">(</span><span class="n">ox</span><span class="p">,</span> <span class="n">oy</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">piece_cap</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">piece_cap</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># capture opponent piece</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">remove_piece</span><span class="p">(</span><span class="n">piece_cap</span><span class="p">,</span> <span class="p">(</span><span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">))</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="n">piece_cap</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2type</span><span class="p">(</span><span class="n">piece_cap</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span><span class="p">:</span>
+                        <span class="c1"># win by capturing all opponent blue pieces</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># lose by capturing all opponent red pieces</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">captured_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2type</span><span class="p">(</span><span class="n">piece_cap</span><span class="p">)</span>
+
+            <span class="c1"># move piece</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">move_piece</span><span class="p">(</span><span class="n">piece</span><span class="p">,</span> <span class="p">(</span><span class="n">ox</span><span class="p">,</span> <span class="n">oy</span><span class="p">),</span> <span class="p">(</span><span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">record</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">&gt;=</span> <span class="mi">200</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># draw</span></div>
+
+<div class="viewcode-block" id="Environment.diff_info"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.diff_info">[docs]</a>    <span class="k">def</span> <span class="nf">diff_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">player</span>
+        <span class="n">played_color</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">record</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">2</span><span class="p">:</span>
+                <span class="n">info</span><span class="p">[</span><span class="s1">&#39;set&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">layouts</span><span class="p">[</span><span class="n">played_color</span><span class="p">]</span> <span class="k">if</span> <span class="n">color</span> <span class="o">==</span> <span class="n">played_color</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;move&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">record</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">played_color</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">color</span> <span class="o">==</span> <span class="n">played_color</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">captured_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">info</span><span class="p">[</span><span class="s1">&#39;captured&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">captured_type</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">info</span></div>
+
+<div class="viewcode-block" id="Environment.update"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">reset</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">reset</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">info</span><span class="p">}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">info</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="s1">&#39;set&#39;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;set&#39;</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="s1">&#39;move&#39;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2action</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;move&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s1">&#39;captured&#39;</span> <span class="ow">in</span> <span class="n">info</span><span class="p">:</span>
+                <span class="c1"># set color to captured piece</span>
+                <span class="n">pos_to</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2to</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+                <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;captured&#39;</span><span class="p">])</span>
+                <span class="n">piece</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos_to</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_to</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">piece</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">play</span><span class="p">(</span><span class="n">action</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Environment.turn"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.turn">[docs]</a>    <span class="k">def</span> <span class="nf">turn</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">%</span> <span class="mi">2</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Environment.terminal"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.terminal">[docs]</a>    <span class="k">def</span> <span class="nf">terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># check whether terminal state or not</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="Environment.reward"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.reward">[docs]</a>    <span class="k">def</span> <span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># return immediate rewards</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">p</span><span class="p">:</span> <span class="o">-</span><span class="mf">0.01</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">()}</span></div>
+
+<div class="viewcode-block" id="Environment.outcome"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.outcome">[docs]</a>    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># return terminal outcomes</span>
+        <span class="n">outcomes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLACK</span><span class="p">:</span>
+            <span class="n">outcomes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">win_color</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span><span class="p">:</span>
+            <span class="n">outcomes</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">p</span><span class="p">:</span> <span class="n">outcomes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">players</span><span class="p">())}</span></div>
+
+<div class="viewcode-block" id="Environment.legal"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.legal">[docs]</a>    <span class="k">def</span> <span class="nf">legal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">action</span> <span class="o">-</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span>
+            <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">layout</span> <span class="o">&lt;</span> <span class="mi">70</span>
+
+        <span class="n">pos_from</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2from</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="n">pos_to</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action2to</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+
+        <span class="n">piece</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos_from</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_from</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="n">c</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2color</span><span class="p">(</span><span class="n">piece</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2type</span><span class="p">(</span><span class="n">piece</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">:</span>
+            <span class="c1"># no self piece on original position</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">pos_from</span><span class="p">,</span> <span class="n">pos_to</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_legal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">pos_from</span><span class="p">,</span> <span class="n">pos_to</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">onboard</span><span class="p">(</span><span class="n">pos_to</span><span class="p">):</span>
+            <span class="c1"># can move to cell if there isn&#39;t my piece</span>
+            <span class="n">piece_cap</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos_to</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos_to</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2color</span><span class="p">(</span><span class="n">piece_cap</span><span class="p">)</span> <span class="o">!=</span> <span class="n">c</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># can move to my goal</span>
+            <span class="k">return</span> <span class="n">t</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">pos_to</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Environment.legal_actions"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.legal_actions">[docs]</a>    <span class="k">def</span> <span class="nf">legal_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># return legal action list</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn_count</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">+</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">70</span><span class="p">)]</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_position</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="o">*</span><span class="mi">8</span><span class="p">:(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="mi">8</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece2type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+            <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_legal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">D</span><span class="p">[</span><span class="n">d</span><span class="p">]):</span>
+                    <span class="n">action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fromdirection2action</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+                    <span class="n">actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">actions</span></div>
+
+<div class="viewcode-block" id="Environment.action_length"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.action_length">[docs]</a>    <span class="k">def</span> <span class="nf">action_length</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># maximum action label (it determines output size of policy function)</span>
+        <span class="k">return</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">6</span> <span class="o">+</span> <span class="mi">70</span></div>
+
+<div class="viewcode-block" id="Environment.players"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.players">[docs]</a>    <span class="k">def</span> <span class="nf">players</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Environment.observation"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.observation">[docs]</a>    <span class="k">def</span> <span class="nf">observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># state representation to be fed into neural networks</span>
+        <span class="n">turn_view</span> <span class="o">=</span> <span class="n">player</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">player</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">turn</span><span class="p">()</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">color</span> <span class="k">if</span> <span class="n">turn_view</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">color</span><span class="p">)</span>
+        <span class="n">opponent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">(</span><span class="n">color</span><span class="p">)</span>
+
+        <span class="n">nbcolor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">color</span><span class="p">,</span>    <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span><span class="p">)]</span>
+        <span class="n">nrcolor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">color</span><span class="p">,</span>    <span class="bp">self</span><span class="o">.</span><span class="n">RED</span> <span class="p">)]</span>
+        <span class="n">nbopp</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">opponent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span><span class="p">)]</span>
+        <span class="n">nropp</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">piece_cnt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">opponent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">RED</span> <span class="p">)]</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="mi">1</span> <span class="k">if</span> <span class="n">color</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLACK</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>  <span class="c1"># my color is black</span>
+            <span class="mi">1</span> <span class="k">if</span> <span class="n">turn_view</span>           <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>  <span class="c1"># view point is turn player</span>
+            <span class="c1"># the number of remained pieces</span>
+            <span class="o">*</span><span class="p">[(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">nbcolor</span> <span class="o">==</span> <span class="n">i</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+            <span class="o">*</span><span class="p">[(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">nrcolor</span> <span class="o">==</span> <span class="n">i</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+            <span class="o">*</span><span class="p">[(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">nbopp</span>   <span class="o">==</span> <span class="n">i</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+            <span class="o">*</span><span class="p">[(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">nropp</span>   <span class="o">==</span> <span class="n">i</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)]</span>
+        <span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+        <span class="n">blue_c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">color</span><span class="p">,</span>    <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span><span class="p">)</span>
+        <span class="n">red_c</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">color</span><span class="p">,</span>    <span class="bp">self</span><span class="o">.</span><span class="n">RED</span><span class="p">)</span>
+        <span class="n">blue_o</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">opponent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">BLUE</span><span class="p">)</span>
+        <span class="n">red_o</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">board</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">colortype2piece</span><span class="p">(</span><span class="n">opponent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">RED</span><span class="p">)</span>
+
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span>
+            <span class="c1"># board zone</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">),</span>
+            <span class="c1"># my/opponent&#39;s all pieces</span>
+            <span class="n">blue_c</span> <span class="o">+</span> <span class="n">red_c</span><span class="p">,</span>
+            <span class="n">blue_o</span> <span class="o">+</span> <span class="n">red_o</span><span class="p">,</span>
+            <span class="c1"># my blue/red pieces</span>
+            <span class="n">blue_c</span><span class="p">,</span>
+            <span class="n">red_c</span><span class="p">,</span>
+            <span class="c1"># opponent&#39;s blue/red pieces</span>
+            <span class="n">blue_o</span> <span class="k">if</span> <span class="n">player</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">),</span>
+            <span class="n">red_o</span>  <span class="k">if</span> <span class="n">player</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">board</span><span class="p">)</span>
+        <span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">color</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">WHITE</span><span class="p">:</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rot90</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;scalar&#39;</span><span class="p">:</span> <span class="n">s</span><span class="p">,</span> <span class="s1">&#39;board&#39;</span><span class="p">:</span> <span class="n">b</span><span class="p">}</span></div>
+
+<div class="viewcode-block" id="Environment.net"><a class="viewcode-back" href="../../../geister.html#handyrl.envs.geister.Environment.net">[docs]</a>    <span class="k">def</span> <span class="nf">net</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">GeisterNet</span></div></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">Environment</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="n">e</span><span class="o">.</span><span class="n">terminal</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="n">actions</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">legal_actions</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">([</span><span class="n">e</span><span class="o">.</span><span class="n">action2str</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">turn</span><span class="p">())</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">])</span>
+            <span class="n">e</span><span class="o">.</span><span class="n">play</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">actions</span><span class="p">))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">outcome</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, DeNA Co., Ltd..
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
