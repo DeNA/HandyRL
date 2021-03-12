@@ -21,7 +21,7 @@ import torch.optim as optim
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu_or_not, RandomModel
+from .model import to_torch, to_gpu_or_not, RandomModel, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -361,10 +361,10 @@ class Trainer:
             return
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
-        train_model = self.model
+        train_model = model = ModelWrapper(self.model)
         if self.gpu:
             if self.gpu > 1:
-                train_model = nn.DataParallel(self.model)
+                train_model = nn.DataParallel(model)
             train_model.cuda()
         train_model.train()
 
@@ -373,7 +373,7 @@ class Trainer:
             batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
+            hidden = to_gpu_or_not(model.init_hidden([batch_size, player_count]), self.gpu)
 
             losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
 
@@ -425,7 +425,7 @@ class Learner:
         # trained datum
         self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net()
-        train_model = self.model_class(self.env, args)
+        train_model = self.model_class()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
         else:
@@ -584,7 +584,7 @@ class Learner:
                         model = self.model
                         if model_id != self.model_era:
                             try:
-                                model = self.model_class(self.env, self.args)
+                                model = self.model_class()
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
