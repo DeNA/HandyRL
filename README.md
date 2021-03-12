@@ -1,4 +1,4 @@
-![HandyRL](docs/img/logo.png)
+![HandyRL](docs/_static/logo.png)
 
 ![](https://github.com/DeNA/HandyRL/workflows/pytest/badge.svg?branch=master)
 
@@ -76,7 +76,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
+NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html).
 
 
 #### Step 2: Train!
@@ -106,11 +106,11 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 * [Tutorial](https://ikki407.github.io/HandyRL/tutorial.html)
 * [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html) shows a list of parameters of `config.yaml`.
-* [Large Scale Training](https://ikki407.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
-* [Train with Customized Environment](https://ikki407.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
-* [API](https://ikki407.github.io/HandyRL/documentation/api.html) shows API of `main.py`
-* [Modules](https://ikki407.github.io/HandyRL/modules.html)
-* [Environments](https://ikki407.github.io/HandyRL/environments.html)
+* [Large-Scale Training](https://ikki407.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
+* [Customized Environment](https://ikki407.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
+* [API](https://ikki407.github.io/HandyRL/documentation/api.html) shows API of `main.py`.
+* [Modules](https://ikki407.github.io/HandyRL/modules.html) lists handyrl modules.
+* [Environments](https://ikki407.github.io/HandyRL/environments.html) lists environments implemented in HandyRL.
 * [FAQ](https://ikki407.github.io/HandyRL/faq/faq.html)
 
 
