@@ -122,7 +122,7 @@ Next, implement :code:`reset()` which resets the game. Then :code:`play()` or :c
         return [0, 3]  # right(0) and top(3) available
 
 
-Finally, the features to feed neural network is implemented in :code:`observation()`. This method need to return the input array for neural network.
+Finally, the features and neural network are implemented in :code:`observation()` and :code:`net()`. :code:`observation()` returns the input array for neural network. :code:`net()` returns PyTorch model.
 
 .. code-block:: python
 
@@ -132,6 +132,9 @@ Finally, the features to feed neural network is implemented in :code:`observatio
     def observation(self, player=None):
         obs = ...
         return np.array(obs)  # this array will be fed to neural network
+
+    def net(self):
+        return YourNetworkModuleClass
 
 
 Simultaneous Game
