@@ -1,9 +1,10 @@
+TODO: CI/CD when develop branch is merged into master branch.
+
 Checkout `gh-pages`.
 ```
 git checkout master
-git checkout gh-pages
+git pull
 git checkout -b feature/update-gh-pages
-git merge master
 ```
 
 Install sphinx and the related libraries.
@@ -29,3 +30,6 @@ Push the new docs.
 # git commit ...
 # git push origin feature/update-gh-pages
 ```
+
+Source files: PR to master
+Build files: PR to `gh-pages`
