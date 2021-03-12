@@ -33,7 +33,6 @@ extensions = [
     'sphinx.ext.githubpages',
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
-    'recommonmark'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -63,12 +62,6 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
 html_show_sourcelink = False
-
-source_suffix = ['.rst', '.md']
-from recommonmark.parser import CommonMarkParser
-source_parsers = {
-    '.md': CommonMarkParser,
-}
 
 rst_prolog = """
 :github_url: https://github.com/DeNA/HandyRL
