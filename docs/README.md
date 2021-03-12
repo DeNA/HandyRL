@@ -20,7 +20,7 @@ make html
 Copy built docs to `docs` folder.
 ```
 cd docs
-cp -a build/html .
+cp -a build/html/. .
 ```
 
 Push the new docs.
