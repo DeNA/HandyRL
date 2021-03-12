@@ -129,11 +129,11 @@ class ScalarHead(nn.Module):
 
 
 class GeisterNet(nn.Module):
-    def __init__(self):
+    def __init__(self, obs):
         super().__init__()
 
         layers, filters, p_filters = 3, 32, 8
-        input_channels = 7 + 18  # board channels + scalar inputs
+        input_channels = obs['scalar'].shape[0] + obs['board'].shape[0]
         self.input_size = (input_channels, 6, 6)
 
         self.conv1 = nn.Conv2d(input_channels, filters, kernel_size=3, stride=1, padding=1, bias=False)
@@ -538,7 +538,7 @@ class Environment(BaseEnvironment):
         return {'scalar': s, 'board': b}
 
     def net(self):
-        return GeisterNet
+        return GeisterNet(self.observation())
 
 
 if __name__ == '__main__':
