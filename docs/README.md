@@ -11,16 +11,7 @@ Install sphinx and the related libraries.
 pip install -r requirements.txt
 ```
 
-```
-sphinx-quickstart docs
-```
-
-Generate rst files for new docs.
-```
-sphinx-apidoc -f -e -o ./docs/source ./handyrl
-```
-
-Build docs.
+Modify and build docs.
 ```
 cd docs
 make html
@@ -28,5 +19,13 @@ make html
 
 Copy built docs to `docs` folder.
 ```
-cp docs/build/* docs
+cd docs
+cp -a build/html .
+```
+
+Push the new docs.
+```
+# git add ...
+# git commit ...
+# git push origin feature/update-gh-pages
 ```

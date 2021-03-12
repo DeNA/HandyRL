@@ -48,7 +48,7 @@ autodoc_member_order = 'bysource'
 
 autosummary_generate = True
 
-html_logo = os.path.join(os.path.abspath('..'), 'img', 'logo.png')
+html_logo = os.path.join(os.path.abspath('.'), '_static', 'logo.png')
 
 # -- Options for HTML output -------------------------------------------------
 
