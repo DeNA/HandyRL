@@ -177,7 +177,7 @@
 <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">prepare_env</span><span class="p">(</span><span class="n">env_args</span><span class="p">):</span>
+<div class="viewcode-block" id="prepare_env"><a class="viewcode-back" href="../../_gen/handyrl.environment.prepare_env.html#handyrl.environment.prepare_env">[docs]</a><span class="k">def</span> <span class="nf">prepare_env</span><span class="p">(</span><span class="n">env_args</span><span class="p">):</span>
     <span class="n">env_name</span> <span class="o">=</span> <span class="n">env_args</span><span class="p">[</span><span class="s1">&#39;env&#39;</span><span class="p">]</span>
     <span class="n">env_source</span> <span class="o">=</span> <span class="n">ENVS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="n">env_name</span><span class="p">)</span>
     <span class="n">env_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">env_source</span><span class="p">)</span>
@@ -185,10 +185,10 @@
     <span class="k">if</span> <span class="n">env_module</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No environment </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">env_name</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">env_module</span><span class="p">,</span> <span class="s1">&#39;prepare&#39;</span><span class="p">):</span>
-        <span class="n">env_module</span><span class="o">.</span><span class="n">prepare</span><span class="p">()</span>
+        <span class="n">env_module</span><span class="o">.</span><span class="n">prepare</span><span class="p">()</span></div>
 
 
-<span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">env_args</span><span class="p">):</span>
+<div class="viewcode-block" id="make_env"><a class="viewcode-back" href="../../_gen/handyrl.environment.make_env.html#handyrl.environment.make_env">[docs]</a><span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">env_args</span><span class="p">):</span>
     <span class="n">env_name</span> <span class="o">=</span> <span class="n">env_args</span><span class="p">[</span><span class="s1">&#39;env&#39;</span><span class="p">]</span>
     <span class="n">env_source</span> <span class="o">=</span> <span class="n">ENVS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="n">env_name</span><span class="p">)</span>
     <span class="n">env_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">env_source</span><span class="p">)</span>
@@ -196,17 +196,12 @@
     <span class="k">if</span> <span class="n">env_module</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No environment </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">env_name</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">env_module</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">env_args</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">env_module</span><span class="o">.</span><span class="n">Environment</span><span class="p">(</span><span class="n">env_args</span><span class="p">)</span></div>
 
 
 <span class="c1"># base class of Environment</span>
 
 <div class="viewcode-block" id="BaseEnvironment"><a class="viewcode-back" href="../../_gen/handyrl.environment.BaseEnvironment.html#handyrl.environment.BaseEnvironment">[docs]</a><span class="k">class</span> <span class="nc">BaseEnvironment</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;A base environment class.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        args (dict): arguments to initialize environment (e.g. make a simulator instance, reset an environment.)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
         <span class="k">pass</span>
 
@@ -216,13 +211,8 @@
     <span class="c1">#</span>
     <span class="c1"># Should be defined in all games</span>
     <span class="c1">#</span>
-<div class="viewcode-block" id="BaseEnvironment.reset"><a class="viewcode-back" href="../../_gen/handyrl.environment.BaseEnvironment.html#handyrl.environment.BaseEnvironment.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
-        <span class="sd">&quot;&quot;&quot;Reset an environment.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            args (dict): arguments to reset an environment state (e.g. reset a reward, reset a state.)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
     <span class="c1">#</span>
     <span class="c1"># Should be defined in all games except you implement original step() function</span>
@@ -265,13 +255,8 @@
     <span class="c1">#</span>
     <span class="c1"># Should be defined in all games</span>
     <span class="c1">#</span>
-<div class="viewcode-block" id="BaseEnvironment.outcome"><a class="viewcode-back" href="../../_gen/handyrl.environment.BaseEnvironment.html#handyrl.environment.BaseEnvironment.outcome">[docs]</a>    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Get a game outcome.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            dict: {player: outcome}</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
     <span class="c1">#</span>
     <span class="c1"># Should be defined in all games</span>

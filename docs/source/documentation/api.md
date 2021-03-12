@@ -3,7 +3,7 @@
 In HandyRL, `main.py` is an entry-point for training and evaluation. This page explains the API interfaces of `main.py`.
 
 Also see the usage for more details:
-* [training](../README.md#train-ai-model-for-tic-tac-toe)
+* [training](../tutorial/tictactoe.md)
 * [training (server version)](large_scale_training.md)
 
 

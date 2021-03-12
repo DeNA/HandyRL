@@ -185,13 +185,13 @@
 <p>To use the customized environment, write a wrapper class named <code class="docutils literal notranslate"><span class="pre">Environment</span></code> in <code class="docutils literal notranslate"><span class="pre">my_env.py</span></code> according to the HandyRL’s format</p>
 <p><strong>NOTE</strong>: the games HandyRL supports are as below:</p>
 <ul class="simple">
-<li><p>turn-based game (alternating game) (<a class="reference external" href="/handyrl/envs/tictactoe.py">tictactoe.py</a>, <a class="reference external" href="/handyrl/envs/geister.py">geister.py</a>)</p></li>
-<li><p>simultaneous game (<a class="reference external" href="/handyrl/envs/kaggle/hungry_geese.py">hungry_geese.py</a>)</p></li>
+<li><p>turn-based game (alternating game) (<a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/tictactoe.py">tictactoe.py</a>, <a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/geister.py">geister.py</a>)</p></li>
+<li><p>simultaneous game (<a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/kaggle/hungry_geese.py">hungry_geese.py</a>)</p></li>
 </ul>
-<p>To see all interfaces of environment, check <a class="reference external" href="/handyrl/environment.py">environment.py</a>.</p>
+<p>To see all interfaces of environment, check <a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl//environment.py">environment.py</a>.</p>
 <div class="section" id="turn-based-game">
 <h3>Turn-Based Game<a class="headerlink" href="#turn-based-game" title="Permalink to this headline">¶</a></h3>
-<p>Let’s create a class <code class="docutils literal notranslate"><span class="pre">Environment</span></code>. We recommend to check compared with the implementation of sample environment like sample game <a class="reference external" href="/handyrl/envs/tictactoe.py">Tic-Tac-Toe</a>.</p>
+<p>Let’s create a class <code class="docutils literal notranslate"><span class="pre">Environment</span></code>. We recommend to check compared with the implementation of sample environment like sample game <a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/tictactoe.py">Tic-Tac-Toe</a>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># my_env.py</span>
 <span class="k">class</span> <span class="nc">Environment</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
@@ -273,7 +273,7 @@
 </div>
 <div class="section" id="simultaneous-game">
 <h3>Simultaneous Game<a class="headerlink" href="#simultaneous-game" title="Permalink to this headline">¶</a></h3>
-<p>In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game <a class="reference external" href="/handyrl/envs/kaggle/hungry_geese.py">hungry_geese.py</a>.</p>
+<p>In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game <a class="reference external" href="https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/kaggle/hungry_geese.py">hungry_geese.py</a>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">step()</span></code> method is required to handle the actions of multi players.</p>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span>    <span class="c1">#</span>
     <span class="c1"># Should be defined in games which has simultaneous transition</span>
@@ -294,10 +294,9 @@
 </div>
 <div class="section" id="prepare-a-config">
 <h2>Prepare a config<a class="headerlink" href="#prepare-a-config" title="Permalink to this headline">¶</a></h2>
-<p>Set the name of the environment to <code class="docutils literal notranslate"><span class="pre">env</span></code> and script path to <code class="docutils literal notranslate"><span class="pre">source</span></code>.</p>
+<p>Set the name of the environment or path to environment script to <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">env_args</span><span class="p">:</span>
-    <span class="nt">env</span><span class="p">:</span> <span class="s">&#39;MyCustomizedEnvironment&#39;</span>
-    <span class="nt">source</span><span class="p">:</span> <span class="s">&#39;my_env&#39;</span>
+    <span class="nt">env</span><span class="p">:</span> <span class="s">&#39;MyCustomizedEnvironment&#39;</span>  <span class="c1"># or &#39;path.to.my_customized_environment&#39;</span>
 </pre></div>
 </div>
 <p><strong>NOTE</strong>: the above config requires that <code class="docutils literal notranslate"><span class="pre">my_env.py</span></code> is in the same directory of <code class="docutils literal notranslate"><span class="pre">main.py</span></code>.</p>

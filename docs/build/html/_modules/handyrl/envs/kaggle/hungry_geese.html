@@ -222,11 +222,6 @@
 
 
 <div class="viewcode-block" id="Environment"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment">[docs]</a><span class="k">class</span> <span class="nc">Environment</span><span class="p">(</span><span class="n">BaseEnvironment</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Hungry Geese Environment</span>
-<span class="sd">    </span>
-<span class="sd">    Args:</span>
-<span class="sd">        args (dict): test</span>
-<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">ACTION</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;NORTH&#39;</span><span class="p">,</span> <span class="s1">&#39;SOUTH&#39;</span><span class="p">,</span> <span class="s1">&#39;WEST&#39;</span><span class="p">,</span> <span class="s1">&#39;EAST&#39;</span><span class="p">]</span>
     <span class="n">NUM_AGENTS</span> <span class="o">=</span> <span class="mi">4</span>
 
@@ -235,9 +230,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="n">make</span><span class="p">(</span><span class="s2">&quot;hungry_geese&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 
-<div class="viewcode-block" id="Environment.reset"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{}):</span>
         <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">num_agents</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">obs</span><span class="p">,</span> <span class="p">{}),</span> <span class="kc">True</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">obs</span><span class="p">,</span> <span class="p">{}),</span> <span class="kc">True</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">reset</span><span class="p">):</span>
         <span class="n">obs</span><span class="p">,</span> <span class="n">last_actions</span> <span class="o">=</span> <span class="n">info</span>
@@ -339,7 +334,7 @@
                 <span class="k">return</span> <span class="kc">False</span>
         <span class="k">return</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="Environment.outcome"><a class="viewcode-back" href="../../../../_gen/handyrl.envs.kaggle.hungry_geese.Environment.html#handyrl.envs.kaggle.hungry_geese.Environment.outcome">[docs]</a>    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">outcome</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># return terminal outcomes</span>
         <span class="c1"># 1st: 1.0 2nd: 0.33 3rd: -0.33 4th: -1.00</span>
         <span class="n">rewards</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">[</span><span class="s1">&#39;observation&#39;</span><span class="p">][</span><span class="s1">&#39;index&#39;</span><span class="p">]:</span> <span class="n">o</span><span class="p">[</span><span class="s1">&#39;reward&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]}</span>
@@ -351,7 +346,7 @@
                         <span class="n">outcomes</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
                     <span class="k">elif</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="n">rr</span><span class="p">:</span>
                         <span class="n">outcomes</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">NUM_AGENTS</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">outcomes</span></div>
+        <span class="k">return</span> <span class="n">outcomes</span>
 
     <span class="k">def</span> <span class="nf">legal_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player</span><span class="p">):</span>
         <span class="c1"># return legal action list</span>

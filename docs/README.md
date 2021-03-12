@@ -22,7 +22,6 @@ sphinx-apidoc -f -e -o ./docs/source ./handyrl
 
 Build docs.
 ```
-cp -r docs/tutorial docs/documentation docs/faq docs/source
 cd docs
 make html
 ```

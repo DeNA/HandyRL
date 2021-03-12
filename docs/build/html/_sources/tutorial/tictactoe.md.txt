@@ -10,7 +10,6 @@ Set `config.yaml` for your training configuration. When you run a training with 
 ```yaml
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.envs.tictactoe'
 
 train_args:
     ...
@@ -18,7 +17,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
+NOTE: TicTacToe is used as a default game. [Here is the list of games](https://github.com/DeNA/HandyRL/blob/master/handyrl/envs/). All parameters are shown in [Config Parameters](../documentation/parameters.md).
 
 
 #### Step 2: Train!
