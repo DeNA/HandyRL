@@ -1,4 +1,4 @@
-![HandyRL](docs/img/logo.png)
+![HandyRL](docs/_static/logo.png)
 
 ![](https://github.com/DeNA/HandyRL/workflows/pytest/badge.svg?branch=master)
 
@@ -15,12 +15,8 @@ HandyRL is a handy and simple framework based on Python and PyTorch for distribu
 * [Getting Started](#Getting-Started)
     * [Train AI Model for Tic-Tac-Toe](#Train-AI-Model-for-Tic-Tac-Toe)
 * [Documentation](#Documentation)
-    * [Config Parameters](docs/parameters.md)
-    * [Large Scale Training](docs/large_scale_training.md)
-    * [Train with Customized Environment](docs/custom_environment.md)
-    * [API](docs/api.md)
-* [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
+
 
 HandyRL is updated at the beginning of every month except for important updates. We appreciate all contributions. Please let us know if you find a bug or have a suggestion by creating an issue and a PR.
 
@@ -73,7 +69,6 @@ Set `config.yaml` for your training configuration. When you run a training with 
 ```yaml
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.envs.tictactoe'
 
 train_args:
     ...
@@ -81,7 +76,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
+NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html).
 
 
 #### Step 2: Train!
@@ -107,25 +102,19 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 ## Documentation
 
-* [**Config Parameters**](docs/parameters.md) shows a list of parameters of `config.yaml`.
-* [**Large Scale Training**](docs/large_scale_training.md) is a procedure for large scale training remotely.
-* [**Train with Customized Environment**](docs/custom_environment.md) explain an interface of environment to create your own game.
-* [**API**](docs/api.md) shows API of `main.py`
+[Full documentation](https://ikki407.github.io/HandyRL)
 
-
-## Frequently Asked Questions
-
-
-*   How to use rule-based AI as an opponent?
-    *   You can easily use it by creating a rule-based AI method `rule_based_action()` in a class `Environment`.
-*   How to change the opponent in evaluation?
-    *   Set your agent in `evaluation.py` like `agents = [agent1, YourOpponentAgent()]`
-* `too many open files` Error
-    * This error happens in a large-scale training. You should increase the maximum file limit by running `ulimit -n 65536`. The value 65536 depends on a training setting. Note that the effect of `ulimit` is session-based so you will have to either change the limit permanently (OS and version dependent) or run this command in your shell starting script.
-    * In Mac OSX, you may need to change the system limit with `launchctl` before running `ulimit -n` (e.g. [How to Change Open Files Limit on OS X and macOS](https://gist.github.com/tombigel/d503800a282fcadbee14b537735d202c))
+* [Tutorial](https://ikki407.github.io/HandyRL/tutorial.html)
+* [Config Parameters](https://ikki407.github.io/HandyRL/documentation/parameters.html) shows a list of parameters of `config.yaml`.
+* [Large-Scale Training](https://ikki407.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
+* [Customized Environment](https://ikki407.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
+* [API](https://ikki407.github.io/HandyRL/documentation/api.html) shows API of `main.py`.
+* [Modules](https://ikki407.github.io/HandyRL/modules.html) lists handyrl modules.
+* [Environments](https://ikki407.github.io/HandyRL/environments.html) lists environments implemented in HandyRL.
+* [FAQ](https://ikki407.github.io/HandyRL/faq/faq.html)
 
 
 ## Use Cases
 
-*   [The 5th solution in Google Research Football with Manchester City F.C.](https://www.kaggle.com/c/google-football/discussion/203412) (Kaggle)
-*   [Baseline RL AI in Hungry Geese](https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning) (Kaggle)
+*   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
+*   [Month 1 Winner in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/222941)
