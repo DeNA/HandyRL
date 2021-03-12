@@ -1,0 +1,478 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>handyrl.connection &mdash; HandyRL  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> HandyRL
+          
+
+          
+            
+            <img src="../../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../documentation/parameters.html">Config Parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../documentation/large_scale_training.html">Large-Scale Training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../documentation/custom_environment.html">Customized Environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../documentation/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../environments.html">Environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../faq/faq.html">FAQ</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">HandyRL</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>handyrl.connection</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for handyrl.connection</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2020 DeNA Co., Ltd.</span>
+<span class="c1"># Licensed under The MIT License [see LICENSE for details]</span>
+
+<span class="kn">import</span> <span class="nn">io</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">queue</span>
+<span class="kn">import</span> <span class="nn">select</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+
+
+<div class="viewcode-block" id="send_recv"><a class="viewcode-back" href="../../connection.html#handyrl.connection.send_recv">[docs]</a><span class="k">def</span> <span class="nf">send_recv</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">sdata</span><span class="p">):</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">sdata</span><span class="p">)</span>
+    <span class="n">rdata</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">rdata</span></div>
+
+
+<div class="viewcode-block" id="PickledConnection"><a class="viewcode-back" href="../../connection.html#handyrl.connection.PickledConnection">[docs]</a><span class="k">class</span> <span class="nc">PickledConnection</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">conn</span>
+
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="PickledConnection.close"><a class="viewcode-back" href="../../connection.html#handyrl.connection.PickledConnection.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="PickledConnection.fileno"><a class="viewcode-back" href="../../connection.html#handyrl.connection.PickledConnection.fileno">[docs]</a>    <span class="k">def</span> <span class="nf">fileno</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">fileno</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ConnectionResetError</span>
+            <span class="n">size</span> <span class="o">-=</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+            <span class="n">buf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buf</span>
+
+<div class="viewcode-block" id="PickledConnection.recv"><a class="viewcode-back" href="../../connection.html#handyrl.connection.PickledConnection.recv">[docs]</a>    <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">size</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;!i&quot;</span><span class="p">,</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
+
+    <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buf</span><span class="p">):</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+            <span class="n">size</span> <span class="o">-=</span> <span class="n">n</span>
+            <span class="n">buf</span> <span class="o">=</span> <span class="n">buf</span><span class="p">[</span><span class="n">n</span><span class="p">:]</span>
+
+<div class="viewcode-block" id="PickledConnection.send"><a class="viewcode-back" href="../../connection.html#handyrl.connection.PickledConnection.send">[docs]</a>    <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="n">buf</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;!i&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">16384</span><span class="p">:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span><span class="p">,</span> <span class="n">buf</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span> <span class="o">+</span> <span class="n">buf</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="open_socket_connection"><a class="viewcode-back" href="../../connection.html#handyrl.connection.open_socket_connection">[docs]</a><span class="k">def</span> <span class="nf">open_socket_connection</span><span class="p">(</span><span class="n">port</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
+    <span class="n">sock</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span>
+        <span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span>
+        <span class="n">sock</span><span class="o">.</span><span class="n">getsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">)</span> <span class="o">|</span> <span class="mi">1</span>
+    <span class="p">)</span>
+    <span class="n">sock</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">sock</span></div>
+
+
+<div class="viewcode-block" id="accept_socket_connection"><a class="viewcode-back" href="../../connection.html#handyrl.connection.accept_socket_connection">[docs]</a><span class="k">def</span> <span class="nf">accept_socket_connection</span><span class="p">(</span><span class="n">sock</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">conn</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">PickledConnection</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">timeout</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="listen_socket_connections"><a class="viewcode-back" href="../../connection.html#handyrl.connection.listen_socket_connections">[docs]</a><span class="k">def</span> <span class="nf">listen_socket_connections</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+    <span class="n">sock</span> <span class="o">=</span> <span class="n">open_socket_connection</span><span class="p">(</span><span class="n">port</span><span class="p">)</span>
+    <span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">accept_socket_connection</span><span class="p">(</span><span class="n">sock</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span></div>
+
+
+<div class="viewcode-block" id="connect_socket_connection"><a class="viewcode-back" href="../../connection.html#handyrl.connection.connect_socket_connection">[docs]</a><span class="k">def</span> <span class="nf">connect_socket_connection</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+    <span class="n">sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">sock</span><span class="o">.</span><span class="n">connect</span><span class="p">((</span><span class="n">host</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)))</span>
+    <span class="k">except</span> <span class="ne">ConnectionRefusedError</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;failed to connect </span><span class="si">%s</span><span class="s1"> </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">PickledConnection</span><span class="p">(</span><span class="n">sock</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="accept_socket_connections"><a class="viewcode-back" href="../../connection.html#handyrl.connection.accept_socket_connections">[docs]</a><span class="k">def</span> <span class="nf">accept_socket_connections</span><span class="p">(</span><span class="n">port</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="mi">1024</span><span class="p">):</span>
+    <span class="n">sock</span> <span class="o">=</span> <span class="n">open_socket_connection</span><span class="p">(</span><span class="n">port</span><span class="p">)</span>
+    <span class="n">sock</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="n">maxsize</span><span class="p">)</span>
+    <span class="n">sock</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+    <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">cnt</span> <span class="o">&lt;</span> <span class="n">maxsize</span><span class="p">:</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="n">accept_socket_connection</span><span class="p">(</span><span class="n">sock</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">conn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cnt</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">yield</span> <span class="n">conn</span></div>
+
+
+<div class="viewcode-block" id="open_multiprocessing_connections"><a class="viewcode-back" href="../../connection.html#handyrl.connection.open_multiprocessing_connections">[docs]</a><span class="k">def</span> <span class="nf">open_multiprocessing_connections</span><span class="p">(</span><span class="n">num_process</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">args_func</span><span class="p">):</span>
+    <span class="c1"># open connections</span>
+    <span class="n">s_conns</span><span class="p">,</span> <span class="n">g_conns</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_process</span><span class="p">):</span>
+        <span class="n">conn0</span><span class="p">,</span> <span class="n">conn1</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Pipe</span><span class="p">(</span><span class="n">duplex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">s_conns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conn0</span><span class="p">)</span>
+        <span class="n">g_conns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conn1</span><span class="p">)</span>
+
+    <span class="c1"># open workers</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">conn</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">g_conns</span><span class="p">):</span>
+        <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args_func</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">conn</span><span class="p">))</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">s_conns</span></div>
+
+
+<div class="viewcode-block" id="MultiProcessJobExecutor"><a class="viewcode-back" href="../../connection.html#handyrl.connection.MultiProcessJobExecutor">[docs]</a><span class="k">class</span> <span class="nc">MultiProcessJobExecutor</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">send_generator</span><span class="p">,</span> <span class="n">num</span><span class="p">,</span> <span class="n">postprocess</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer_length</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">num_receivers</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">send_generator</span> <span class="o">=</span> <span class="n">send_generator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">postprocess</span> <span class="o">=</span> <span class="n">postprocess</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffer_length</span> <span class="o">=</span> <span class="n">buffer_length</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_receivers</span> <span class="o">=</span> <span class="n">num_receivers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conns</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">send_cnt</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threads</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num</span><span class="p">):</span>
+            <span class="n">conn0</span><span class="p">,</span> <span class="n">conn1</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Pipe</span><span class="p">(</span><span class="n">duplex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">conn1</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">conn1</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conn0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">send_cnt</span><span class="p">[</span><span class="n">conn0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="MultiProcessJobExecutor.shutdown"><a class="viewcode-back" href="../../connection.html#handyrl.connection.MultiProcessJobExecutor.shutdown">[docs]</a>    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="p">:</span>
+            <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="MultiProcessJobExecutor.recv"><a class="viewcode-back" href="../../connection.html#handyrl.connection.MultiProcessJobExecutor.recv">[docs]</a>    <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="MultiProcessJobExecutor.start"><a class="viewcode-back" href="../../connection.html#handyrl.connection.MultiProcessJobExecutor.start">[docs]</a>    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_sender</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_receivers</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_receiver</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">i</span><span class="p">,)))</span>
+        <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="p">:</span>
+            <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;start sender&#39;</span><span class="p">)</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+            <span class="n">total_send_cnt</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">conn</span><span class="p">,</span> <span class="n">cnt</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_cnt</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">cnt</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffer_length</span><span class="p">:</span>
+                    <span class="n">conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">send_generator</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">send_cnt</span><span class="p">[</span><span class="n">conn</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+                    <span class="n">total_send_cnt</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">total_send_cnt</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;finished sender&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_receiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;start receiver </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">index</span><span class="p">)</span>
+        <span class="n">conns</span> <span class="o">=</span> <span class="p">[</span><span class="n">conn</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">conn</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_receivers</span> <span class="o">==</span> <span class="n">index</span><span class="p">]</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+            <span class="n">tmp_conns</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">conns</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">conn</span> <span class="ow">in</span> <span class="n">tmp_conns</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">cnt</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocess</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocess</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">send_cnt</span><span class="p">[</span><span class="n">conn</span><span class="p">]</span> <span class="o">-=</span> <span class="n">cnt</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+                        <span class="k">break</span>
+                    <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+                        <span class="k">pass</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;finished receiver </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">index</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="QueueCommunicator"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator">[docs]</a><span class="k">class</span> <span class="nc">QueueCommunicator</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conns</span><span class="o">=</span><span class="p">[]):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn_ids</span> <span class="o">=</span> <span class="p">{},</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">conn</span> <span class="ow">in</span> <span class="n">conns</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threads</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_send_thread</span><span class="p">),</span>
+            <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_thread</span><span class="p">),</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="p">:</span>
+            <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+<div class="viewcode-block" id="QueueCommunicator.shutdown"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator.shutdown">[docs]</a>    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">thread</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">threads</span><span class="p">:</span>
+            <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="QueueCommunicator.recv"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator.recv">[docs]</a>    <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="QueueCommunicator.send"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator.send">[docs]</a>    <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">send_data</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">conn</span><span class="p">,</span> <span class="n">send_data</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="QueueCommunicator.add"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator.add">[docs]</a>    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="p">[</span><span class="n">conn</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn_ids</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn_ids</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+<div class="viewcode-block" id="QueueCommunicator.disconnect"><a class="viewcode-back" href="../../connection.html#handyrl.connection.QueueCommunicator.disconnect">[docs]</a>    <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;disconnected&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_send_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">conn</span><span class="p">,</span> <span class="n">send_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">send_data</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ConnectionResetError</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">BrokenPipeError</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_recv_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+            <span class="n">conn_list</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">select</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conns</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[],</span> <span class="mf">0.3</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">conn</span> <span class="ow">in</span> <span class="n">conn_list</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">recv_data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">ConnectionResetError</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">except</span> <span class="ne">EOFError</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown_flag</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">input_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">conn</span><span class="p">,</span> <span class="n">recv_data</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+                        <span class="k">break</span>
+                    <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+                        <span class="k">pass</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, DeNA Co., Ltd..
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
