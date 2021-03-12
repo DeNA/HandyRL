@@ -25,3 +25,8 @@ Build docs.
 cd docs
 make html
 ```
+
+Copy built docs to `docs` folder.
+```
+cp docs/build/* docs
+```
