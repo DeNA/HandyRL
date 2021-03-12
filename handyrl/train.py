@@ -89,18 +89,19 @@ def make_batch(episodes, args):
 
         # pad each array if step length is short
         if len(tmask) < args['forward_steps']:
-            pad_len = args['forward_steps'] - len(tmask)
-            obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
-            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
-            progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
+            pad_len_b = args['burn_in_steps'] - (ep['train_start'] - ep['start'])
+            pad_len = args['forward_steps'] - len(tmask) - pad_len_b
+            obs = map_r(obs, lambda o: np.pad(o, [(pad_len_b, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            p = np.pad(p, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            v = np.pad(np.concatenate([v, np.tile(oc, [pad_len, 1, 1])]), [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0)
+            act = np.pad(act, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            rew = np.pad(rew, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmask = np.pad(tmask, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            omask = np.pad(omask, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
+            amask = np.pad(amask, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
+            progress = np.pad(progress, [(pad_len_b, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
         datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
@@ -162,7 +163,11 @@ def forward_prediction(model, hidden, batch, args):
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
-            outputs_ = model(obs, hidden_)
+            if t < args['burn_in_steps']:
+                with torch.no_grad():
+                    outputs_= model(obs, hidden_)
+            else:
+                outputs_ = model(obs, hidden_)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = outputs_['hidden']
@@ -290,16 +295,18 @@ class Batcher:
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
-        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
-        st = random.randrange(turn_candidates)
-        ed = min(st + self.args['forward_steps'], ep['steps'])
+        trained_steps = self.args['forward_steps'] - self.args['burn_in_steps']
+        turn_candidates = 1 + max(0, ep['steps'] - trained_steps)  # change start turn by sequence length
+        st_train = random.randrange(turn_candidates)
+        ed = min(st_train + trained_steps, ep['steps'])
+        st = max(0, st_train - self.args['burn_in_steps'])
         st_block = st // self.args['compress_steps']
         ed_block = (ed - 1) // self.args['compress_steps'] + 1
         ep_minimum = {
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps']
+            'start': st, 'end': ed, 'train_start': st_train, 'total': ep['steps']
         }
         return ep_minimum
 
