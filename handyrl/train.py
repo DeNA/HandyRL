@@ -164,9 +164,12 @@ def forward_prediction(model, hidden, batch, args):
             else:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
             if t < args['burn_in_steps']:
+                model.eval()
                 with torch.no_grad():
                     outputs_= model(obs, hidden_)
             else:
+                if not model.training:
+                    model.train()
                 outputs_ = model(obs, hidden_)
             for k, o in outputs_.items():
                 if k == 'hidden':
