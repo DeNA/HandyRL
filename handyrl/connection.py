@@ -251,7 +251,7 @@ class QueueCommunicator:
 
     def _recv_thread(self):
         while not self.shutdown_flag:
-            conn_list, _, _ = select.select(self.conns, [], [], 0.3)
+            conn_list = mp.connection.wait(self.conns, 0.3)
             for conn in conn_list:
                 try:
                     recv_data = conn.recv()
