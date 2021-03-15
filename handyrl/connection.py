@@ -8,7 +8,6 @@ import socket
 import pickle
 import threading
 import queue
-import select
 import multiprocessing as mp
 import multiprocessing.connection as connection
 
