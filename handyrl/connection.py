@@ -206,7 +206,8 @@ class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
-        self.conns, self.conn_ids = {}, 0
+        self.conns = {}
+        self.conn_index = 0
         for conn in conns:
             self.add(conn)
         self.shutdown_flag = False
@@ -228,9 +229,9 @@ class QueueCommunicator:
     def send(self, conn, send_data):
         self.output_queue.put((conn, send_data))
 
-    def add(self, conn):
-        self.conns[conn] = self.conn_ids
-        self.conn_ids += 1
+    def add_connection(self, conn):
+        self.conns[conn] = self.conn_index
+        self.conn_index += 1
 
     def disconnect(self, conn):
         print('disconnected')
