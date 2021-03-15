@@ -251,8 +251,8 @@ class QueueCommunicator:
 
     def _recv_thread(self):
         while not self.shutdown_flag:
-            conn_list = connection.wait(self.conns, 0.3)
-            for conn in conn_list:
+            conns = connection.wait(self.conns, timeout=0.3)
+            for conn in conns:
                 try:
                     recv_data = conn.recv()
                 except ConnectionResetError:
