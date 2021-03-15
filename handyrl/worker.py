@@ -10,6 +10,7 @@ import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
+import pickle
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
@@ -47,7 +48,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = send_recv(self.conn, ('model', model_id))
+                    model_pool[model_id] = pickle.loads(send_recv(self.conn, ('model', model_id)))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]

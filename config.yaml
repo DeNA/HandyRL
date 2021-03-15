@@ -1,12 +1,9 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.envs.tictactoe'
     #env: 'Geister'
-    #source: 'handyrl.envs.geister'
     #env: 'HungryGeese'
-    #source: 'handyrl.envs.kaggle.hungry_geese'
-
+    #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
 
 train_args:
     turn_based_training: True
