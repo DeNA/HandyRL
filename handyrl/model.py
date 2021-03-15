@@ -13,21 +13,8 @@ import torch.nn.functional as F
 from .util import map_r
 
 
-def to_torch(x, transpose=False, unsqueeze=None):
-    if x is None:
-        return None
-    elif isinstance(x, (list, tuple, set)):
-        return type(x)(to_torch(xx, transpose, unsqueeze) for xx in x)
-    elif isinstance(x, dict):
-        return type(x)((key, to_torch(xx, transpose, unsqueeze)) for key, xx in x.items())
-
-    a = np.array(x)
-    if transpose:
-        a = np.swapaxes(a, 0, 1)
-    if unsqueeze is not None:
-        a = np.expand_dims(a, unsqueeze)
-
-    return torch.from_numpy(a).contiguous()
+def to_torch(x):
+    return map_r(x, lambda x: torch.from_numpy(x).contiguous() if x is not None else None)
 
 
 def to_numpy(x):
@@ -229,8 +216,8 @@ class BaseModel(nn.Module):
         # numpy array -> numpy array
         self.eval()
         with torch.no_grad():
-            xt = to_torch(x, unsqueeze=0)
-            ht = to_torch(hidden, unsqueeze=0)
+            xt = map_r(x, lambda x: torch.from_numpy(x).contiguous().unsqueeze(0) if x is not None else None)
+            ht = map_r(hidden, lambda h: torch.from_numpy(h).contiguous().unsqueeze(0) if h is not None else None)
             outputs = self.forward(xt, ht, **kwargs)
         return map_r(outputs, lambda o: o.detach().numpy().squeeze(0) if o is not None else None)
 
