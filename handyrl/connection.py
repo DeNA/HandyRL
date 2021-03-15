@@ -10,6 +10,7 @@ import threading
 import queue
 import select
 import multiprocessing as mp
+import multiprocessing.connection as connection
 
 
 def send_recv(conn, sdata):
@@ -185,7 +186,7 @@ class MultiProcessJobExecutor:
         print('start receiver %d' % index)
         conns = [conn for i, conn in enumerate(self.conns) if i % self.num_receivers == index]
         while not self.shutdown_flag:
-            tmp_conns = mp.connection.wait(conns)
+            tmp_conns = connection.wait(conns)
             for conn in tmp_conns:
                 data, cnt = conn.recv()
                 if self.postprocess is not None:
@@ -251,7 +252,7 @@ class QueueCommunicator:
 
     def _recv_thread(self):
         while not self.shutdown_flag:
-            conn_list = mp.connection.wait(self.conns, 0.3)
+            conn_list = connection.wait(self.conns, 0.3)
             for conn in conn_list:
                 try:
                     recv_data = conn.recv()
