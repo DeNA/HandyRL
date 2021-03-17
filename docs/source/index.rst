@@ -10,11 +10,12 @@ Welcome to HandyRL's documentation!
    :maxdepth: 1
    :caption: Contents:
 
-   tutorial
+   Tutorial: Training for Tic-Tac-Toe <tutorial/tictactoe>
+
    documentation/parameters
    documentation/large_scale_training
    documentation/custom_environment
    documentation/api
    modules
    environments
-   faq/faq
+   documentation/faq   
