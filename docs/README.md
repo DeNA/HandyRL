@@ -22,6 +22,7 @@ Copy built docs to `docs` folder.
 ```
 cd docs
 cp -a build/html/. .
+rm -r build/
 ```
 
 Push the new docs.
