@@ -104,17 +104,17 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 [Full documentation](https://DeNA.github.io/HandyRL)
 
-* [Tutorial](https://DeNA.github.io/HandyRL/tutorial.html)
+* [Tutorial](https://DeNA.github.io/HandyRL/tutorial/tictactoe.html)
 * [Config Parameters](https://DeNA.github.io/HandyRL/documentation/parameters.html) shows a list of parameters of `config.yaml`.
 * [Large-Scale Training](https://DeNA.github.io/HandyRL/documentation/large_scale_training.html) is a procedure for large scale training remotely.
 * [Customized Environment](https://DeNA.github.io/HandyRL/documentation/custom_environment.html) explain an interface of environment to create your own game.
 * [API](https://DeNA.github.io/HandyRL/documentation/api.html) shows API of `main.py`.
 * [Modules](https://DeNA.github.io/HandyRL/modules.html) lists handyrl modules.
 * [Environments](https://DeNA.github.io/HandyRL/environments.html) lists environments implemented in HandyRL.
-* [FAQ](https://DeNA.github.io/HandyRL/faq/faq.html)
+* [FAQ](https://DeNA.github.io/HandyRL/documentation/faq.html)
 
 
 ## Use Cases
 
-*   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
 *   [Month 1 Winner in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/222941)
+*   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
