@@ -10,6 +10,7 @@ import threading
 import random
 import bz2
 import pickle
+import warnings
 from collections import deque
 
 import numpy as np
@@ -18,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 import torch.optim as optim
+import psutil
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
@@ -421,6 +423,7 @@ class Learner:
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
+        self.flags = set()
 
         # trained datum
         self.model_era = self.args['restart_epoch']
@@ -480,8 +483,17 @@ class Learner:
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
 
         # store generated episodes
+        mem = psutil.virtual_memory()
+        mem_used_ratio = mem.used / mem.total
+        mem_ok = mem_used_ratio <= 0.5
+        maximum_episodes = self.args['maximum_episodes'] if mem_ok else len(self.trainer.episodes)
+
+        if not mem_ok and 'memory_over' not in self.flags:
+            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_used_ratio * 100, len(self.trainer.episodes)))
+            self.flags.add('memory_over')
+
         self.trainer.episodes.extend([e for e in episodes if e is not None])
-        while len(self.trainer.episodes) > self.args['maximum_episodes']:
+        while len(self.trainer.episodes) > maximum_episodes:
             self.trainer.episodes.popleft()
 
     def feed_results(self, results):
@@ -519,6 +531,9 @@ class Learner:
         if model is None:
             model = self.model
         self.update_model(model, steps)
+
+        # clear flags
+        self.flags = set()
 
     def server(self):
         # central conductor server
