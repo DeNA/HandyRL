@@ -264,7 +264,7 @@ class Batcher:
 
         self.executor = MultiProcessJobExecutor(
             self._worker, self._selector(), self.args['num_batchers'],
-            buffer_length=3, num_receivers=2
+            buffer_length=1, num_receivers=2
         )
 
     def _selector(self):
