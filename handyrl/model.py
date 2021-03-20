@@ -14,7 +14,7 @@ from .util import map_r
 
 
 def to_torch(x):
-    return map_r(x, lambda x: torch.from_numpy(x).contiguous() if x is not None else None)
+    return map_r(x, lambda x: torch.from_numpy(np.array(x)).contiguous() if x is not None else None)
 
 
 def to_numpy(x):
@@ -216,8 +216,8 @@ class BaseModel(nn.Module):
         # numpy array -> numpy array
         self.eval()
         with torch.no_grad():
-            xt = map_r(x, lambda x: torch.from_numpy(x).contiguous().unsqueeze(0) if x is not None else None)
-            ht = map_r(hidden, lambda h: torch.from_numpy(h).contiguous().unsqueeze(0) if h is not None else None)
+            xt = map_r(x, lambda x: torch.from_numpy(np.array(x)).contiguous().unsqueeze(0) if x is not None else None)
+            ht = map_r(hidden, lambda h: torch.from_numpy(np.array(h)).contiguous().unsqueeze(0) if h is not None else None)
             outputs = self.forward(xt, ht, **kwargs)
         return map_r(outputs, lambda o: o.detach().numpy().squeeze(0) if o is not None else None)
 
