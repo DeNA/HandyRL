@@ -38,10 +38,6 @@ def to_gpu(data):
     return map_r(data, lambda x: x.cuda() if x is not None else None)
 
 
-def to_gpu_or_not(data, gpu):
-    return to_gpu(data) if gpu else data
-
-
 # model base class
 
 class BaseModel(nn.Module):
