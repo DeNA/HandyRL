@@ -21,7 +21,7 @@ import torch.optim as optim
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu_or_not, RandomModel
+from .model import to_torch, to_gpu, RandomModel
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -370,10 +370,13 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
-            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
+            batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
+            hidden = self.model.init_hidden([batch_size, player_count])
+            if self.gpu > 0:
+                batch = to_gpu(self.batcher.batch())
+                hidden = to_gpu(hidden)
 
             losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
 
