@@ -9,7 +9,7 @@ sys.path.append('../')
 
 from handyrl import Learner, WorkerCluster
 from handyrl.envs.tictactoe import Environment
-from handyrl.model import SimpleConv2DModel as Net
+from handyrl.envs.tictactoe import SimpleConv2dModel as Net
 
 
 if __name__ == '__main__':

@@ -410,7 +410,7 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, env, net, args, remote=False):
+    def __init__(self, args, env=None, net=None, remote=False):
         train_args = args['train_args']
         env_args = args['env_args']
         train_args['env'] = env_args
@@ -420,14 +420,14 @@ class Learner:
         self.remote = remote
         random.seed(args['seed'])
 
-        self.env = env(args['env'])
+        self.env = env(args['env']) if env is not None else make_env(env_args)
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = self.env.net()
+        self.model_class = net if net is not None else self.env.net()
         train_model = self.model_class()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
@@ -633,11 +633,11 @@ class Learner:
 
 
 def train_main(args):
-    prepare_env(env_args)  # preparing environment is needed in stand-alone mode
-    learner = Learner(train_args)
+    prepare_env(args['env_args'])  # preparing environment is needed in stand-alone mode
+    learner = Learner(args=args)
     learner.run()
 
 
 def train_server_main(args):
-    learner = Learner(train_args, remote=True)
+    learner = Learner(args=args, remote=True)
     learner.run()

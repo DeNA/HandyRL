@@ -4,4 +4,3 @@
 from .train import Learner
 from .worker import WorkerCluster
 from .environment import BaseEnvironment
-from .model import BaseModel
