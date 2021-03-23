@@ -1,6 +1,3 @@
-# Copyright (c) 2020 DeNA Co., Ltd.
-# Licensed under The MIT License [see LICENSE for details]
-
 import os
 import sys
 import yaml
