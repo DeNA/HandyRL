@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel
 
 
 class ConvLSTMCell(nn.Module):
@@ -129,13 +128,12 @@ class ScalarHead(nn.Module):
         return h
 
 
-class GeisterNet(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
+class GeisterNet(nn.Module):
+    def __init__(self):
+        super().__init__()
 
         layers, filters, p_filters = 3, 32, 8
-        o = env.observation()
-        input_channels = o['scalar'].shape[-1] + o['board'].shape[-3]
+        input_channels = 7 + 18  # board channels + scalar inputs
         self.input_size = (input_channels, 6, 6)
 
         self.conv1 = nn.Conv2d(input_channels, filters, kernel_size=3, stride=1, padding=1, bias=False)

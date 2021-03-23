@@ -18,6 +18,7 @@ from .connection import send_recv, open_multiprocessing_connections
 from .connection import connect_socket_connection, accept_socket_connections
 from .evaluation import Evaluator
 from .generation import Generator
+from .model import ModelWrapper
 
 
 class Worker:
@@ -48,7 +49,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = pickle.loads(send_recv(self.conn, ('model', model_id)))
+                    model_pool[model_id] = ModelWrapper(pickle.loads(send_recv(self.conn, ('model', model_id))))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]
