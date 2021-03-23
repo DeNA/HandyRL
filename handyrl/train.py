@@ -262,10 +262,7 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        self.executor = MultiProcessJobExecutor(
-            self._worker, self._selector(), self.args['num_batchers'],
-            buffer_length=1, num_receivers=2
-        )
+        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'], num_receivers=2)
 
     def _selector(self):
         while True:
@@ -276,7 +273,7 @@ class Batcher:
         while not self.shutdown_flag:
             episodes = conn.recv()
             batch = make_batch(episodes, self.args)
-            conn.send((batch, 1))
+            conn.send(batch)
         print('finished batcher %d' % bid)
 
     def run(self):
