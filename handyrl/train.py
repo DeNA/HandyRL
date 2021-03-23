@@ -626,8 +626,38 @@ class Learner:
             self.shutdown()
 
 
+def preprocess_config(args):
+    default_config = {
+        'train_args': {
+            'turn_based_training': True,
+            'observation': False,
+            'compress_steps': 4,
+            'entropy_regularization': 1.0e-1,
+            'entropy_regularization_decay': 0.1,
+            'maximum_episodes': 100000,
+            'num_batchers': 2,
+            'eval_rate': 0.1,
+            'policy_target': 'TD',
+            'value_target': 'TD',
+            'seed': 0,
+            'restart_epoch': 0,
+        },
+    }
+
+    def recursive_update(dct, merge_dct):
+        for k, v in merge_dct.items():
+            if k in dct and isinstance(dct[k], dict) and isinstance(v, dict):
+                recursive_update(dct[k], v)
+            elif not k in dct:
+                dct[k] = v
+        return dct
+
+    recursive_update(default_config, args)
+    return args
+
+
 def train_main(args):
-    train_args = args['train_args']
+    train_args = preprocess_config(args['train_args'])
     train_args['remote'] = False
 
     env_args = args['env_args']
@@ -639,7 +669,7 @@ def train_main(args):
 
 
 def train_server_main(args):
-    train_args = args['train_args']
+    train_args = preprocess_config(args['train_args'])
     train_args['remote'] = True
 
     env_args = args['env_args']
