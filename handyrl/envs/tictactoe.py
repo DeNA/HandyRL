@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel
 
 
 class Conv(nn.Module):
@@ -50,19 +49,15 @@ class Head(nn.Module):
         return h
 
 
-class SimpleConv2dModel(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
+class SimpleConv2dModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        layers, filters = 3, 32
 
-        self.input_shape = env.observation().shape
-
-        layers, filters = args.get('layers', 3), args.get('filters', 32)
-        internal_size = (filters, *self.input_shape[1:])
-
-        self.conv = nn.Conv2d(self.input_shape[0], filters, 3, stride=1, padding=1)
+        self.conv = nn.Conv2d(3, filters, 3, stride=1, padding=1)
         self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
-        self.head_p = Head(internal_size, 2, self.action_length)
-        self.head_v = Head(internal_size, 1, 1)
+        self.head_p = Head((filters, 3, 3), 2, 9)
+        self.head_v = Head((filters, 3, 3), 1, 1)
 
     def forward(self, x, hidden=None):
         h = F.relu(self.conv(x))

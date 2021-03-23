@@ -21,7 +21,7 @@ import torch.optim as optim
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu, RandomModel
+from .model import to_torch, to_gpu, RandomModel, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -262,10 +262,7 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        self.executor = MultiProcessJobExecutor(
-            self._worker, self._selector(), self.args['num_batchers'],
-            buffer_length=1, num_receivers=2
-        )
+        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'], num_receivers=2)
 
     def _selector(self):
         while True:
@@ -276,7 +273,7 @@ class Batcher:
         while not self.shutdown_flag:
             episodes = conn.recv()
             batch = make_batch(episodes, self.args)
-            conn.send((batch, 1))
+            conn.send(batch)
         print('finished batcher %d' % bid)
 
     def run(self):
@@ -361,10 +358,10 @@ class Trainer:
             return
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
-        train_model = self.model
+        train_model = model = ModelWrapper(self.model)
         if self.gpu:
             if self.gpu > 1:
-                train_model = nn.DataParallel(self.model)
+                train_model = nn.DataParallel(model)
             train_model.cuda()
         train_model.train()
 
@@ -373,7 +370,7 @@ class Trainer:
             batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = self.model.init_hidden([batch_size, player_count])
+            hidden = model.init_hidden([batch_size, player_count])
             if self.gpu > 0:
                 batch = to_gpu(self.batcher.batch())
                 hidden = to_gpu(hidden)
@@ -428,7 +425,7 @@ class Learner:
         # trained datum
         self.model_era = self.args['restart_epoch']
         self.model_class = self.env.net()
-        train_model = self.model_class(self.env, args)
+        train_model = self.model_class()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
         else:
@@ -587,7 +584,7 @@ class Learner:
                         model = self.model
                         if model_id != self.model_era:
                             try:
-                                model = self.model_class(self.env, self.args)
+                                model = self.model_class()
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model

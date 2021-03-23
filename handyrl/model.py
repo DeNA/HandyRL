@@ -25,18 +25,26 @@ def to_gpu(data):
     return map_r(data, lambda x: x.cuda() if x is not None else None)
 
 
-# model base class
+# model wrapper class
 
-class BaseModel(nn.Module):
-    def __init__(self, env, args=None):
+class ModelWrapper(nn.Module):
+    def __init__(self, model):
         super().__init__()
-        self.action_length = env.action_length()
+        self.model = model
 
     def init_hidden(self, batch_size=None):
+        if hasattr(self.model, 'init_hidden'):
+            return self.model.init_hidden(batch_size)
         return None
+
+    def forward(self, *args, **kwargs):
+        return self.model.forward(*args, **kwargs)
 
     def inference(self, x, hidden, **kwargs):
         # numpy array -> numpy array
+        if hasattr(self.model, 'inference'):
+            return self.model.inference(x, hidden, **kwargs)
+
         self.eval()
         with torch.no_grad():
             xt = map_r(x, lambda x: torch.from_numpy(np.array(x)).contiguous().unsqueeze(0) if x is not None else None)
@@ -47,6 +55,10 @@ class BaseModel(nn.Module):
 
 # simple model
 
-class RandomModel(BaseModel):
+class RandomModel(nn.Module):
+    def __init__(self, env):
+        super().__init__()
+        self.action_length = env.action_length()
+
     def inference(self, x=None, hidden=None):
         return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(1, dtype=np.float32)}
