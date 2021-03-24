@@ -206,7 +206,7 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(action)
 
     def net(self):
-        return GeeseNet
+        return GeeseNet()
 
     def observation(self, player=None):
         if player is None:
