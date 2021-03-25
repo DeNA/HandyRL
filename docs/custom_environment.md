@@ -11,7 +11,7 @@ The basic steps are as below:
 
 To use the customized environment, write a wrapper class named `Environment` in `my_env.py` according to the HandyRL's format.
 
-The games HandyRL supports are as below:
+HandyRL currently supports the (discrete-time and discrete-action) games like below:
 * Turn-based game (alternating game) ([tictactoe.py](/handyrl/envs/tictactoe.py), [geister.py](/handyrl/envs/geister.py))
 * Simultaneous game ([hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py))
 
@@ -121,18 +121,20 @@ Finally, the features and neural network are implemented in `observation()` and 
 
 #### Simultaneous Game
 
-In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
+As the difference between the turn-based game, you need to implement step() and turns(). we recommend to check your script by comparing with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
 
-First, :code:`step()` method is required to handle the actions of multi players.
+First, `step()` method is required to handle the actions of multi players.
 ```py
     #
     # Should be defined in games which has simultaneous transition
     #
     def step(self, actions):
-        ...
+        for p, action in actions.items():
+            if action is not None:
+                self.play(action, p)
 ```
 
-`turns()` returns the list of player id that can act in the step.
+Next, `turns()` returns the list of player id that can act in the turn.
 ```py
     #
     # Should be defined if you use multiplayer simultaneous action game
