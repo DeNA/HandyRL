@@ -73,7 +73,6 @@ Set `config.yaml` for your training configuration. When you run a training with 
 ```yaml
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.envs.tictactoe'
 
 train_args:
     ...
@@ -81,7 +80,7 @@ train_args:
     ...
 ```
 
-NOTE: TicTacToe is used as a default game. [Here is the list of games](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
+NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://DeNA.github.io/HandyRL/documentation/parameters.html).
 
 
 #### Step 2: Train!
@@ -109,23 +108,11 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 * [**Config Parameters**](docs/parameters.md) shows a list of parameters of `config.yaml`.
 * [**Large Scale Training**](docs/large_scale_training.md) is a procedure for large scale training remotely.
-* [**Train with Customized Environment**](docs/custom_environment.md) explain an interface of environment to create your own game.
-* [**API**](docs/api.md) shows API of `main.py`
-
-
-## Frequently Asked Questions
-
-
-*   How to use rule-based AI as an opponent?
-    *   You can easily use it by creating a rule-based AI method `rule_based_action()` in a class `Environment`.
-*   How to change the opponent in evaluation?
-    *   Set your agent in `evaluation.py` like `agents = [agent1, YourOpponentAgent()]`
-* `too many open files` Error
-    * This error happens in a large-scale training. You should increase the maximum file limit by running `ulimit -n 65536`. The value 65536 depends on a training setting. Note that the effect of `ulimit` is session-based so you will have to either change the limit permanently (OS and version dependent) or run this command in your shell starting script.
-    * In Mac OSX, you may need to change the system limit with `launchctl` before running `ulimit -n` (e.g. [How to Change Open Files Limit on OS X and macOS](https://gist.github.com/tombigel/d503800a282fcadbee14b537735d202c))
+* [**Train with Customized Environment**](docs/custom_environment.md) explains an interface of environment to create your own game.
+* [**API**](docs/api.md) shows entry-point APIs of `main.py`
 
 
 ## Use Cases
 
-*   [The 5th solution in Google Research Football with Manchester City F.C.](https://www.kaggle.com/c/google-football/discussion/203412) (Kaggle)
-*   [Baseline RL AI in Hungry Geese](https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning) (Kaggle)
+*   [Month 1 Winner in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/222941)
+*   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)

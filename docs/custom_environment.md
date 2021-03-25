@@ -4,31 +4,31 @@ In this page, you will know how to prepare the customized environment where you 
 
 The basic steps are as below:
 * Prepare the customized environment
-* Prepare a config
+* Prepare your config file
 * Train and evaluate on the customized environment
 
 ### Prepare the Customized Environment
 
-To use the customized environment, write a wrapper class named `Environment` in `my_env.py` according to the HandyRL's format
+To use the customized environment, write a wrapper class named `Environment` in `my_env.py` according to the HandyRL's format.
 
-**NOTE**: the games HandyRL supports are as below:
-* turn-based game (alternating game) ([tictactoe.py](/handyrl/envs/tictactoe.py), [geister.py](/handyrl/envs/geister.py))
-* simultaneous game ([hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py))
+The games HandyRL supports are as below:
+* Turn-based game (alternating game) ([tictactoe.py](/handyrl/envs/tictactoe.py), [geister.py](/handyrl/envs/geister.py))
+* Simultaneous game ([hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py))
 
 To see all interfaces of environment, check [environment.py](/handyrl/environment.py).
 
 #### Turn-Based Game
 
-Let's create a class `Environment`. We recommend to check compared with the implementation of sample environment like sample game [Tic-Tac-Toe](/handyrl/envs/tictactoe.py).
+Let's create a class `Environment`. If it is the first time for you to use HandyRL, we recommend to check your script by comparing with the implementation of sample environment like sample game [Tic-Tac-Toe](/handyrl/envs/tictactoe.py).
 
 ```python
-# my_env.py
-class Environment:
-    def __init__(self, args={}):
-        ...
+    # my_env.py
+    class Environment:
+        def __init__(self, args={}):
+            ...
 ```
 
-Next, implement `reset()` and `play()` methods. `reset()` resets the game and `play()` steps the game state with one step.
+Next, implement `reset()` which resets the game. Then `play()` or `step()` methods should be implemented. `play()` and `step()` function step the game state with one step. Note that the difference between those methods is the argument.
 
 ```python
     #
@@ -42,9 +42,17 @@ Next, implement `reset()` and `play()` methods. `reset()` resets the game and `p
     #
     def play(self, action, player):
         ...
+
+    #
+    # Should be defined in games which has simultaneous transition
+    #
+    def step(self, actions):
+        for p, action in actions.items():
+            if action is not None:
+                self.play(action, p)
 ```
 
-`terminal()` returns whether the game finished or not
+`terminal()` returns whether the game finished or not.
 ```py
     #
     # Should be defined in all games
@@ -59,13 +67,13 @@ Next, implement `reset()` and `play()` methods. `reset()` resets the game and `p
     # Should be defined if you use multiplayer game or add name to each player
     #
     def players(self):
-        return [0]
+        return [0, 1]  # player id
 
     #
     # Should be defined if you use multiplayer sequential action game
     #
     def turn(self):
-        return 0
+        return 0  # player id
 ```
 
 `reward()` and `outcome()` return the reward and outcome respectively at the step.
@@ -74,44 +82,48 @@ Next, implement `reset()` and `play()` methods. `reset()` resets the game and `p
     # Should be defined if you use immediate reward
     #
     def reward(self):
-        return {0: 0}
+        return {0: 1, 1: 10}  # {player_id: reward}
 
     #
     # Should be defined in all games
     #
     def outcome(self):
-        return [0]
+        return {0: -1, 1: 1}  # {player_id: outcome} -1: loss, 0: draw, 1: win
 ```
 
-`action_length()` returns the length of all legal actions. `legal_actions()` returns the available actions in the step. Note that the actions are represented by int.
+`action_length()` returns the length of all legal actions. `legal_actions()` returns the available actions (indices) in the step. Note that the actions are represented by int.
 ```py
     #
     # Should be defined in all games
     #
     def action_length(self):
-        return 10
+        return 4  # example: right(0), bottom(1), left(2), top(3)
 
     #
     # Should be defined in all games
     #
     def legal_actions(self, player):
-        return 0
+        return [0, 3]  # right(0) and top(3) available
 ```
 
-Finally, the features to feed neural network is implemented in `observation()`. This method need to return the input array for neural network.
+Finally, the features and neural network are implemented in `observation()` and `net()`. `observation()` returns the input array for neural network. `net()` returns PyTorch model.
 ```py
     #
     # Should be defined in all games
     #
     def observation(self, player=None):
-        return [0, 1, 2, 3]
+        obs = ...
+        return np.array(obs)  # this array will be fed to neural network
+
+    def net(self):
+        return YourNetworkModuleClass
 ```
 
 #### Simultaneous Game
 
 In simultaneous game, you need to implement different methods for handling multi players. We recommend to check compared with the implementation of sample environment like sample game [hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py).
 
-`step()` method is required to handle the actions of multi players.
+First, :code:`step()` method is required to handle the actions of multi players.
 ```py
     #
     # Should be defined in games which has simultaneous transition
@@ -130,19 +142,16 @@ In simultaneous game, you need to implement different methods for handling multi
 ```
 
 
-### Prepare a config
+### Prepare your config file
 
-Set the name of the environment to `env` and script path to `source`.
+Set the name of the environment or path to environment script to `env`.
 
 ```yaml
 env_args:
-    env: 'MyCustomizedEnvironment'
-    source: 'my_env'
+    env: 'path.to.my_env'
 ```
 
-**NOTE**: the above config requires that `my_env.py` is in the same directory of `main.py`.
-
-### Train and Evaluate on the Customized Environment
+### Train and evaluate on the customized environment
 
 ```
 python main.py --train

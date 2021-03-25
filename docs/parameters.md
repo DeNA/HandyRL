@@ -8,10 +8,8 @@ This parameters are used for training and evaluation.
 
 * `env`, type = string
     * environment name
-    * **NOTE**: only used for print in terminal for now
-* `source`, type = string
-    * path to environment module
-    * **NOTE**: if your environment module is on `handyrl/envs/your_env.py`, set `handyrl.envs.your_env` (split `.py`)
+    * **NOTE** default games: TicTacToe, Geister, ParallelTicTacToe, HungryGeese
+    * **NOTE** if your environment module is on :code:`handyrl/envs/your_env.py`, set :code:`handyrl.envs.your_env` (split :code:`.py`)
 
 
 ### Training Parameters (train_args)
@@ -85,7 +83,7 @@ This parameters are used only for worker of distributed training (`python main.p
 
 * `server_address`, type = string
     * training server address to be connected from worker
-    * **NOTE**: when training a model on cloud (e.g. GCP, AWS), the internal/external IP of virtual machine can be set here
+    * **NOTE** when training a model on cloud (e.g. GCP, AWS), the internal/external IP of virtual machine can be set here
 * `num_parallel`, type = int
     * the number of worker processes
     * `num_parallel` workers are generated automatically for data generation (self-play) and evaluation
