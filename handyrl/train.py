@@ -372,7 +372,7 @@ class Trainer:
             player_count = batch['value'].size(2)
             hidden = model.init_hidden([batch_size, player_count])
             if self.gpu > 0:
-                batch = to_gpu(self.batcher.batch())
+                batch = to_gpu(batch)
                 hidden = to_gpu(hidden)
 
             losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
