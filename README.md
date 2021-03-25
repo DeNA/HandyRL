@@ -80,7 +80,7 @@ train_args:
     ...
 ```
 
-NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](https://DeNA.github.io/HandyRL/documentation/parameters.html).
+NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All parameters are shown in [Config Parameters](docs/parameters.md).
 
 
 #### Step 2: Train!
