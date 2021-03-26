@@ -19,7 +19,6 @@ HandyRL is a handy and simple framework based on Python and PyTorch for distribu
     * [Large Scale Training](docs/large_scale_training.md)
     * [Train with Customized Environment](docs/custom_environment.md)
     * [API](docs/api.md)
-* [Frequently Asked Questions](#Frequently-Asked-Questions)
 * [Use Cases](#Use-Cases)
 
 HandyRL is updated at the beginning of every month except for important updates. We appreciate all contributions. Please let us know if you find a bug or have a suggestion by creating an issue and a PR.
