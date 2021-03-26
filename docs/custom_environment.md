@@ -11,7 +11,7 @@ The basic steps are as below:
 
 To use the customized environment, write a wrapper class named `Environment` in `my_env.py` according to the HandyRL's format.
 
-HandyRL currently supports the (discrete-time and discrete-action) games like below:
+HandyRL currently supports games like below:
 * Turn-based game (alternating game) ([tictactoe.py](/handyrl/envs/tictactoe.py), [geister.py](/handyrl/envs/geister.py))
 * Simultaneous game ([hungry_geese.py](/handyrl/envs/kaggle/hungry_geese.py))
 
