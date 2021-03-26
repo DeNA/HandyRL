@@ -18,6 +18,7 @@ from .connection import send_recv, open_multiprocessing_connections
 from .connection import connect_socket_connection, accept_socket_connections
 from .evaluation import Evaluator
 from .generation import Generator
+from .model import ModelWrapper
 
 
 class Worker:
@@ -48,7 +49,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = pickle.loads(send_recv(self.conn, ('model', model_id)))
+                    model_pool[model_id] = ModelWrapper(pickle.loads(send_recv(self.conn, ('model', model_id))))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]
@@ -106,7 +107,7 @@ class Gather(QueueCommunicator):
         )
 
         for conn in worker_conns:
-            self.add(conn)
+            self.add_connection(conn)
 
         self.args_buf_len = 1 + len(worker_conns) // 4
         self.result_buf_len = 1 + len(worker_conns) // 4
@@ -174,7 +175,7 @@ class WorkerCluster(QueueCommunicator):
                 while not self.shutdown_flag:  # use super class's flag
                     conn = next(conn_acceptor)
                     if conn is not None:
-                        self.add(conn)
+                        self.add_connection(conn)
                 print('finished worker server')
             # use super class's thread list
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
@@ -187,7 +188,7 @@ class WorkerCluster(QueueCommunicator):
                 conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
-                self.add(conn0)
+                self.add_connection(conn0)
 
 
 def entry(worker_args):
