@@ -37,6 +37,9 @@ class NetworkAgentClient:
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'update':
+                    reset = args[1]
+                    if reset:
+                        self.agent.reset(self.env, show=True)
                     view_transition(self.env)
             self.conn.send(ret)
 
