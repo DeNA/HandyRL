@@ -46,6 +46,9 @@ This parameters are used for training (`python main.py --train`, `python main.py
 * `maximum_episodes`, type = int, constraints: `maximum_episodes` >= `minimum_episodes`
     * maximum buffer size to store episode data
     * the exceeded episode is popped from oldest one
+* `epochs`, type = int
+    * epochs to stop training
+    * **NOTE** If epochs < 0, there is no limit (i.e. keep training)
 * `num_batchers`, type = int
     * the number of batcher that makes batch data in multi-process
 * `eval_rate`, type = double, constraints: 0.0 <= `eval_rate` <= 1.0
