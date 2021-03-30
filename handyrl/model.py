@@ -3,6 +3,9 @@
 
 # neural nets
 
+import os
+os.environ['OMP_NUM_THREADS'] = '1'
+
 import numpy as np
 import torch
 torch.set_num_threads(1)

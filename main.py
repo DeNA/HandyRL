@@ -1,14 +1,11 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
 
-import os
 import sys
 import yaml
 
 
 if __name__ == '__main__':
-    os.environ['OMP_NUM_THREADS'] = '1'
-
     with open('config.yaml') as f:
         args = yaml.safe_load(f)
     print(args)
