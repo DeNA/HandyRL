@@ -37,6 +37,9 @@ class NetworkAgentClient:
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'update':
+                    reset = args[1]
+                    if reset:
+                        self.agent.reset(self.env, show=True)
                     view_transition(self.env)
             self.conn.send(ret)
 
@@ -242,10 +245,11 @@ def network_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    model = env.net()(env)
+    from .model import ModelWrapper
+    model = env.net()()
     model.load_state_dict(torch.load(model_path))
     model.eval()
-    return model
+    return ModelWrapper(model)
 
 
 def client_mp_child(env_args, model_path, conn):

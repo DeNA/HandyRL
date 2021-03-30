@@ -132,24 +132,22 @@ def open_multiprocessing_connections(num_process, target, args_func):
 
 
 class MultiProcessJobExecutor:
-    def __init__(self, func, send_generator, num, postprocess=None, buffer_length=512, num_receivers=1):
+    def __init__(self, func, send_generator, num_workers, postprocess=None, num_receivers=1):
         self.send_generator = send_generator
         self.postprocess = postprocess
-        self.buffer_length = buffer_length
         self.num_receivers = num_receivers
         self.conns = []
-        self.send_cnt = {}
+        self.waiting_conns = queue.Queue()
         self.shutdown_flag = False
-        self.lock = threading.Lock()
         self.output_queue = queue.Queue(maxsize=8)
         self.threads = []
 
-        for i in range(num):
+        for i in range(num_workers):
             conn0, conn1 = mp.Pipe(duplex=True)
             mp.Process(target=func, args=(conn1, i)).start()
             conn1.close()
             self.conns.append(conn0)
-            self.send_cnt[conn0] = 0
+            self.waiting_conns.put(conn0)
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -169,16 +167,14 @@ class MultiProcessJobExecutor:
     def _sender(self):
         print('start sender')
         while not self.shutdown_flag:
-            total_send_cnt = 0
-            for conn, cnt in self.send_cnt.items():
-                if cnt < self.buffer_length:
-                    conn.send(next(self.send_generator))
-                    self.lock.acquire()
-                    self.send_cnt[conn] += 1
-                    self.lock.release()
-                    total_send_cnt += 1
-            if total_send_cnt == 0:
-                time.sleep(0.01)
+            data = next(self.send_generator)
+            while not self.shutdown_flag:
+                try:
+                    conn = self.waiting_conns.get(timeout=0.3)
+                    conn.send(data)
+                    break
+                except queue.Empty:
+                    pass
         print('finished sender')
 
     def _receiver(self, index):
@@ -187,15 +183,13 @@ class MultiProcessJobExecutor:
         while not self.shutdown_flag:
             tmp_conns = connection.wait(conns)
             for conn in tmp_conns:
-                data, cnt = conn.recv()
+                data = conn.recv()
+                self.waiting_conns.put(conn)
                 if self.postprocess is not None:
                     data = self.postprocess(data)
                 while not self.shutdown_flag:
                     try:
                         self.output_queue.put(data, timeout=0.3)
-                        self.lock.acquire()
-                        self.send_cnt[conn] -= cnt
-                        self.lock.release()
                         break
                     except queue.Full:
                         pass
@@ -206,7 +200,8 @@ class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
-        self.conns, self.conn_ids = {}, 0
+        self.conns = {}
+        self.conn_index = 0
         for conn in conns:
             self.add(conn)
         self.shutdown_flag = False
@@ -228,9 +223,9 @@ class QueueCommunicator:
     def send(self, conn, send_data):
         self.output_queue.put((conn, send_data))
 
-    def add(self, conn):
-        self.conns[conn] = self.conn_ids
-        self.conn_ids += 1
+    def add_connection(self, conn):
+        self.conns[conn] = self.conn_index
+        self.conn_index += 1
 
     def disconnect(self, conn):
         print('disconnected')
