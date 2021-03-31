@@ -1,4 +1,0 @@
-PyYAML
-numpy
-torch
-pytest

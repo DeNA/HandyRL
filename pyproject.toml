@@ -8,6 +8,11 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.7"
 
+PyYAML = "^5.4.1"
+numpy = "^1.20.2"
+torch = "^1.8.1"
+pytest = "^6.2.2"
+
 [tool.poetry.dev-dependencies]
 
 [build-system]
