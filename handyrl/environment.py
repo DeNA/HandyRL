@@ -6,10 +6,17 @@
 import importlib
 
 
+ENVS = {
+    'TicTacToe':         'handyrl.envs.tictactoe',
+    'Geister':           'handyrl.envs.geister',
+    'ParallelTicTacToe': 'handyrl.envs.parallel_tictactoe',
+    'HungryGeese':       'handyrl.envs.kaggle.hungry_geese',
+}
+
+
 def prepare_env(env_args):
     env_name = env_args['env']
-    env_source = env_args['source']
-
+    env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
     if env_module is None:
@@ -20,8 +27,7 @@ def prepare_env(env_args):
 
 def make_env(env_args):
     env_name = env_args['env']
-    env_source = env_args['source']
-
+    env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
     if env_module is None:
