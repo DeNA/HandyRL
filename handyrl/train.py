@@ -491,7 +491,7 @@ class Learner:
         # store generated episodes
         mem = psutil.virtual_memory()
         mem_used_ratio = mem.used / mem.total
-        mem_ok = mem_used_ratio <= 0.5
+        mem_ok = mem_used_ratio <= 0.95
         maximum_episodes = self.args['maximum_episodes'] if mem_ok else len(self.trainer.episodes)
 
         if not mem_ok and 'memory_over' not in self.flags:
