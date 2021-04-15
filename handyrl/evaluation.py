@@ -10,10 +10,23 @@ import multiprocessing as mp
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
-from .agent import view, view_transition
 
 
 network_match_port = 9876
+
+
+def view(env, player=None):
+    if hasattr(env, 'view'):
+        env.view(player=player)
+    else:
+        print(env)
+
+
+def view_transition(env):
+    if hasattr(env, 'view_transition'):
+        env.view_transition()
+    else:
+        pass
 
 
 class NetworkAgentClient:
@@ -30,6 +43,8 @@ class NetworkAgentClient:
             elif command == 'outcome':
                 print('outcome = %f' % args[0])
             elif hasattr(self.agent, command):
+                if command == 'action' or command == 'observe':
+                    view(self.env)
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
                     player = args[0]
@@ -68,6 +83,8 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     for agent in agents.values():
         agent.reset(env, show=show)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -95,6 +112,8 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         info = env.diff_info(p)
         agent.update(info, True)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
