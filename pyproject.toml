@@ -4,6 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "handyrl"
+# Bump it to appropreate version if #183 done and ready to release.
 version = "0.0.1"
 description = "Simple framework of distributed reinforcement learning on Python/PyTorch"
 authors = ["DeNA Co., Ltd."]
