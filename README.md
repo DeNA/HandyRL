@@ -48,6 +48,17 @@ cd HandyRL
 
 Then, install additional libraries (e.g. numpy, pytorch). Or run it in a virtual environment or container (e.g. Docker).
 ```
+pip3 install -r requirements.txt
+```
+
+To use games of kaggle environments (e.g. Hungry Geese) you can install also additional dependencies.
+```
+pip3 install -r requirements-dev.txt
+```
+
+Or equivalently, you can use [poetry](https://python-poetry.org/).
+
+```
 poetry install
 ```
 
@@ -82,7 +93,7 @@ NOTE: [Here is the list of games implemented in HandyRL](handyrl/envs). All para
 After creating the configuration, you can start training by running the following command. The trained models are saved in `models` folder every `update_episodes` described in `config.yaml`.
 
 ```
-poetry run python main.py --train
+python main.py --train
 ```
 
 
@@ -92,7 +103,7 @@ After training, you can evaluate the model against any models. The below code ev
 
 
 ```
-poetry run python main.py --eval models/1.pth 100 4
+python main.py --eval models/1.pth 100 4
 ```
 
 NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You can change the agent with any of your agents.

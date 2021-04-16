@@ -29,3 +29,25 @@ jobs:
       - name: pytest
         run: |
           poetry run python -m pytest
+  validate-requirements:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+        poetry-version: [1.1.5]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: ${{ matrix.poetry-version }}
+      - run: |
+          # If failed, do
+          #   $ poetry export --without-hashes -f requirements.txt --output requirements.txt
+          #   $ poetry export --without-hashes -f requirements.txt --output requirements-dev.txt --dev
+          diff <(poetry export --without-hashes -f requirements.txt | grep -v '^Warning:') requirements.txt
+          diff <(poetry export --without-hashes -f requirements.txt --dev | grep -v '^Warning:') requirements-dev.txt
