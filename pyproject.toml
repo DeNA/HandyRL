@@ -1,3 +1,7 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "handyrl"
 version = "0.0.1"
@@ -17,7 +21,3 @@ pytest = "^6.2.2"
 # For handyrl/envs/kaggle/hungry_geese.py
 kaggle-environments = "^1.7.11"
 requests = "^2.25.1"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
