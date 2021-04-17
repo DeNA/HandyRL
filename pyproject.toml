@@ -19,6 +19,7 @@ psutil = "^5.8.0"
 torch = "^1.8.1"
 
 [tool.poetry.dev-dependencies]
+pysen = {version = "^0.9.1", extras = ["lint"]}
 pytest = "^6.2.2"
 # For handyrl/envs/kaggle/hungry_geese.py
 kaggle-environments = "^1.7.11"
