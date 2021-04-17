@@ -29,6 +29,26 @@ jobs:
       - name: pytest
         run: |
           poetry run python -m pytest
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+        poetry-version: [1.1.5]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: abatilo/actions-poetry@v2.0.0
+        with:
+          poetry-version: ${{ matrix.poetry-version }}
+      - run: |
+          poetry install
+      - run: |
+          poetry run pysen run lint
   validate-requirements:
     runs-on: ubuntu-latest
     strategy:
