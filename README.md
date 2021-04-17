@@ -121,3 +121,35 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 *   [Month 1 Winner in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/222941)
 *   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
+
+
+## How to develop HandyRL
+
+### Lint
+
+```console
+poetry run pysen run lint
+```
+
+You can fix some errors automatically:
+
+```console
+poetry run pysen run foramt
+```
+
+### Test
+
+```console
+poetry run pysen run pytest -v
+```
+
+### Tips
+
+If you do not use IDE, the following command helps you:
+
+```console
+# At the first time, install `inotifywait`.
+sudo apt-get install -y inotify-tools
+
+function COMMAND { clear; poetry run pysen run lint && poetry run pytest -v }; COMMAND; while true; do if inotifywait -r -e modify . 2>/dev/null | git check-ignore --stdin >/dev/null; then :; else COMMAND; fi; done
+```
