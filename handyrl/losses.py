@@ -62,13 +62,13 @@ def compute_target(algorithm, values, returns, rewards, lmb, gamma, rhos, cs):
     if values is None:
         return None, 0
 
-    if algorithm == 'MC':
+    if algorithm == "MC":
         return monte_carlo(values, returns)
-    elif algorithm == 'TD':
+    elif algorithm == "TD":
         return temporal_difference(values, returns, rewards, lmb, gamma)
-    elif algorithm == 'UPGO':
+    elif algorithm == "UPGO":
         return upgo(values, returns, rewards, lmb, gamma)
-    elif algorithm == 'VTRACE':
+    elif algorithm == "VTRACE":
         return vtrace(values, returns, rewards, lmb, gamma, rhos, cs)
     else:
-        print('No algorithm named %s' % algorithm)
+        print("No algorithm named %s" % algorithm)

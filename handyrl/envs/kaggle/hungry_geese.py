@@ -6,8 +6,8 @@
 
 # wrapper of Hungry Geese environment from kaggle
 
-import random
 import itertools
+import random
 
 import numpy as np
 import torch
@@ -28,8 +28,8 @@ class TorusConv2d(nn.Module):
         self.bn = nn.BatchNorm2d(output_dim) if bn else None
 
     def forward(self, x):
-        h = torch.cat([x[:,:,:,-self.edge_size[1]:], x, x[:,:,:,:self.edge_size[1]]], dim=3)
-        h = torch.cat([h[:,:,-self.edge_size[0]:], h, h[:,:,:self.edge_size[0]]], dim=2)
+        h = torch.cat([x[:, :, :, -self.edge_size[1] :], x, x[:, :, :, : self.edge_size[1]]], dim=3)
+        h = torch.cat([h[:, :, -self.edge_size[0] :], h, h[:, :, : self.edge_size[0]]], dim=2)
         h = self.conv(h)
         h = self.bn(h) if self.bn is not None else h
         return h
@@ -49,16 +49,16 @@ class GeeseNet(nn.Module):
         h = F.relu_(self.conv0(x))
         for block in self.blocks:
             h = F.relu_(h + block(h))
-        h_head = (h * x[:,:1]).view(h.size(0), h.size(1), -1).sum(-1)
+        h_head = (h * x[:, :1]).view(h.size(0), h.size(1), -1).sum(-1)
         h_avg = h.view(h.size(0), h.size(1), -1).mean(-1)
         p = self.head_p(h_head)
         v = torch.tanh(self.head_v(torch.cat([h_head, h_avg], 1)))
 
-        return {'policy': p, 'value': v}
+        return {"policy": p, "value": v}
 
 
 class Environment(BaseEnvironment):
-    ACTION = ['NORTH', 'SOUTH', 'WEST', 'EAST']
+    ACTION = ["NORTH", "SOUTH", "WEST", "EAST"]
     NUM_AGENTS = 4
 
     def __init__(self, args={}):
@@ -101,54 +101,54 @@ class Environment(BaseEnvironment):
 
     def __str__(self):
         # output state
-        obs = self.obs_list[-1][0]['observation']
-        colors = ['\033[33m', '\033[34m', '\033[32m', '\033[31m']
-        color_end = '\033[0m'
+        obs = self.obs_list[-1][0]["observation"]
+        colors = ["\033[33m", "\033[34m", "\033[32m", "\033[31m"]
+        color_end = "\033[0m"
 
         def check_cell(pos):
-            for i, geese in enumerate(obs['geese']):
+            for i, geese in enumerate(obs["geese"]):
                 if pos in geese:
                     if pos == geese[0]:
-                        return i, 'h'
+                        return i, "h"
                     if pos == geese[-1]:
-                        return i, 't'
+                        return i, "t"
                     index = geese.index(pos)
                     pos_prev = geese[index - 1] if index > 0 else None
                     pos_next = geese[index + 1] if index < len(geese) - 1 else None
                     directions = [self.direction(pos, pos_prev), self.direction(pos, pos_next)]
                     return i, directions
-            if pos in obs['food']:
-                return 'f'
+            if pos in obs["food"]:
+                return "f"
             return None
 
         def cell_string(cell):
             if cell is None:
-                return '.'
-            elif cell == 'f':
-                return 'f'
+                return "."
+            elif cell == "f":
+                return "f"
             else:
                 index, directions = cell
-                if directions == 'h':
-                    return colors[index] + '@' + color_end
-                elif directions == 't':
-                    return colors[index] + '*' + color_end
+                if directions == "h":
+                    return colors[index] + "@" + color_end
+                elif directions == "t":
+                    return colors[index] + "*" + color_end
                 elif max(directions) < 2:
-                    return colors[index] + '|' + color_end
+                    return colors[index] + "|" + color_end
                 elif min(directions) >= 2:
-                    return colors[index] + '-' + color_end
+                    return colors[index] + "-" + color_end
                 else:
-                    return colors[index] + '+' + color_end
+                    return colors[index] + "+" + color_end
 
         cell_status = [check_cell(pos) for pos in range(7 * 11)]
 
-        s = 'turn %d\n' % len(self.obs_list)
+        s = "turn %d\n" % len(self.obs_list)
         for x in range(7):
             for y in range(11):
                 pos = x * 11 + y
                 s += cell_string(cell_status[pos])
-            s += '\n'
-        for i, geese in enumerate(obs['geese']):
-            s += colors[i] + str(len(geese) or '-') + color_end + ' '
+            s += "\n"
+        for i, geese in enumerate(obs["geese"]):
+            s += colors[i] + str(len(geese) or "-") + color_end + " "
         return s
 
     def step(self, actions):
@@ -161,19 +161,19 @@ class Environment(BaseEnvironment):
 
     def turns(self):
         # players to move
-        return [p for p in self.players() if self.obs_list[-1][p]['status'] == 'ACTIVE']
+        return [p for p in self.players() if self.obs_list[-1][p]["status"] == "ACTIVE"]
 
     def terminal(self):
         # check whether terminal state or not
         for obs in self.obs_list[-1]:
-            if obs['status'] == 'ACTIVE':
+            if obs["status"] == "ACTIVE":
                 return False
         return True
 
     def outcome(self):
         # return terminal outcomes
         # 1st: 1.0 2nd: 0.33 3rd: -0.33 4th: -1.00
-        rewards = {o['observation']['index']: o['reward'] for o in self.obs_list[-1]}
+        rewards = {o["observation"]["index"]: o["reward"] for o in self.obs_list[-1]}
         outcomes = {p: 0 for p in self.players()}
         for p, r in rewards.items():
             for pp, rr in rewards.items():
@@ -196,12 +196,13 @@ class Environment(BaseEnvironment):
         return list(range(self.NUM_AGENTS))
 
     def rule_based_action(self, player):
-        from kaggle_environments.envs.hungry_geese.hungry_geese import Observation, Configuration, Action, GreedyAgent
-        action_map = {'N': Action.NORTH, 'S': Action.SOUTH, 'W': Action.WEST, 'E': Action.EAST}
+        from kaggle_environments.envs.hungry_geese.hungry_geese import Action, Configuration, GreedyAgent, Observation
 
-        agent = GreedyAgent(Configuration({'rows': 7, 'columns': 11}))
+        action_map = {"N": Action.NORTH, "S": Action.SOUTH, "W": Action.WEST, "E": Action.EAST}
+
+        agent = GreedyAgent(Configuration({"rows": 7, "columns": 11}))
         agent.last_action = action_map[self.ACTION[self.last_actions[player]][0]] if player in self.last_actions else None
-        obs = {**self.obs_list[-1][0]['observation'], **self.obs_list[-1][player]['observation']}
+        obs = {**self.obs_list[-1][0]["observation"], **self.obs_list[-1][player]["observation"]}
         action = agent(Observation(obs))
         return self.ACTION.index(action)
 
@@ -213,9 +214,9 @@ class Environment(BaseEnvironment):
             player = 0
 
         b = np.zeros((self.NUM_AGENTS * 4 + 1, 7 * 11), dtype=np.float32)
-        obs = self.obs_list[-1][0]['observation']
+        obs = self.obs_list[-1][0]["observation"]
 
-        for p, geese in enumerate(obs['geese']):
+        for p, geese in enumerate(obs["geese"]):
             # head position
             for pos in geese[:1]:
                 b[0 + (p - player) % self.NUM_AGENTS, pos] = 1
@@ -228,19 +229,19 @@ class Environment(BaseEnvironment):
 
         # previous head position
         if len(self.obs_list) > 1:
-            obs_prev = self.obs_list[-2][0]['observation']
-            for p, geese in enumerate(obs_prev['geese']):
+            obs_prev = self.obs_list[-2][0]["observation"]
+            for p, geese in enumerate(obs_prev["geese"]):
                 for pos in geese[:1]:
                     b[12 + (p - player) % self.NUM_AGENTS, pos] = 1
 
         # food
-        for pos in obs['food']:
+        for pos in obs["food"]:
             b[16, pos] = 1
 
         return b.reshape(-1, 7, 11)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     e = Environment()
     for _ in range(100):
         e.reset()

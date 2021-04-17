@@ -25,6 +25,18 @@ pytest = "^6.2.2"
 kaggle-environments = "^1.7.11"
 requests = "^2.25.1"
 
+[tool.pysen.lint]
+enable_black = true
+enable_flake8 = true
+enable_isort = true
+enable_mypy = false
+# mypy_preset = "strict"
+line_length = 128
+py_version = "py38"
+
+[[tool.pysen.lint.mypy_targets]]
+paths = ["."]
+
 [tool.pytest.ini_options]
 testpaths = [
     "tests",

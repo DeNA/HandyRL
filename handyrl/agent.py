@@ -24,32 +24,32 @@ class RandomAgent:
 
 class RuleBasedAgent(RandomAgent):
     def action(self, env, player, show=False):
-        if hasattr(env, 'rule_based_action'):
+        if hasattr(env, "rule_based_action"):
             return env.rule_based_action(player)
         else:
             return random.choice(env.legal_actions(player))
 
 
 def view(env, player=None):
-    if hasattr(env, 'view'):
+    if hasattr(env, "view"):
         env.view(player=player)
     else:
         print(env)
 
 
 def view_transition(env):
-    if hasattr(env, 'view_transition'):
+    if hasattr(env, "view_transition"):
         env.view_transition()
     else:
         pass
 
 
 def print_outputs(env, prob, v):
-    if hasattr(env, 'print_outputs'):
+    if hasattr(env, "print_outputs"):
         env.print_outputs(prob, v)
     else:
-        print('v = %f' % v)
-        print('p = %s' % (prob * 1000).astype(int))
+        print("v = %f" % v)
+        print("p = %s" % (prob * 1000).astype(int))
 
 
 class Agent:
@@ -65,14 +65,14 @@ class Agent:
 
     def plan(self, obs):
         outputs = self.model.inference(obs, self.hidden)
-        self.hidden = outputs.pop('hidden', None)
+        self.hidden = outputs.pop("hidden", None)
         return outputs
 
     def action(self, env, player, show=False):
         outputs = self.plan(env.observation(player))
         actions = env.legal_actions(player)
-        p = outputs['policy']
-        v = outputs.get('value', None)
+        p = outputs["policy"]
+        v = outputs.get("value", None)
         mask = np.ones_like(p)
         mask[actions] = 0
         p -= mask * 1e32
@@ -90,7 +90,7 @@ class Agent:
     def observe(self, env, player, show=False):
         if self.observation:
             outputs = self.plan(env.observation(player))
-            v = outputs.get('value', None)
+            v = outputs.get("value", None)
         if show:
             view(env, player=player)
             if self.observation:
@@ -106,7 +106,7 @@ class EnsembleAgent(Agent):
         for i, model in enumerate(self.model):
             o = model.inference(obs, self.hidden[i])
             for k, v in o:
-                if k == 'hidden':
+                if k == "hidden":
                     self.hidden[i] = v
                 else:
                     outputs[k] = outputs.get(k, []) + [o]

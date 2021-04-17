@@ -12,9 +12,9 @@ from .tictactoe import Environment as TicTacToe
 
 class Environment(TicTacToe):
     def __str__(self):
-        s = '  ' + ' '.join(self.Y) + '\n'
+        s = "  " + " ".join(self.Y) + "\n"
         for i in range(3):
-            s += self.X[i] + ' ' + ' '.join([self.C[self.board[i, j]] for j in range(3)]) + '\n'
+            s += self.X[i] + " " + " ".join([self.C[self.board[i, j]] for j in range(3)]) + "\n"
         return s
 
     def step(self, actions):
@@ -29,10 +29,12 @@ class Environment(TicTacToe):
         self.board[x, y] = selected_color
 
         # check winning condition
-        if self.board[x, :].sum() == 3 * selected_color \
-          or self.board[:, y].sum() == 3 * selected_color \
-          or (x == y and np.diag(self.board, k=0).sum() == 3 * selected_color) \
-          or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * selected_color):
+        if (
+            self.board[x, :].sum() == 3 * selected_color
+            or self.board[:, y].sum() == 3 * selected_color
+            or (x == y and np.diag(self.board, k=0).sum() == 3 * selected_color)
+            or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * selected_color)
+        ):
             self.win_color = selected_color
 
         self.record.append((selected_color, action))
@@ -48,7 +50,7 @@ class Environment(TicTacToe):
             self.reset()
         else:
             saction, scolor = info.split(":")
-            action, player = self.str2action(saction), 'OX'.index(scolor)
+            action, player = self.str2action(saction), "OX".index(scolor)
             self._step(action, player)
 
     def turn(self):
@@ -58,7 +60,7 @@ class Environment(TicTacToe):
         return self.players()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     e = Environment()
     for _ in range(100):
         e.reset()

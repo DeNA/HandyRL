@@ -3,8 +3,8 @@
 
 # implementation of Geister
 
-import random
 import itertools
+import random
 
 import numpy as np
 import torch
@@ -30,20 +30,21 @@ class ConvLSTMCell(nn.Module):
             out_channels=4 * self.hidden_dim,
             kernel_size=self.kernel_size,
             padding=self.padding,
-            bias=self.bias
+            bias=self.bias,
         )
 
     def init_hidden(self, input_size, batch_size):
         if batch_size is None:  # for inference
-            return tuple([
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32)
-            ])
+            return tuple(
+                [
+                    np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
+                    np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
+                ]
+            )
         else:  # for training
-            return tuple([
-                torch.zeros(*batch_size, self.hidden_dim, *input_size),
-                torch.zeros(*batch_size, self.hidden_dim, *input_size)
-            ])
+            return tuple(
+                [torch.zeros(*batch_size, self.hidden_dim, *input_size), torch.zeros(*batch_size, self.hidden_dim, *input_size)]
+            )
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
@@ -70,12 +71,9 @@ class DRC(nn.Module):
 
         blocks = []
         for _ in range(self.num_layers):
-            blocks.append(ConvLSTMCell(
-                input_dim=input_dim,
-                hidden_dim=hidden_dim,
-                kernel_size=(kernel_size, kernel_size),
-                bias=bias
-            ))
+            blocks.append(
+                ConvLSTMCell(input_dim=input_dim, hidden_dim=hidden_dim, kernel_size=(kernel_size, kernel_size), bias=bias)
+            )
         self.blocks = nn.ModuleList(blocks)
 
     def init_hidden(self, input_size, batch_size):
@@ -149,7 +147,7 @@ class GeisterNet(nn.Module):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
-        b, s = x['board'], x['scalar']
+        b, s = x["board"], x["scalar"]
         h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([h_s, b], -3)
 
@@ -164,26 +162,23 @@ class GeisterNet(nn.Module):
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
+        return {"policy": h_p, "value": torch.tanh(h_v), "return": h_r, "hidden": hidden}
 
 
 class Environment(BaseEnvironment):
-    X, Y = 'ABCDEF', '123456'
+    X, Y = "ABCDEF", "123456"
     BLACK, WHITE = 0, 1
     BLUE, RED = 0, 1
-    C = 'BW'
-    T = 'BR'
-    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r', 4: '*'}
+    C = "BW"
+    T = "BR"
+    P = {-1: "_", 0: "B", 1: "R", 2: "b", 3: "r", 4: "*"}
     # original positions to set pieces
     OPOS = [
-        ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
-        ['E5', 'D5', 'C5', 'B5', 'E6', 'D6', 'C6', 'B6'],
+        ["B2", "C2", "D2", "E2", "B1", "C1", "D1", "E1"],
+        ["E5", "D5", "C5", "B5", "E6", "D6", "C6", "B6"],
     ]
     # goal positions
-    GPOS = np.array([
-        [(-1, 5), (6, 5)],
-        [(-1, 0), (6, 0)]
-    ], dtype=np.int32)
+    GPOS = np.array([[(-1, 5), (6, 5)], [(-1, 0), (6, 0)]], dtype=np.int32)
 
     D = np.array([(-1, 0), (0, -1), (0, 1), (1, 0)], dtype=np.int32)
     OSEQ = list(itertools.combinations([i for i in range(8)], 4))
@@ -264,10 +259,10 @@ class Environment(BaseEnvironment):
         if self.onboard(pos):
             return self.X[pos[0]] + self.Y[pos[1]]
         else:
-            return '**'
+            return "**"
 
     def str2position(self, s):
-        if s != '**':
+        if s != "**":
             return np.array((self.X.find(s[0]), self.Y.find(s[1])), dtype=np.int32)
         else:
             return None
@@ -296,7 +291,7 @@ class Environment(BaseEnvironment):
 
     def action2str(self, a, player):
         if a >= 4 * 6 * 6:
-            return 's' + str(a - 4 * 6 * 6)
+            return "s" + str(a - 4 * 6 * 6)
 
         c = player
         pos_from = self.action2from(a, c)
@@ -304,7 +299,7 @@ class Environment(BaseEnvironment):
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
-        if s[0] == 's':
+        if s[0] == "s":
             return 4 * 6 * 6 + int(s[1:])
 
         c = player
@@ -330,22 +325,22 @@ class Environment(BaseEnvironment):
         return self.fromdirection2action(pos_from, d, c)
 
     def record_string(self):
-        return ' '.join([self.action2str(a, i % 2) for i, a in enumerate(self.record)])
+        return " ".join([self.action2str(a, i % 2) for i, a in enumerate(self.record)])
 
     def position_string(self):
         poss = [self.position2str(pos) for pos in self.piece_position]
-        return ','.join(poss)
+        return ",".join(poss)
 
     def __str__(self):
         # output state
         def _piece(p):
             return p if p == -1 or self.layouts[self.piece2color(p)] >= 0 else 4
 
-        s = '  ' + ' '.join(self.Y) + '\n'
+        s = "  " + " ".join(self.Y) + "\n"
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
-        s += 'color = ' + self.C[self.color] + '\n'
-        s += 'record = ' + self.record_string()
+            s += self.X[i] + " " + " ".join([self.P[_piece(self.board[i, j])] for j in range(6)]) + "\n"
+        s += "color = " + self.C[self.color] + "\n"
+        s += "record = " + self.record_string()
         return s
 
     def _set(self, layout):
@@ -401,25 +396,25 @@ class Environment(BaseEnvironment):
         info = {}
         if len(self.record) == 0:
             if self.turn_count > -2:
-                info['set'] = self.layouts[played_color] if color == played_color else -1
+                info["set"] = self.layouts[played_color] if color == played_color else -1
         else:
-            info['move'] = self.action2str(self.record[-1], played_color)
+            info["move"] = self.action2str(self.record[-1], played_color)
             if color == played_color and self.captured_type is not None:
-                info['captured'] = self.T[self.captured_type]
+                info["captured"] = self.T[self.captured_type]
         return info
 
     def update(self, info, reset):
         if reset:
             self.args = {**self.args, **info}
             self.reset(info)
-        elif 'set' in info:
-            self._set(info['set'])
-        elif 'move' in info:
-            action = self.str2action(info['move'], self.color)
-            if 'captured' in info:
+        elif "set" in info:
+            self._set(info["set"])
+        elif "move" in info:
+            action = self.str2action(info["move"], self.color)
+            if "captured" in info:
                 # set color to captured piece
                 pos_to = self.action2to(action, self.color)
-                t = self.T.index(info['captured'])
+                t = self.T.index(info["captured"])
                 piece = self.colortype2piece(self.opponent(self.color), t)
                 self.board[pos_to[0], pos_to[1]] = piece
             self.play(action)
@@ -474,7 +469,7 @@ class Environment(BaseEnvironment):
         if self.turn_count < 0:
             return [4 * 6 * 6 + i for i in range(70)]
         actions = []
-        for pos in self.piece_position[self.color*8:(self.color+1)*8]:
+        for pos in self.piece_position[self.color * 8 : (self.color + 1) * 8]:
             if pos[0] == -1:
                 continue
             t = self.piece2type(self.board[pos[0], pos[1]])
@@ -498,50 +493,54 @@ class Environment(BaseEnvironment):
         color = self.color if turn_view else self.opponent(self.color)
         opponent = self.opponent(color)
 
-        nbcolor = self.piece_cnt[self.colortype2piece(color,    self.BLUE)]
-        nrcolor = self.piece_cnt[self.colortype2piece(color,    self.RED )]
-        nbopp   = self.piece_cnt[self.colortype2piece(opponent, self.BLUE)]
-        nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
+        nbcolor = self.piece_cnt[self.colortype2piece(color, self.BLUE)]
+        nrcolor = self.piece_cnt[self.colortype2piece(color, self.RED)]
+        nbopp = self.piece_cnt[self.colortype2piece(opponent, self.BLUE)]
+        nropp = self.piece_cnt[self.colortype2piece(opponent, self.RED)]
 
-        s = np.array([
-            1 if color == self.BLACK else 0,  # my color is black
-            1 if turn_view           else 0,  # view point is turn player
-            # the number of remained pieces
-            *[(1 if nbcolor == i else 0) for i in range(1, 5)],
-            *[(1 if nrcolor == i else 0) for i in range(1, 5)],
-            *[(1 if nbopp   == i else 0) for i in range(1, 5)],
-            *[(1 if nropp   == i else 0) for i in range(1, 5)]
-        ]).astype(np.float32)
+        s = np.array(
+            [
+                1 if color == self.BLACK else 0,  # my color is black
+                1 if turn_view else 0,  # view point is turn player
+                # the number of remained pieces
+                *[(1 if nbcolor == i else 0) for i in range(1, 5)],
+                *[(1 if nrcolor == i else 0) for i in range(1, 5)],
+                *[(1 if nbopp == i else 0) for i in range(1, 5)],
+                *[(1 if nropp == i else 0) for i in range(1, 5)],
+            ]
+        ).astype(np.float32)
 
-        blue_c = self.board == self.colortype2piece(color,    self.BLUE)
-        red_c  = self.board == self.colortype2piece(color,    self.RED)
+        blue_c = self.board == self.colortype2piece(color, self.BLUE)
+        red_c = self.board == self.colortype2piece(color, self.RED)
         blue_o = self.board == self.colortype2piece(opponent, self.BLUE)
-        red_o  = self.board == self.colortype2piece(opponent, self.RED)
+        red_o = self.board == self.colortype2piece(opponent, self.RED)
 
-        b = np.stack([
-            # board zone
-            np.ones_like(self.board),
-            # my/opponent's all pieces
-            blue_c + red_c,
-            blue_o + red_o,
-            # my blue/red pieces
-            blue_c,
-            red_c,
-            # opponent's blue/red pieces
-            blue_o if player is None else np.zeros_like(self.board),
-            red_o  if player is None else np.zeros_like(self.board)
-        ]).astype(np.float32)
+        b = np.stack(
+            [
+                # board zone
+                np.ones_like(self.board),
+                # my/opponent's all pieces
+                blue_c + red_c,
+                blue_o + red_o,
+                # my blue/red pieces
+                blue_c,
+                red_c,
+                # opponent's blue/red pieces
+                blue_o if player is None else np.zeros_like(self.board),
+                red_o if player is None else np.zeros_like(self.board),
+            ]
+        ).astype(np.float32)
 
         if color == self.WHITE:
             b = np.rot90(b, k=2, axes=(1, 2))
 
-        return {'scalar': s, 'board': b}
+        return {"scalar": s, "board": b}
 
     def net(self):
         return GeisterNet
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     e = Environment()
     for _ in range(100):
         e.reset()

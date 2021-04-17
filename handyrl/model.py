@@ -5,6 +5,7 @@
 
 import numpy as np
 import torch
+
 torch.set_num_threads(1)
 
 import torch.nn as nn
@@ -27,13 +28,14 @@ def to_gpu(data):
 
 # model wrapper class
 
+
 class ModelWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
 
     def init_hidden(self, batch_size=None):
-        if hasattr(self.model, 'init_hidden'):
+        if hasattr(self.model, "init_hidden"):
             return self.model.init_hidden(batch_size)
         return None
 
@@ -42,7 +44,7 @@ class ModelWrapper(nn.Module):
 
     def inference(self, x, hidden, **kwargs):
         # numpy array -> numpy array
-        if hasattr(self.model, 'inference'):
+        if hasattr(self.model, "inference"):
             return self.model.inference(x, hidden, **kwargs)
 
         self.eval()
@@ -55,10 +57,11 @@ class ModelWrapper(nn.Module):
 
 # simple model
 
+
 class RandomModel(nn.Module):
     def __init__(self, env):
         super().__init__()
         self.action_length = env.action_length()
 
     def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(1, dtype=np.float32)}
+        return {"policy": np.zeros(self.action_length, dtype=np.float32), "value": np.zeros(1, dtype=np.float32)}

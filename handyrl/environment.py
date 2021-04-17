@@ -5,28 +5,27 @@
 
 import importlib
 
-
 ENVS = {
-    'TicTacToe':         'handyrl.envs.tictactoe',
-    'Geister':           'handyrl.envs.geister',
-    'ParallelTicTacToe': 'handyrl.envs.parallel_tictactoe',
-    'HungryGeese':       'handyrl.envs.kaggle.hungry_geese',
+    "TicTacToe": "handyrl.envs.tictactoe",
+    "Geister": "handyrl.envs.geister",
+    "ParallelTicTacToe": "handyrl.envs.parallel_tictactoe",
+    "HungryGeese": "handyrl.envs.kaggle.hungry_geese",
 }
 
 
 def prepare_env(env_args):
-    env_name = env_args['env']
+    env_name = env_args["env"]
     env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
     if env_module is None:
         print("No environment %s" % env_name)
-    elif hasattr(env_module, 'prepare'):
+    elif hasattr(env_module, "prepare"):
         env_module.prepare()
 
 
 def make_env(env_args):
-    env_name = env_args['env']
+    env_name = env_args["env"]
     env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
@@ -38,12 +37,13 @@ def make_env(env_args):
 
 # base class of Environment
 
+
 class BaseEnvironment:
     def __init__(self, args={}):
         pass
 
     def __str__(self):
-        return ''
+        return ""
 
     #
     # Should be defined in all games
@@ -135,7 +135,7 @@ class BaseEnvironment:
     # Should be defined if you use network battle mode
     #
     def diff_info(self, player=None):
-        return ''
+        return ""
 
     #
     # Should be defined if you use network battle mode

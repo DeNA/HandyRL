@@ -19,10 +19,7 @@ class Conv(nn.Module):
         super().__init__()
         if bn:
             bias = False
-        self.conv = nn.Conv2d(
-            filters0, filters1, kernel_size,
-            stride=1, padding=kernel_size//2, bias=bias
-        )
+        self.conv = nn.Conv2d(filters0, filters1, kernel_size, stride=1, padding=kernel_size // 2, bias=bias)
         self.bn = nn.BatchNorm2d(filters1) if bn else None
 
     def forward(self, x):
@@ -66,13 +63,13 @@ class SimpleConv2dModel(nn.Module):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v)}
+        return {"policy": h_p, "value": torch.tanh(h_v)}
 
 
 class Environment(BaseEnvironment):
-    X, Y = 'ABC',  '123'
+    X, Y = "ABC", "123"
     BLACK, WHITE = 1, -1
-    C = {0: '_', BLACK: 'O', WHITE: 'X'}
+    C = {0: "_", BLACK: "O", WHITE: "X"}
 
     def __init__(self, args=None):
         super().__init__()
@@ -91,13 +88,13 @@ class Environment(BaseEnvironment):
         return self.X.find(s[0]) * 3 + self.Y.find(s[1])
 
     def record_string(self):
-        return ' '.join([self.action2str(a) for a in self.record])
+        return " ".join([self.action2str(a) for a in self.record])
 
     def __str__(self):
-        s = '  ' + ' '.join(self.Y) + '\n'
+        s = "  " + " ".join(self.Y) + "\n"
         for i in range(3):
-            s += self.X[i] + ' ' + ' '.join([self.C[self.board[i, j]] for j in range(3)]) + '\n'
-        s += 'record = ' + self.record_string()
+            s += self.X[i] + " " + " ".join([self.C[self.board[i, j]] for j in range(3)]) + "\n"
+        s += "record = " + self.record_string()
         return s
 
     def play(self, action, _=None):
@@ -107,10 +104,12 @@ class Environment(BaseEnvironment):
         self.board[x, y] = self.color
 
         # check winning condition
-        win = self.board[x, :].sum() == 3 * self.color \
-            or self.board[:, y].sum() == 3 * self.color \
-            or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color) \
+        win = (
+            self.board[x, :].sum() == 3 * self.color
+            or self.board[:, y].sum() == 3 * self.color
+            or (x == y and np.diag(self.board, k=0).sum() == 3 * self.color)
             or (x == 2 - y and np.diag(self.board[::-1, :], k=0).sum() == 3 * self.color)
+        )
 
         if win:
             self.win_color = self.color
@@ -164,15 +163,13 @@ class Environment(BaseEnvironment):
         # input feature for neural nets
         turn_view = player is None or player == self.turn()
         color = self.color if turn_view else -self.color
-        a = np.stack([
-            np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
-            self.board == color,
-            self.board == -color
-        ]).astype(np.float32)
+        a = np.stack(
+            [np.ones_like(self.board) if turn_view else np.zeros_like(self.board), self.board == color, self.board == -color]
+        ).astype(np.float32)
         return a
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     e = Environment()
     for _ in range(100):
         e.reset()

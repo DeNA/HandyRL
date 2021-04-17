@@ -3,19 +3,23 @@
 
 # worker and gather
 
+import functools
+import multiprocessing as mp
+import pickle
 import random
 import threading
 import time
-import functools
-from socket import gethostname
 from collections import deque
-import multiprocessing as mp
-import pickle
+from socket import gethostname
 
-from .environment import prepare_env, make_env
-from .connection import QueueCommunicator
-from .connection import send_recv, open_multiprocessing_connections
-from .connection import connect_socket_connection, accept_socket_connections
+from .connection import (
+    QueueCommunicator,
+    accept_socket_connections,
+    connect_socket_connection,
+    open_multiprocessing_connections,
+    send_recv,
+)
+from .environment import make_env, prepare_env
 from .evaluation import Evaluator
 from .generation import Generator
 from .model import ModelWrapper
@@ -23,20 +27,20 @@ from .model import ModelWrapper
 
 class Worker:
     def __init__(self, args, conn, wid):
-        print('opened worker %d' % wid)
+        print("opened worker %d" % wid)
         self.worker_id = wid
         self.args = args
         self.conn = conn
         self.latest_model = -1, None
 
-        env = make_env({**args['env'], 'id': wid})
+        env = make_env({**args["env"], "id": wid})
         self.generator = Generator(env, self.args)
         self.evaluator = Evaluator(env, self.args)
 
-        random.seed(args['seed'] + wid)
+        random.seed(args["seed"] + wid)
 
     def __del__(self):
-        print('closed worker %d' % self.worker_id)
+        print("closed worker %d" % self.worker_id)
 
     def _gather_models(self, model_ids):
         model_pool = {}
@@ -49,7 +53,7 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = ModelWrapper(pickle.loads(send_recv(self.conn, ('model', model_id))))
+                    model_pool[model_id] = ModelWrapper(pickle.loads(send_recv(self.conn, ("model", model_id))))
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]
@@ -57,24 +61,24 @@ class Worker:
 
     def run(self):
         while True:
-            args = send_recv(self.conn, ('args', None))
-            role = args['role']
+            args = send_recv(self.conn, ("args", None))
+            role = args["role"]
 
             models = {}
-            if 'model_id' in args:
-                model_ids = list(args['model_id'].values())
+            if "model_id" in args:
+                model_ids = list(args["model_id"].values())
                 model_pool = self._gather_models(model_ids)
 
                 # make dict of models
-                for p, model_id in args['model_id'].items():
+                for p, model_id in args["model_id"].items():
                     models[p] = model_pool[model_id]
 
-            if role == 'g':
+            if role == "g":
                 episode = self.generator.execute(models, args)
-                send_recv(self.conn, ('episode', episode))
-            elif role == 'e':
+                send_recv(self.conn, ("episode", episode))
+            elif role == "e":
                 result = self.evaluator.execute(models, args)
-                send_recv(self.conn, ('result', result))
+                send_recv(self.conn, ("result", result))
 
 
 def make_worker_args(args, n_ga, gaid, wid, conn):
@@ -88,22 +92,20 @@ def open_worker(args, conn, wid):
 
 class Gather(QueueCommunicator):
     def __init__(self, args, conn, gaid):
-        print('started gather %d' % gaid)
+        print("started gather %d" % gaid)
         super().__init__()
         self.gather_id = gaid
         self.server_conn = conn
         self.args_queue = deque([])
-        self.data_map = {'model': {}}
+        self.data_map = {"model": {}}
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
+        n_pro, n_ga = args["worker"]["num_parallel"], args["worker"]["num_gathers"]
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
         worker_conns = open_multiprocessing_connections(
-            num_workers_per_gather,
-            open_worker,
-            functools.partial(make_worker_args, args, n_ga, gaid)
+            num_workers_per_gather, open_worker, functools.partial(make_worker_args, args, n_ga, gaid)
         )
 
         for conn in worker_conns:
@@ -113,12 +115,12 @@ class Gather(QueueCommunicator):
         self.result_buf_len = 1 + len(worker_conns) // 4
 
     def __del__(self):
-        print('finished gather %d' % self.gather_id)
+        print("finished gather %d" % self.gather_id)
 
     def run(self):
         while True:
             conn, (command, args) = self.recv()
-            if command == 'args':
+            if command == "args":
                 # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:
                     # get multiple arguments from server and store them
@@ -167,24 +169,25 @@ class WorkerCluster(QueueCommunicator):
         self.args = args
 
     def run(self):
-        if self.args['remote']:
+        if self.args["remote"]:
             # prepare listening connections
             def worker_server(port):
                 conn_acceptor = accept_socket_connections(port=port, timeout=0.5)
-                print('started worker server %d' % port)
+                print("started worker server %d" % port)
                 while not self.shutdown_flag:  # use super class's flag
                     conn = next(conn_acceptor)
                     if conn is not None:
                         self.add_connection(conn)
-                print('finished worker server')
+                print("finished worker server")
+
             # use super class's thread list
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
             self.threads[-1].start()
         else:
             # open local connections
-            if 'num_gathers' not in self.args['worker']:
-                self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
-            for i in range(self.args['worker']['num_gathers']):
+            if "num_gathers" not in self.args["worker"]:
+                self.args["worker"]["num_gathers"] = 1 + max(0, self.args["worker"]["num_parallel"] - 1) // 16
+            for i in range(self.args["worker"]["num_gathers"]):
                 conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
@@ -192,7 +195,7 @@ class WorkerCluster(QueueCommunicator):
 
 
 def entry(worker_args):
-    conn = connect_socket_connection(worker_args['server_address'], 9999)
+    conn = connect_socket_connection(worker_args["server_address"], 9999)
     conn.send(worker_args)
     args = conn.recv()
     conn.close()
@@ -201,20 +204,20 @@ def entry(worker_args):
 
 def worker_main(args):
     # offline generation worker
-    worker_args = args['worker_args']
-    worker_args['address'] = gethostname()
-    if 'num_gathers' not in worker_args:
-        worker_args['num_gathers'] = 1 + max(0, worker_args['num_parallel'] - 1) // 16
+    worker_args = args["worker_args"]
+    worker_args["address"] = gethostname()
+    if "num_gathers" not in worker_args:
+        worker_args["num_gathers"] = 1 + max(0, worker_args["num_parallel"] - 1) // 16
 
     args = entry(worker_args)
     print(args)
-    prepare_env(args['env'])
+    prepare_env(args["env"])
 
     # open workers
     process = []
     try:
-        for i in range(args['worker']['num_gathers']):
-            conn = connect_socket_connection(args['worker']['server_address'], 9998)
+        for i in range(args["worker"]["num_gathers"]):
+            conn = connect_socket_connection(args["worker"]["server_address"], 9998)
             p = mp.Process(target=gather_loop, args=(args, conn, i))
             p.start()
             conn.close()

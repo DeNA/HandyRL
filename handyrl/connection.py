@@ -2,14 +2,14 @@
 # Licensed under The MIT License [see LICENSE for details]
 
 import io
-import time
-import struct
-import socket
-import pickle
-import threading
-import queue
 import multiprocessing as mp
 import multiprocessing.connection as connection
+import pickle
+import queue
+import socket
+import struct
+import threading
+import time
 
 
 def send_recv(conn, sdata):
@@ -45,7 +45,7 @@ class PickledConnection:
 
     def recv(self):
         buf = self._recv(4)
-        size, = struct.unpack("!i", buf.getvalue())
+        (size,) = struct.unpack("!i", buf.getvalue())
         buf = self._recv(size)
         return pickle.loads(buf.getvalue())
 
@@ -72,11 +72,8 @@ class PickledConnection:
 
 def open_socket_connection(port, reuse=False):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(
-        socket.SOL_SOCKET, socket.SO_REUSEADDR,
-        sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR) | 1
-    )
-    sock.bind(('', int(port)))
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR) | 1)
+    sock.bind(("", int(port)))
     return sock
 
 
@@ -99,7 +96,7 @@ def connect_socket_connection(host, port):
     try:
         sock.connect((host, int(port)))
     except ConnectionRefusedError:
-        print('failed to connect %s %d' % (host, port))
+        print("failed to connect %s %d" % (host, port))
     return PickledConnection(sock)
 
 
@@ -165,7 +162,7 @@ class MultiProcessJobExecutor:
             thread.start()
 
     def _sender(self):
-        print('start sender')
+        print("start sender")
         while not self.shutdown_flag:
             data = next(self.send_generator)
             while not self.shutdown_flag:
@@ -175,10 +172,10 @@ class MultiProcessJobExecutor:
                     break
                 except queue.Empty:
                     pass
-        print('finished sender')
+        print("finished sender")
 
     def _receiver(self, index):
-        print('start receiver %d' % index)
+        print("start receiver %d" % index)
         conns = [conn for i, conn in enumerate(self.conns) if i % self.num_receivers == index]
         while not self.shutdown_flag:
             tmp_conns = connection.wait(conns)
@@ -193,7 +190,7 @@ class MultiProcessJobExecutor:
                         break
                     except queue.Full:
                         pass
-        print('finished receiver %d' % index)
+        print("finished receiver %d" % index)
 
 
 class QueueCommunicator:
@@ -228,7 +225,7 @@ class QueueCommunicator:
         self.conn_index += 1
 
     def disconnect(self, conn):
-        print('disconnected')
+        print("disconnected")
         self.conns.pop(conn, None)
 
     def _send_thread(self):

@@ -34,26 +34,18 @@ def rotate(x, max_depth=1024):
         return x
     if isinstance(x, (list, tuple)):
         if isinstance(x[0], (list, tuple)):
-            return type(x[0])(
-                rotate(type(x)(xx[i] for xx in x), max_depth - 1)
-                for i, _ in enumerate(x[0])
-            )
+            return type(x[0])(rotate(type(x)(xx[i] for xx in x), max_depth - 1) for i, _ in enumerate(x[0]))
         elif isinstance(x[0], dict):
-            return type(x[0])(
-                (key, rotate(type(x)(xx[key] for xx in x), max_depth - 1))
-                for key in x[0]
-            )
+            return type(x[0])((key, rotate(type(x)(xx[key] for xx in x), max_depth - 1)) for key in x[0])
     elif isinstance(x, dict):
         x_front = x[list(x.keys())[0]]
         if isinstance(x_front, (list, tuple)):
             return type(x_front)(
-                rotate(type(x)((key, xx[i]) for key, xx in x.items()), max_depth - 1)
-                for i, _ in enumerate(x_front)
+                rotate(type(x)((key, xx[i]) for key, xx in x.items()), max_depth - 1) for i, _ in enumerate(x_front)
             )
         elif isinstance(x_front, dict):
             return type(x_front)(
-                (key2, rotate(type(x)((key1, xx[key2]) for key1, xx in x.items()), max_depth - 1))
-                for key2 in x_front
+                (key2, rotate(type(x)((key1, xx[key2]) for key1, xx in x.items()), max_depth - 1)) for key2 in x_front
             )
     return x
 
