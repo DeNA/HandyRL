@@ -4,6 +4,7 @@
 # game environment
 
 import importlib
+from typing import Any, Dict, Optional
 
 ENVS = {
     "TicTacToe": "handyrl.envs.tictactoe",
@@ -39,7 +40,7 @@ def make_env(env_args):
 
 
 class BaseEnvironment:
-    def __init__(self, args={}):
+    def __init__(self, args: Optional[Dict[Any, Any]] = None):
         pass
 
     def __str__(self):
@@ -48,7 +49,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def reset(self, args={}):
+    def reset(self, args: Optional[Dict[Any, Any]]):
         raise NotImplementedError()
 
     #

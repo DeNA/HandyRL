@@ -6,10 +6,11 @@
 import numpy as np
 import torch
 
-torch.set_num_threads(1)
+# noqa idiom
+if True:
+    torch.set_num_threads(1)
 
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .util import map_r
 

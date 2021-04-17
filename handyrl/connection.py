@@ -9,7 +9,7 @@ import queue
 import socket
 import struct
 import threading
-import time
+from typing import Any, List, Optional
 
 
 def send_recv(conn, sdata):
@@ -194,7 +194,9 @@ class MultiProcessJobExecutor:
 
 
 class QueueCommunicator:
-    def __init__(self, conns=[]):
+    def __init__(self, conns: Optional[List[Any]] = None):
+        conns = [] if conns is None else conns
+
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
         self.conns = {}

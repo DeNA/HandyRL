@@ -6,8 +6,9 @@
 import multiprocessing as mp
 import random
 import time
+from typing import Any, Dict, Optional
 
-from .agent import Agent, EnsembleAgent, RandomAgent, RuleBasedAgent, SoftAgent, view, view_transition
+from .agent import Agent, RandomAgent, view_transition
 from .connection import accept_socket_connections, connect_socket_connection, send_recv
 from .environment import make_env, prepare_env
 
@@ -59,8 +60,11 @@ class NetworkAgent:
         return send_recv(self.conn, ("observe", [player]))
 
 
-def exec_match(env, agents, critic, show=False, game_args={}):
+def exec_match(env, agents, critic, show=False, game_args: Optional[Dict[Any, Any]] = None):
     """ match with shared game environment """
+
+    game_args = {} if game_args is None else game_args
+
     if env.reset(game_args):
         return None
     for agent in agents.values():
@@ -85,8 +89,11 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     return outcome
 
 
-def exec_network_match(env, network_agents, critic, show=False, game_args={}):
+def exec_network_match(env, network_agents, critic, show=False, game_args: Optional[Dict[Any, Any]] = None):
     """ match with divided game environment """
+
+    game_args = {} if game_args is None else game_args
+
     if env.reset(game_args):
         return None
     for p, agent in network_agents.items():

@@ -6,8 +6,8 @@
 
 # wrapper of Hungry Geese environment from kaggle
 
-import itertools
 import random
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -61,12 +61,16 @@ class Environment(BaseEnvironment):
     ACTION = ["NORTH", "SOUTH", "WEST", "EAST"]
     NUM_AGENTS = 4
 
-    def __init__(self, args={}):
+    def __init__(self, args: Optional[Dict[Any, Any]] = None):
+        args = {} if args is None else args
+
         super().__init__()
         self.env = make("hungry_geese")
         self.reset()
 
-    def reset(self, args={}):
+    def reset(self, args: Optional[Dict[Any, Any]] = None):
+        args = {} if args is None else args
+
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
         self.update((obs, {}), True)
 

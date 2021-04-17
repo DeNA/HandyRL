@@ -635,7 +635,7 @@ class Learner:
                             try:
                                 model = self.model_class()
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
-                            except:
+                            except Exception:
                                 # return latest model if failed to load specified model
                                 pass
                         send_data.append(pickle.dumps(model))

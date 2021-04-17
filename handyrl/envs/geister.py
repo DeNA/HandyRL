@@ -5,6 +5,7 @@
 
 import itertools
 import random
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -187,7 +188,9 @@ class Environment(BaseEnvironment):
         super().__init__()
         self.reset()
 
-    def reset(self, args={}):
+    def reset(self, args: Optional[Dict[Any, Any]] = None):
+        args = {} if args is None else args
+
         self.args = args
         self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
         self.color = self.BLACK
@@ -311,15 +314,17 @@ class Environment(BaseEnvironment):
             for g in self.GPOS[c]:
                 if ((pos_from - g) ** 2).sum() == 1:
                     diff = g - pos_from
-                    for d, dd in enumerate(self.D):
+                    for d_, dd in enumerate(self.D):
                         if np.array_equal(dd, diff):
+                            d = d_
                             break
                     break
         else:
             # check action direction
             diff = pos_to - pos_from
-            for d, dd in enumerate(self.D):
+            for d_, dd in enumerate(self.D):
                 if np.array_equal(dd, diff):
+                    d = d_
                     break
 
         return self.fromdirection2action(pos_from, d, c)

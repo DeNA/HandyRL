@@ -3,7 +3,6 @@
 
 # implementation of Tic-Tac-Toe
 
-import copy
 import random
 
 import numpy as np
