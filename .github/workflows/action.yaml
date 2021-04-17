@@ -28,7 +28,7 @@ jobs:
           poetry install
       - name: pytest
         run: |
-          poetry run python -m pytest
+          poetry run python -m pytest -v
   lint:
     runs-on: ubuntu-latest
     strategy:
