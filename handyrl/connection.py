@@ -203,7 +203,7 @@ class QueueCommunicator:
         self.conns = {}
         self.conn_index = 0
         for conn in conns:
-            self.add(conn)
+            self.add_connection(conn)
         self.shutdown_flag = False
         self.threads = [
             threading.Thread(target=self._send_thread),
