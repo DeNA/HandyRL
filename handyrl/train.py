@@ -10,6 +10,7 @@ import threading
 import random
 import bz2
 import pickle
+import warnings
 from collections import deque
 
 import numpy as np
@@ -18,10 +19,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 import torch.optim as optim
+import psutil
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu_or_not, RandomModel, ModelWrapper
+from .model import to_torch, to_gpu, RandomModel, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -367,10 +369,13 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             # episodes were only tuple of arrays
-            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
+            batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = to_gpu_or_not(model.init_hidden([batch_size, player_count]), self.gpu)
+            hidden = model.init_hidden([batch_size, player_count])
+            if self.gpu > 0:
+                batch = to_gpu(batch)
+                hidden = to_gpu(hidden)
 
             losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
 
@@ -410,18 +415,25 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, args):
+    def __init__(self, args, env=None, net=None, remote=False):
+        train_args = args['train_args']
+        env_args = args['env_args']
+        train_args['env'] = env_args
+        args = train_args
+        args['remote'] = remote
+
         self.args = args
         random.seed(args['seed'])
 
-        self.env = make_env(args['env'])
+        self.env = env(args['env']) if env is not None else make_env(env_args)
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
+        self.flags = set()
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        train_model = self.env.net()
+        train_model = net if net is not None else self.env.net()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
         else:
@@ -476,8 +488,17 @@ class Learner:
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
 
         # store generated episodes
+        mem = psutil.virtual_memory()
+        mem_used_ratio = mem.used / mem.total
+        mem_ok = mem_used_ratio <= 0.95
+        maximum_episodes = self.args['maximum_episodes'] if mem_ok else len(self.trainer.episodes)
+
+        if not mem_ok and 'memory_over' not in self.flags:
+            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_used_ratio * 100, len(self.trainer.episodes)))
+            self.flags.add('memory_over')
+
         self.trainer.episodes.extend([e for e in episodes if e is not None])
-        while len(self.trainer.episodes) > self.args['maximum_episodes']:
+        while len(self.trainer.episodes) > maximum_episodes:
             self.trainer.episodes.popleft()
 
     def feed_results(self, results):
@@ -516,12 +537,15 @@ class Learner:
             model = self.model
         self.update_model(model, steps)
 
+        # clear flags
+        self.flags = set()
+
     def server(self):
         # central conductor server
         # returns as list if getting multiple requests as list
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
-        while True:
+        while self.model_era < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
             while not self.shutdown_flag and self.num_episodes < next_update_episodes:
@@ -626,23 +650,11 @@ class Learner:
 
 
 def train_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = False
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
-    prepare_env(env_args)  # preparing environment is needed in stand-alone mode
-    learner = Learner(train_args)
+    prepare_env(args['env_args'])  # preparing environment is needed in stand-alone mode
+    learner = Learner(args=args)
     learner.run()
 
 
 def train_server_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = True
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
-    learner = Learner(train_args)
+    learner = Learner(args=args, remote=True)
     learner.run()

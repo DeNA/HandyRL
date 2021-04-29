@@ -107,7 +107,7 @@ class Gather(QueueCommunicator):
         )
 
         for conn in worker_conns:
-            self.add(conn)
+            self.add_connection(conn)
 
         self.args_buf_len = 1 + len(worker_conns) // 4
         self.result_buf_len = 1 + len(worker_conns) // 4
@@ -175,7 +175,7 @@ class WorkerCluster(QueueCommunicator):
                 while not self.shutdown_flag:  # use super class's flag
                     conn = next(conn_acceptor)
                     if conn is not None:
-                        self.add(conn)
+                        self.add_connection(conn)
                 print('finished worker server')
             # use super class's thread list
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
@@ -188,7 +188,7 @@ class WorkerCluster(QueueCommunicator):
                 conn0, conn1 = mp.Pipe(duplex=True)
                 mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
                 conn1.close()
-                self.add(conn0)
+                self.add_connection(conn0)
 
 
 def entry(worker_args):
