@@ -604,7 +604,7 @@ class Learner:
                         model = self.model
                         if model_id != self.model_era:
                             try:
-                                model = self.env.net()
+                                model = copy.deepcopy(self.model)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
