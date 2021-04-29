@@ -147,10 +147,16 @@ class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_opponent = 'rulebase'
+        self.default_opponent = 'random'
 
     def execute(self, models, args):
         agents = {}
+        opponents = self.args.get('eval', {}).get('opponent', [])
+        if len(opponents) == 0:
+            opponent = self.default_opponent
+        else:
+            opponent = random.choice(opponents)
+
         for p, model in models.items():
             if model is None:
                 agents[p] = build_agent(self.default_opponent, self.env)
