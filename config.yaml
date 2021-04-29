@@ -17,6 +17,7 @@ train_args:
     batch_size: 128
     minimum_episodes: 400
     maximum_episodes: 100000
+    epochs: -1
     num_batchers: 2
     eval_rate: 0.1
     worker:
