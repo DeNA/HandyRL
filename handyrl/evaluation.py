@@ -135,17 +135,25 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     return outcome
 
 
+def build_agent(raw, env):
+    if raw == 'random':
+        return RandomAgent()
+    elif raw == 'rulebase':
+        return RuleBasedAgent()
+    return None
+
+
 class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_agent = RandomAgent()  # RuleBasedAgent, trained agent, etc.
+        self.default_opponent = 'rulebase'
 
     def execute(self, models, args):
         agents = {}
         for p, model in models.items():
             if model is None:
-                agents[p] = self.default_agent
+                agents[p] = build_agent(self.default_opponent, self.env)
             else:
                 agents[p] = Agent(model, self.args['observation'])
         outcome = exec_match(self.env, agents, None)
