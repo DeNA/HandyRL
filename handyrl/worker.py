@@ -199,28 +199,36 @@ def entry(worker_args):
     return args
 
 
+class RemoteWorkerCluster:
+    def __init__(self, args):
+        args['address'] = gethostname()
+        if 'num_gathers' not in args:
+            args['num_gathers'] = 1 + max(0, args['num_parallel'] - 1) // 16
+
+        self.args = args
+
+    def run(self):
+        args = entry(self.args)
+        print(args)
+        prepare_env(args['env'])
+
+        # open worker
+        process = []
+        try:
+            for i in range(self.args['num_gathers']):
+                conn = connect_socket_connection(self.args['server_address'], 9998)
+                p = mp.Process(target=gather_loop, args=(args, conn, i))
+                p.start()
+                conn.close()
+                process.append(p)
+            while True:
+                time.sleep(100)
+        finally:
+            for p in process:
+                p.terminate()
+
+
 def worker_main(args):
     # offline generation worker
-    worker_args = args['worker_args']
-    worker_args['address'] = gethostname()
-    if 'num_gathers' not in worker_args:
-        worker_args['num_gathers'] = 1 + max(0, worker_args['num_parallel'] - 1) // 16
-
-    args = entry(worker_args)
-    print(args)
-    prepare_env(args['env'])
-
-    # open workers
-    process = []
-    try:
-        for i in range(args['worker']['num_gathers']):
-            conn = connect_socket_connection(args['worker']['server_address'], 9998)
-            p = mp.Process(target=gather_loop, args=(args, conn, i))
-            p.start()
-            conn.close()
-            process.append(p)
-        while True:
-            time.sleep(100)
-    finally:
-        for p in process:
-            p.terminate()
+    worker = RemoteWorkerCluster(args=args['worker_args'])
+    worker.run()
