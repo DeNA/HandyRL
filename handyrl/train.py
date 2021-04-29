@@ -433,8 +433,7 @@ class Learner:
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = net if net is not None else self.env.net()
-        train_model = self.model_class()
+        train_model = net if net is not None else self.env.net()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
         else:
@@ -605,7 +604,7 @@ class Learner:
                         model = self.model
                         if model_id != self.model_era:
                             try:
-                                model = self.model_class()
+                                model = copy.deepcopy(self.model)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
