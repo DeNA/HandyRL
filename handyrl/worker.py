@@ -177,7 +177,7 @@ class WorkerCluster(QueueCommunicator):
                     if conn is not None:
                         self.add_connection(conn)
                 print('finished worker server')
-            # use super class's thread list
+            # use thread list of QueueCommunicator
             self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
             self.threads[-1].start()
         else:
