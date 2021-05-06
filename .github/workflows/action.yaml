@@ -6,8 +6,8 @@ on:
   push:
 
 jobs:
-  pytest:
-    name: Run pytest
+  test:
+    name: Test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
