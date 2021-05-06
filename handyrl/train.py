@@ -446,7 +446,7 @@ def preprocess_config(args):
         for k, v in merge_dct.items():
             if k in dct and isinstance(dct[k], dict) and isinstance(v, dict):
                 recursive_update(dct[k], v)
-            elif not k in dct:
+            else:
                 dct[k] = v
 
     recursive_update(default_config, args)
