@@ -415,7 +415,7 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, args, env=None, net=None, remote=False):
+    def __init__(self, args, net=None, remote=False):
         train_args = args['train_args']
         env_args = args['env_args']
         train_args['env'] = env_args
@@ -425,7 +425,7 @@ class Learner:
         self.args = args
         random.seed(args['seed'])
 
-        self.env = env(args['env']) if env is not None else make_env(env_args)
+        self.env = make_env(env_args)
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
