@@ -331,7 +331,6 @@ class Trainer:
         self.trained_model = self.wrapped_model
         if self.gpu > 1:
             self.trained_model = nn.DataParallel(self.wrapped_model)
-        self.trained_model.train()
 
     def update(self):
         if len(self.episodes) < self.args['minimum_episodes']:
