@@ -538,7 +538,7 @@ class Environment(BaseEnvironment):
         return {'scalar': s, 'board': b}
 
     def net(self):
-        return GeisterNet
+        return GeisterNet()
 
 
 if __name__ == '__main__':
