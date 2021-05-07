@@ -10,10 +10,23 @@ import multiprocessing as mp
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
-from .agent import view, view_transition
 
 
 network_match_port = 9876
+
+
+def view(env, player=None):
+    if hasattr(env, 'view'):
+        env.view(player=player)
+    else:
+        print(env)
+
+
+def view_transition(env):
+    if hasattr(env, 'view_transition'):
+        env.view_transition()
+    else:
+        pass
 
 
 class NetworkAgentClient:
@@ -30,6 +43,8 @@ class NetworkAgentClient:
             elif command == 'outcome':
                 print('outcome = %f' % args[0])
             elif hasattr(self.agent, command):
+                if command == 'action' or command == 'observe':
+                    view(self.env)
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
                     player = args[0]
@@ -37,6 +52,9 @@ class NetworkAgentClient:
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'update':
+                    reset = args[1]
+                    if reset:
+                        self.agent.reset(self.env, show=True)
                     view_transition(self.env)
             self.conn.send(ret)
 
@@ -65,6 +83,8 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     for agent in agents.values():
         agent.reset(env, show=show)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -92,6 +112,8 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         info = env.diff_info(p)
         agent.update(info, True)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -113,24 +135,39 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     return outcome
 
 
+def build_agent(raw, env):
+    if raw == 'random':
+        return RandomAgent()
+    elif raw == 'rulebase':
+        return RuleBasedAgent()
+    return None
+
+
 class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_agent = RandomAgent()  # RuleBasedAgent, trained agent, etc.
+        self.default_opponent = 'random'
 
     def execute(self, models, args):
+        opponents = self.args.get('eval', {}).get('opponent', [])
+        if len(opponents) == 0:
+            opponent = self.default_opponent
+        else:
+            opponent = random.choice(opponents)
+
         agents = {}
         for p, model in models.items():
             if model is None:
-                agents[p] = self.default_agent
+                agents[p] = build_agent(opponent, self.env)
             else:
                 agents[p] = Agent(model, self.args['observation'])
+
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome}
+        return {'args': args, 'result': outcome, 'opponent': opponent}
 
 
 def wp_func(results):
@@ -242,10 +279,11 @@ def network_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    model = env.net()(env)
+    from .model import ModelWrapper
+    model = env.net()()
     model.load_state_dict(torch.load(model_path))
     model.eval()
-    return model
+    return ModelWrapper(model)
 
 
 def client_mp_child(env_args, model_path, conn):

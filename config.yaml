@@ -18,6 +18,7 @@ train_args:
     batch_size: 128
     minimum_episodes: 400
     maximum_episodes: 100000
+    epochs: -1
     num_batchers: 2
     eval_rate: 0.1
     worker:
@@ -25,6 +26,8 @@ train_args:
     lambda: 0.7
     policy_target: 'TD' # 'UPGO' 'VTRACE' 'TD' 'MC'
     value_target: 'TD' # 'VTRACE' 'TD' 'MC'
+    eval:
+        opponent: ['random']
     seed: 0
     restart_epoch: 0
 

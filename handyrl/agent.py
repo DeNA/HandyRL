@@ -30,20 +30,6 @@ class RuleBasedAgent(RandomAgent):
             return random.choice(env.legal_actions(player))
 
 
-def view(env, player=None):
-    if hasattr(env, 'view'):
-        env.view(player=player)
-    else:
-        print(env)
-
-
-def view_transition(env):
-    if hasattr(env, 'view_transition'):
-        env.view_transition()
-    else:
-        pass
-
-
 def print_outputs(env, prob, v):
     if hasattr(env, 'print_outputs'):
         env.print_outputs(prob, v)
@@ -78,7 +64,6 @@ class Agent:
         p -= mask * 1e32
 
         if show:
-            view(env, player=player)
             print_outputs(env, softmax(p), v)
 
         if self.temperature == 0:
@@ -91,9 +76,7 @@ class Agent:
         if self.observation:
             outputs = self.plan(env.observation(player))
             v = outputs.get('value', None)
-        if show:
-            view(env, player=player)
-            if self.observation:
+            if show:
                 print_outputs(env, None, v)
 
 
