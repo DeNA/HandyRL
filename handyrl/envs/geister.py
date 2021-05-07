@@ -9,28 +9,141 @@ import itertools
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel, Encoder, Head, DRC, Conv
 
 
-class GeisterNet(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
+class ConvLSTMCell(nn.Module):
+    def __init__(self, input_dim, hidden_dim, kernel_size, bias):
+        super().__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.kernel_size = kernel_size
+        self.padding = kernel_size[0] // 2, kernel_size[1] // 2
+        self.bias = bias
+
+        self.conv = nn.Conv2d(
+            in_channels=self.input_dim + self.hidden_dim,
+            out_channels=4 * self.hidden_dim,
+            kernel_size=self.kernel_size,
+            padding=self.padding,
+            bias=self.bias
+        )
+
+    def init_hidden(self, input_size, batch_size):
+        if batch_size is None:  # for inference
+            return tuple([
+                np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
+                np.zeros((self.hidden_dim, *input_size), dtype=np.float32)
+            ])
+        else:  # for training
+            return tuple([
+                torch.zeros(*batch_size, self.hidden_dim, *input_size),
+                torch.zeros(*batch_size, self.hidden_dim, *input_size)
+            ])
+
+    def forward(self, input_tensor, cur_state):
+        h_cur, c_cur = cur_state
+
+        combined = torch.cat([input_tensor, h_cur], dim=-3)  # concatenate along channel axis
+        combined_conv = self.conv(combined)
+
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=-3)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+
+        c_next = f * c_cur + i * g
+        h_next = o * torch.tanh(c_next)
+
+        return h_next, c_next
+
+
+class DRC(nn.Module):
+    def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
+        super().__init__()
+        self.num_layers = num_layers
+
+        blocks = []
+        for _ in range(self.num_layers):
+            blocks.append(ConvLSTMCell(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                kernel_size=(kernel_size, kernel_size),
+                bias=bias
+            ))
+        self.blocks = nn.ModuleList(blocks)
+
+    def init_hidden(self, input_size, batch_size):
+        hs, cs = [], []
+        for block in self.blocks:
+            h, c = block.init_hidden(input_size, batch_size)
+            hs.append(h)
+            cs.append(c)
+        return hs, cs
+
+    def forward(self, x, hidden, num_repeats):
+        if hidden is None:
+            hidden = self.init_hidden(x.shape[-2:], x.shape[:-3])
+
+        hs, cs = hidden
+        for _ in range(num_repeats):
+            for i, block in enumerate(self.blocks):
+                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+
+        return hs[-1], (hs, cs)
+
+
+class Conv2dHead(nn.Module):
+    def __init__(self, input_shape, filters, output_filters):
+        super().__init__()
+        self.outputs = input_shape[1] * input_shape[2] * output_filters
+
+        self.conv1 = nn.Conv2d(input_shape[0], filters, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn = nn.BatchNorm2d(filters)
+        self.conv2 = nn.Conv2d(filters, output_filters, kernel_size=1, bias=False)
+
+    def forward(self, x):
+        h = F.relu(self.bn(self.conv1(x)))
+        h = self.conv2(h).view(-1, self.outputs)
+        return h
+
+
+class ScalarHead(nn.Module):
+    def __init__(self, input_shape, filters, outputs):
+        super().__init__()
+        self.hidden_units = input_shape[1] * input_shape[2] * filters
+
+        self.conv = nn.Conv2d(input_shape[0], filters, kernel_size=1, bias=False)
+        self.bn = nn.BatchNorm2d(filters)
+        self.fc = nn.Linear(input_shape[1] * input_shape[2] * filters, outputs, bias=False)
+
+    def forward(self, x):
+        h = F.relu(self.bn(self.conv(x)))
+        h = self.fc(h.view(-1, self.hidden_units))
+        return h
+
+
+class GeisterNet(nn.Module):
+    def __init__(self):
+        super().__init__()
 
         layers, filters, p_filters = 3, 32, 8
-        o = env.observation()
-        input_channels = o['scalar'].shape[-1] + o['board'].shape[-3]
+        input_channels = 7 + 18  # board channels + scalar inputs
         self.input_size = (input_channels, 6, 6)
 
-        self.encoder = Encoder(self.input_size, filters)
+        self.conv1 = nn.Conv2d(input_channels, filters, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(filters)
         self.body = DRC(layers, filters, filters)
-        self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
-        self.activation_p = nn.LeakyReLU(0.1)
-        self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
-        self.head_p_set = nn.Linear(1, 70 * 2, bias=True)
-        self.head_v = Head((filters * 2, 6, 6), 1, 1)
-        self.head_r = Head((filters * 2, 6, 6), 1, 1)
+
+        self.head_p_move = Conv2dHead((filters * 2, 6, 6), p_filters, 4)
+        self.head_p_set = nn.Linear(1, 70, bias=True)
+        self.head_v = ScalarHead((filters * 2, 6, 6), 1, 1)
+        self.head_r = ScalarHead((filters * 2, 6, 6), 1, 1)
 
     def init_hidden(self, batch_size=None):
         return self.body.init_hidden(self.input_size[1:], batch_size)
@@ -40,14 +153,14 @@ class GeisterNet(BaseModel):
         h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([h_s, b], -3)
 
-        h_e = self.encoder(h)
+        h_e = F.relu(self.bn1(self.conv1(h)))
         h, hidden = self.body(h_e, hidden, num_repeats=3)
-
         h = torch.cat([h_e, h], -3)
-        h_p = self.activation_p(self.head_p1(h))
-        h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
-        h_p_set = self.head_p_set(s.sum(-1, keepdim=True).mul(0))
-        h_p = torch.cat([h_p, h_p_set], -1)
+
+        h_p_move = self.head_p_move(h)
+        turn_color = s[:, :1]
+        h_p_set = self.head_p_set(turn_color)
+        h_p = torch.cat([h_p_move, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
@@ -60,7 +173,7 @@ class Environment(BaseEnvironment):
     BLUE, RED = 0, 1
     C = 'BW'
     T = 'BR'
-    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r'}
+    P = {-1: '_', 0: 'B', 1: 'R', 2: 'b', 3: 'r', 4: '*'}
     # original positions to set pieces
     OPOS = [
         ['B2', 'C2', 'D2', 'E2', 'B1', 'C1', 'D1', 'E1'],
@@ -182,12 +295,18 @@ class Environment(BaseEnvironment):
         return self.action2from(a, c) + self.D[self.action2direction(a, c)]
 
     def action2str(self, a, player):
+        if a >= 4 * 6 * 6:
+            return 's' + str(a - 4 * 6 * 6)
+
         c = player
         pos_from = self.action2from(a, c)
         pos_to = self.action2to(a, c)
         return self.position2str(pos_from) + self.position2str(pos_to)
 
     def str2action(self, s, player):
+        if s[0] == 's':
+            return 4 * 6 * 6 + int(s[1:])
+
         c = player
         pos_from = self.str2position(s[:2])
         pos_to = self.str2position(s[2:])
@@ -219,27 +338,29 @@ class Environment(BaseEnvironment):
 
     def __str__(self):
         # output state
+        def _piece(p):
+            return p if p == -1 or self.layouts[self.piece2color(p)] >= 0 else 4
+
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
-            s += self.X[i] + ' ' + ' '.join([self.P[self.board[i, j]] for j in range(6)]) + '\n'
+            s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
         s += 'color = ' + self.C[self.color] + '\n'
         s += 'record = ' + self.record_string()
         return s
 
+    def _set(self, layout):
+        self.layouts[self.color] = layout
+        if layout < 0:
+            layout = random.randrange(70)
+        self.set_pieces(self.color, layout)
+        self.color = self.opponent(self.color)
+        self.turn_count += 1
+
     def play(self, action, _=None):
         # state transition
-        if isinstance(action, str):
-            for astr in action.split():
-                self.play(self.str2action(astr, self.turn()))
-            return
-
         if self.turn_count < 0:
-            layout = action - 4 * 6 * 6 - 70 * self.color
-            self.layouts[self.color] = layout
-            self.set_pieces(self.color, layout)
-            self.color = self.opponent(self.color)
-            self.turn_count += 1
-            return
+            layout = action - 4 * 6 * 6
+            return self._set(layout)
 
         ox, oy = self.action2from(action, self.color)
         nx, ny = self.action2to(action, self.color)
@@ -277,19 +398,23 @@ class Environment(BaseEnvironment):
     def diff_info(self, player):
         color = player
         played_color = (self.turn_count - 1) % 2
+        info = {}
         if len(self.record) == 0:
-            return {}
-        info = {'move': self.action2str(self.record[-1], played_color)}
-        if color == played_color and self.captured_type is not None:
-            info['captured'] = self.T[self.captured_type]
+            if self.turn_count > -2:
+                info['set'] = self.layouts[played_color] if color == played_color else -1
+        else:
+            info['move'] = self.action2str(self.record[-1], played_color)
+            if color == played_color and self.captured_type is not None:
+                info['captured'] = self.T[self.captured_type]
         return info
 
-    def reset_info(self, info):
-        self.args = {**self.args, **info}
-        self.reset(info)
-
-    def play_info(self, info):
-        if 'move' in info:
+    def update(self, info, reset):
+        if reset:
+            self.args = {**self.args, **info}
+            self.reset(info)
+        elif 'set' in info:
+            self._set(info['set'])
+        elif 'move' in info:
             action = self.str2action(info['move'], self.color)
             if 'captured' in info:
                 # set color to captured piece
@@ -321,7 +446,7 @@ class Environment(BaseEnvironment):
 
     def legal(self, action):
         if self.turn_count < 0:
-            layout = action - 4 * 6 * 6 - 70 * self.color
+            layout = action - 4 * 6 * 6
             return 0 <= layout < 70
 
         pos_from = self.action2from(action, self.color)
@@ -330,7 +455,7 @@ class Environment(BaseEnvironment):
         piece = self.board[pos_from[0], pos_from[1]]
         c, t = self.piece2color(piece), self.piece2type(piece)
         if c != self.color:
-            # no piece on destination position
+            # no self piece on original position
             return False
 
         return self._legal(c, t, pos_from, pos_to)
@@ -347,7 +472,7 @@ class Environment(BaseEnvironment):
     def legal_actions(self, _=None):
         # return legal action list
         if self.turn_count < 0:
-            return [4 * 6 * 6 + 70 * self.color + i for i in range(70)]
+            return [4 * 6 * 6 + i for i in range(70)]
         actions = []
         for pos in self.piece_position[self.color*8:(self.color+1)*8]:
             if pos[0] == -1:
@@ -362,7 +487,7 @@ class Environment(BaseEnvironment):
 
     def action_length(self):
         # maximum action label (it determines output size of policy function)
-        return 4 * 6 * 6 + 70 * 2
+        return 4 * 6 * 6 + 70
 
     def players(self):
         return [0, 1]
@@ -379,8 +504,8 @@ class Environment(BaseEnvironment):
         nropp   = self.piece_cnt[self.colortype2piece(opponent, self.RED )]
 
         s = np.array([
-            1 if turn_view           else 0,  # view point is turn player
             1 if color == self.BLACK else 0,  # my color is black
+            1 if turn_view           else 0,  # view point is turn player
             # the number of remained pieces
             *[(1 if nbcolor == i else 0) for i in range(1, 5)],
             *[(1 if nrcolor == i else 0) for i in range(1, 5)],

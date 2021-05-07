@@ -1,14 +1,11 @@
 # Copyright (c) 2020 DeNA Co., Ltd.
 # Licensed under The MIT License [see LICENSE for details]
 
-import os
 import sys
 import yaml
 
 
 if __name__ == '__main__':
-    os.environ['OMP_NUM_THREADS'] = '1'
-
     with open('config.yaml') as f:
         args = yaml.safe_load(f)
     print(args)
@@ -22,7 +19,7 @@ if __name__ == '__main__':
     if mode == '--train' or mode == '-t':
         from handyrl.train import train_main as main
         main(args)
-    if mode == '--train-server' or mode == '-ts':
+    elif mode == '--train-server' or mode == '-ts':
         from handyrl.train import train_server_main as main
         main(args)
     elif mode == '--worker' or mode == '-w':

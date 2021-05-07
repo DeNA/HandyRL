@@ -2,3 +2,4 @@ PyYAML
 numpy
 torch
 pytest
+psutil

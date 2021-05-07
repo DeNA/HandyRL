@@ -18,7 +18,6 @@ import torch.nn.functional as F
 from kaggle_environments import make
 
 from ...environment import BaseEnvironment
-from ...model import BaseModel
 
 
 class TorusConv2d(nn.Module):
@@ -36,12 +35,12 @@ class TorusConv2d(nn.Module):
         return h
 
 
-class GeeseNet(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
-        input_shape = env.observation().shape
+class GeeseNet(nn.Module):
+    def __init__(self):
+        super().__init__()
         layers, filters = 12, 32
-        self.conv0 = TorusConv2d(input_shape[0], filters, (3, 3), True)
+
+        self.conv0 = TorusConv2d(17, filters, (3, 3), True)
         self.blocks = nn.ModuleList([TorusConv2d(filters, filters, (3, 3), True) for _ in range(layers)])
         self.head_p = nn.Linear(filters, 4, bias=False)
         self.head_v = nn.Linear(filters * 2, 1, bias=False)
@@ -60,6 +59,7 @@ class GeeseNet(BaseModel):
 
 class Environment(BaseEnvironment):
     ACTION = ['NORTH', 'SOUTH', 'WEST', 'EAST']
+    DIRECTION = [[-1, 0], [1, 0], [0, -1], [0, 1]]
     NUM_AGENTS = 4
 
     def __init__(self, args={}):
@@ -69,11 +69,14 @@ class Environment(BaseEnvironment):
 
     def reset(self, args={}):
         obs = self.env.reset(num_agents=self.NUM_AGENTS)
-        self.reset_info(obs)
+        self.update((obs, {}), True)
 
-    def reset_info(self, obs):
-        self.obs_list = [obs]
-        self.last_actions = {}
+    def update(self, info, reset):
+        obs, last_actions = info
+        if reset:
+            self.obs_list = []
+        self.obs_list.append(obs)
+        self.last_actions = last_actions
 
     def action2str(self, a, player=None):
         return self.ACTION[a]
@@ -82,20 +85,14 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(s)
 
     def direction(self, pos_from, pos_to):
-        if pos_to is None:
+        if pos_from is None or pos_to is None:
             return None
-        x_from, y_from = pos_from // 11, pos_from % 11
-        x_to, y_to = pos_to // 11, pos_to % 11
-        if x_from == x_to:
-            if (y_from + 1) % 11 == y_to:
-                return 3
-            if (y_from - 1) % 11 == y_to:
-                return 2
-        if y_from == y_to:
-            if (x_from + 1) % 7 == x_to:
-                return 1
-            if (x_from - 1) % 7 == x_to:
-                return 0
+        x, y = pos_from // 11, pos_from % 11
+        for i, d in enumerate(self.DIRECTION):
+            nx, ny = (x + d[0]) % 7, (y + d[1]) % 11
+            if nx * 11 + ny == pos_to:
+                return i
+        return None
 
     def __str__(self):
         # output state
@@ -149,18 +146,13 @@ class Environment(BaseEnvironment):
             s += colors[i] + str(len(geese) or '-') + color_end + ' '
         return s
 
-    def plays(self, actions):
+    def step(self, actions):
         # state transition
         obs = self.env.step([self.action2str(actions.get(p, None) or 0) for p in self.players()])
-        self.play_info((obs, actions))
+        self.update((obs, actions), False)
 
     def diff_info(self, _):
         return self.obs_list[-1], self.last_actions
-
-    def play_info(self, info):
-        obs, actions = info
-        self.obs_list.append(obs)
-        self.last_actions = actions
 
     def turns(self):
         # players to move
@@ -251,6 +243,6 @@ if __name__ == '__main__':
             print(e)
             actions = {p: e.legal_actions(p) for p in e.turns()}
             print([[e.action2str(a, p) for a in alist] for p, alist in actions.items()])
-            e.plays({p: random.choice(alist) for p, alist in actions.items()})
+            e.step({p: random.choice(alist) for p, alist in actions.items()})
         print(e)
         print(e.outcome())
