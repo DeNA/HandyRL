@@ -59,6 +59,7 @@ class GeeseNet(nn.Module):
 
 class Environment(BaseEnvironment):
     ACTION = ['NORTH', 'SOUTH', 'WEST', 'EAST']
+    DIRECTION = [[-1, 0], [1, 0], [0, -1], [0, 1]]
     NUM_AGENTS = 4
 
     def __init__(self, args={}):
@@ -84,20 +85,14 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(s)
 
     def direction(self, pos_from, pos_to):
-        if pos_to is None:
+        if pos_from is None or pos_to is None:
             return None
-        x_from, y_from = pos_from // 11, pos_from % 11
-        x_to, y_to = pos_to // 11, pos_to % 11
-        if x_from == x_to:
-            if (y_from + 1) % 11 == y_to:
-                return 3
-            if (y_from - 1) % 11 == y_to:
-                return 2
-        if y_from == y_to:
-            if (x_from + 1) % 7 == x_to:
-                return 1
-            if (x_from - 1) % 7 == x_to:
-                return 0
+        x, y = pos_from // 11, pos_from % 11
+        for i, d in enumerate(self.DIRECTION):
+            nx, ny = (x + d[0]) % 7, (y + d[1]) % 11
+            if nx * 11 + ny == pos_to:
+                return i
+        return None
 
     def __str__(self):
         # output state
