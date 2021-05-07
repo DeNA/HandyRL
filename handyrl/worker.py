@@ -11,6 +11,7 @@ from socket import gethostname
 from collections import deque
 import multiprocessing as mp
 import pickle
+import copy
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
@@ -167,28 +168,51 @@ class WorkerCluster(QueueCommunicator):
         self.args = args
 
     def run(self):
-        if self.args['remote']:
-            # prepare listening connections
-            def worker_server(port):
-                conn_acceptor = accept_socket_connections(port=port, timeout=0.5)
-                print('started worker server %d' % port)
-                while not self.shutdown_flag:  # use super class's flag
-                    conn = next(conn_acceptor)
-                    if conn is not None:
-                        self.add_connection(conn)
-                print('finished worker server')
-            # use thread list of QueueCommunicator
-            self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-            self.threads[-1].start()
-        else:
-            # open local connections
-            if 'num_gathers' not in self.args['worker']:
-                self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
-            for i in range(self.args['worker']['num_gathers']):
-                conn0, conn1 = mp.Pipe(duplex=True)
-                mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
-                conn1.close()
-                self.add_connection(conn0)
+        # open local connections
+        if 'num_gathers' not in self.args['worker']:
+            self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
+        for i in range(self.args['worker']['num_gathers']):
+            conn0, conn1 = mp.Pipe(duplex=True)
+            mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
+            conn1.close()
+            self.add_connection(conn0)
+
+
+class WorkerServer(QueueCommunicator):
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+
+    def run(self):
+        # prepare listening connections
+        def entry_server(port):
+            print('started entry server %d' % port)
+            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
+            while not self.shutdown_flag:
+                conn = next(conn_acceptor)
+                if conn is not None:
+                    worker_args = conn.recv()
+                    print('accepted connection from %s!' % worker_args['address'])
+                    args = copy.deepcopy(self.args)
+                    args['worker'] = worker_args
+                    conn.send(args)
+                    conn.close()
+            print('finished entry server')
+
+        def worker_server(port):
+            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
+            print('started worker server %d' % port)
+            while not self.shutdown_flag:  # use super class's flag
+                conn = next(conn_acceptor)
+                if conn is not None:
+                    self.add_connection(conn)
+            print('finished worker server')
+
+        # use thread list of super class
+        self.threads.append(threading.Thread(target=entry_server, args=(9999,)))
+        self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
+        self.threads[-2].start()
+        self.threads[-1].start()
 
 
 def entry(worker_args):

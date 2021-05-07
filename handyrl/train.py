@@ -27,7 +27,7 @@ from .model import to_torch, to_gpu, RandomModel, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
-from .worker import WorkerCluster
+from .worker import WorkerCluster, WorkerServer
 
 
 def make_batch(episodes, args):
@@ -421,7 +421,6 @@ class Learner:
         env_args = args['env_args']
         train_args['env'] = env_args
         args = train_args
-        args['remote'] = remote
 
         self.args = args
         random.seed(args['seed'])
@@ -451,7 +450,7 @@ class Learner:
         self.num_results = 0
 
         # multiprocess or remote connection
-        self.worker = WorkerCluster(args)
+        self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
         self.trainer = Trainer(args, train_model)
@@ -460,8 +459,7 @@ class Learner:
         self.shutdown_flag = True
         self.trainer.shutdown()
         self.worker.shutdown()
-        for thread in self.threads:
-            thread.join()
+        self.thread.join()
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
@@ -620,29 +618,11 @@ class Learner:
             self.update()
         print('finished server')
 
-    def entry_server(self):
-        port = 9999
-        print('started entry server %d' % port)
-        conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-        while not self.shutdown_flag:
-            conn = next(conn_acceptor)
-            if conn is not None:
-                worker_args = conn.recv()
-                print('accepted connection from %s!' % worker_args['address'])
-                args = copy.deepcopy(self.args)
-                args['worker'] = worker_args
-                conn.send(args)
-                conn.close()
-        print('finished entry server')
-
     def run(self):
         try:
-            # open threads
-            self.threads = [threading.Thread(target=self.trainer.run)]
-            if self.args['remote']:
-                self.threads.append(threading.Thread(target=self.entry_server))
-            for thread in self.threads:
-                thread.start()
+            # open training thread
+            self.thread = threading.Thread(target=self.trainer.run)
+            self.thread.start()
             # open generator, evaluator
             self.worker.run()
             self.server()
