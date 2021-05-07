@@ -530,11 +530,15 @@ class Learner:
             def output_wp(name, results):
                 n, r, r2 = results
                 mean = r / (n + 1e-6)
-                print('win rate (%s) = %.3f (%.1f / %d)' % (name, (mean + 1) / 2, (r + n) / 2, n))
+                name_tag = ' (%s)' % name if name != '' else ''
+                print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-            output_wp("total", self.results[self.model_era])
-            for key in sorted(list(self.results_per_opponent[self.model_era])):
-                output_wp(key, self.results_per_opponent[self.model_era][key])
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+                output_wp('', self.results[self.model_era])
+            else:
+                output_wp('total', self.results[self.model_era])
+                for key in sorted(list(self.results_per_opponent[self.model_era])):
+                    output_wp(key, self.results_per_opponent[self.model_era][key])
 
         if self.model_era not in self.generation_results:
             print('generation stats = Nan (0)')
