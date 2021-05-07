@@ -159,7 +159,7 @@ class Evaluator:
 
         for p, model in models.items():
             if model is None:
-                agents[p] = build_agent(self.default_opponent, self.env)
+                agents[p] = build_agent(opponent, self.env)
             else:
                 agents[p] = Agent(model, self.args['observation'])
         outcome = exec_match(self.env, agents, None)
