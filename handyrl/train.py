@@ -327,6 +327,11 @@ class Trainer:
         self.update_flag = False
         self.shutdown_flag = False
 
+        self.wrapped_model = ModelWrapper(self.model)
+        self.trained_model = self.wrapped_model
+        if self.gpu > 1:
+            self.trained_model = nn.DataParallel(self.wrapped_model)
+
     def update(self):
         if len(self.episodes) < self.args['minimum_episodes']:
             return None, 0  # return None before training
@@ -360,24 +365,20 @@ class Trainer:
             return
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
-        train_model = model = ModelWrapper(self.model)
-        if self.gpu:
-            if self.gpu > 1:
-                train_model = nn.DataParallel(model)
-            train_model.cuda()
-        train_model.train()
+        if self.gpu > 0:
+            self.trained_model.cuda()
+        self.trained_model.train()
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
-            # episodes were only tuple of arrays
             batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = model.init_hidden([batch_size, player_count])
+            hidden = self.wrapped_model.init_hidden([batch_size, player_count])
             if self.gpu > 0:
                 batch = to_gpu(batch)
                 hidden = to_gpu(hidden)
 
-            losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
+            losses, dcnt = compute_loss(batch, self.trained_model, hidden, self.args)
 
             self.optimizer.zero_grad()
             losses['total'].backward()
