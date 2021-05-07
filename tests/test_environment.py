@@ -8,6 +8,7 @@ ENVS = [
     'tictactoe',
     'geister',
     'parallel_tictactoe',
+    'gym',
     'kaggle.hungry_geese',
 ]
 
