@@ -8,8 +8,8 @@ import socket
 import pickle
 import threading
 import queue
-import select
 import multiprocessing as mp
+import multiprocessing.connection as connection
 
 
 def send_recv(conn, sdata):
@@ -119,7 +119,7 @@ def open_multiprocessing_connections(num_process, target, args_func):
     # open connections
     s_conns, g_conns = [], []
     for _ in range(num_process):
-        conn0, conn1 = mp.connection.Pipe(duplex=True)
+        conn0, conn1 = mp.Pipe(duplex=True)
         s_conns.append(conn0)
         g_conns.append(conn1)
 
@@ -131,25 +131,23 @@ def open_multiprocessing_connections(num_process, target, args_func):
     return s_conns
 
 
-class MultiProcessWorkers:
-    def __init__(self, func, send_generator, num, postprocess=None, buffer_length=512, num_receivers=1):
+class MultiProcessJobExecutor:
+    def __init__(self, func, send_generator, num_workers, postprocess=None, num_receivers=1):
         self.send_generator = send_generator
         self.postprocess = postprocess
-        self.buffer_length = buffer_length
         self.num_receivers = num_receivers
         self.conns = []
-        self.send_cnt = {}
+        self.waiting_conns = queue.Queue()
         self.shutdown_flag = False
-        self.lock = threading.Lock()
         self.output_queue = queue.Queue(maxsize=8)
         self.threads = []
 
-        for i in range(num):
+        for i in range(num_workers):
             conn0, conn1 = mp.Pipe(duplex=True)
             mp.Process(target=func, args=(conn1, i)).start()
             conn1.close()
             self.conns.append(conn0)
-            self.send_cnt[conn0] = 0
+            self.waiting_conns.put(conn0)
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -169,95 +167,43 @@ class MultiProcessWorkers:
     def _sender(self):
         print('start sender')
         while not self.shutdown_flag:
-            total_send_cnt = 0
-            for conn, cnt in self.send_cnt.items():
-                if cnt < self.buffer_length:
-                    conn.send(next(self.send_generator))
-                    self.lock.acquire()
-                    self.send_cnt[conn] += 1
-                    self.lock.release()
-                    total_send_cnt += 1
-            if total_send_cnt == 0:
-                time.sleep(0.01)
+            data = next(self.send_generator)
+            while not self.shutdown_flag:
+                try:
+                    conn = self.waiting_conns.get(timeout=0.3)
+                    conn.send(data)
+                    break
+                except queue.Empty:
+                    pass
         print('finished sender')
 
     def _receiver(self, index):
         print('start receiver %d' % index)
         conns = [conn for i, conn in enumerate(self.conns) if i % self.num_receivers == index]
         while not self.shutdown_flag:
-            tmp_conns = mp.connection.wait(conns)
+            tmp_conns = connection.wait(conns)
             for conn in tmp_conns:
-                data, cnt = conn.recv()
+                data = conn.recv()
+                self.waiting_conns.put(conn)
                 if self.postprocess is not None:
                     data = self.postprocess(data)
                 while not self.shutdown_flag:
                     try:
                         self.output_queue.put(data, timeout=0.3)
-                        self.lock.acquire()
-                        self.send_cnt[conn] -= cnt
-                        self.lock.release()
                         break
                     except queue.Full:
                         pass
         print('finished receiver %d' % index)
 
 
-class MultiThreadWorkers:
-    def __init__(self, func, send_generator, num, postprocess=None):
-        self.func = func
-        self.send_generator = send_generator
-        self.postprocess = postprocess
-        self.num = num
-        self.conns = []
-        self.send_cnt = {}
-        self.shutdown_flag = False
-        self.lock = threading.Lock()
-        self.output_queue = queue.Queue(maxsize=8)
-        self.threads = []
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        for thread in self.threads:
-            thread.join()
-
-    def recv(self):
-        return self.output_queue.get()
-
-    def start(self):
-        class LocalConnection:
-            def __init__(self, parent):
-                self.parent = parent
-
-            def send(self, recv_data):
-                data, _ = recv_data
-                if self.parent.postprocess is not None:
-                    data = self.parent.postprocess(data)
-                while not self.parent.shutdown_flag:
-                    try:
-                        self.parent.output_queue.put(data, timeout=0.3)
-                        break
-                    except queue.Full:
-                        pass
-
-            def recv(self):
-                self.parent.lock.acquire()
-                data = next(self.parent.send_generator)
-                self.parent.lock.release()
-                return data
-
-        for i in range(self.num):
-            conn = LocalConnection(self)
-            self.threads.append(threading.Thread(target=self.func, args=(conn, i)))
-            self.threads[-1].start()
-
-
 class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
-        self.conns, self.conn_ids = {}, 0
+        self.conns = {}
+        self.conn_index = 0
         for conn in conns:
-            self.add(conn)
+            self.add_connection(conn)
         self.shutdown_flag = False
         self.threads = [
             threading.Thread(target=self._send_thread),
@@ -277,9 +223,9 @@ class QueueCommunicator:
     def send(self, conn, send_data):
         self.output_queue.put((conn, send_data))
 
-    def add(self, conn):
-        self.conns[conn] = self.conn_ids
-        self.conn_ids += 1
+    def add_connection(self, conn):
+        self.conns[conn] = self.conn_index
+        self.conn_index += 1
 
     def disconnect(self, conn):
         print('disconnected')
@@ -293,13 +239,15 @@ class QueueCommunicator:
                 continue
             try:
                 conn.send(send_data)
+            except ConnectionResetError:
+                self.disconnect(conn)
             except BrokenPipeError:
                 self.disconnect(conn)
 
     def _recv_thread(self):
         while not self.shutdown_flag:
-            conn_list, _, _ = select.select(self.conns, [], [], 0.3)
-            for conn in conn_list:
+            conns = connection.wait(self.conns, timeout=0.3)
+            for conn in conns:
                 try:
                     recv_data = conn.recv()
                 except ConnectionResetError:

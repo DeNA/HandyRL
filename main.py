@@ -4,10 +4,6 @@
 import sys
 import yaml
 
-from handyrl.train import train_main, train_server_main
-from handyrl.worker import worker_main
-from handyrl.evaluation import eval_main, eval_server_main, eval_client_main
-
 
 if __name__ == '__main__':
     with open('config.yaml') as f:
@@ -21,16 +17,22 @@ if __name__ == '__main__':
     mode = sys.argv[1]
 
     if mode == '--train' or mode == '-t':
-        train_main(args)
-    if mode == '--train-server' or mode == '-ts':
-        train_server_main(args)
+        from handyrl.train import train_main as main
+        main(args)
+    elif mode == '--train-server' or mode == '-ts':
+        from handyrl.train import train_server_main as main
+        main(args)
     elif mode == '--worker' or mode == '-w':
-        worker_main(args)
+        from handyrl.worker import worker_main as main
+        main(args)
     elif mode == '--eval' or mode == '-e':
-        eval_main(args, sys.argv[2:])
+        from handyrl.evaluation import eval_main as main
+        main(args, sys.argv[2:])
     elif mode == '--eval-server' or mode == '-es':
-        eval_server_main(args, sys.argv[2:])
+        from handyrl.evaluation import eval_server_main as main
+        main(args, sys.argv[2:])
     elif mode == '--eval-client' or mode == '-ec':
-        eval_client_main(args, sys.argv[2:])
+        from handyrl.evaluation import eval_client_main as main
+        main(args, sys.argv[2:])
     else:
         print('Not found mode %s.' % mode)

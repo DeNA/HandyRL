@@ -6,10 +6,17 @@
 import importlib
 
 
+ENVS = {
+    'TicTacToe':         'handyrl.envs.tictactoe',
+    'Geister':           'handyrl.envs.geister',
+    'ParallelTicTacToe': 'handyrl.envs.parallel_tictactoe',
+    'HungryGeese':       'handyrl.envs.kaggle.hungry_geese',
+}
+
+
 def prepare_env(env_args):
     env_name = env_args['env']
-    env_source = env_args['source']
-
+    env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
     if env_module is None:
@@ -20,8 +27,7 @@ def prepare_env(env_args):
 
 def make_env(env_args):
     env_name = env_args['env']
-    env_source = env_args['source']
-
+    env_source = ENVS.get(env_name, env_name)
     env_module = importlib.import_module(env_source)
 
     if env_module is None:
@@ -34,7 +40,7 @@ def make_env(env_args):
 
 class BaseEnvironment:
     def __init__(self, args={}):
-        self.reset()
+        pass
 
     def __str__(self):
         return ''
@@ -46,22 +52,30 @@ class BaseEnvironment:
         raise NotImplementedError()
 
     #
-    # Should be defined in all games which has stochastic state transition before deciding action
+    # Should be defined in all games except you implement original step() function
     #
-    def chance(self):
-        pass
-
-    #
-    # Should be defined in all games
-    #
-    def play(self, action):
+    def play(self, action, player):
         raise NotImplementedError()
 
     #
-    # Should be defined if you use multiplayer game
+    # Should be defined in games which has simultaneous trainsition
+    #
+    def step(self, actions):
+        for p, action in actions.items():
+            if action is not None:
+                self.play(action, p)
+
+    #
+    # Should be defined if you use multiplayer sequential action game
     #
     def turn(self):
         return 0
+
+    #
+    # Should be defined if you use multiplayer simultaneous action game
+    #
+    def turns(self):
+        return [self.turn()]
 
     #
     # Should be defined in all games
@@ -84,7 +98,7 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def legal_actions(self):
+    def legal_actions(self, player):
         raise NotImplementedError()
 
     #
@@ -120,23 +134,11 @@ class BaseEnvironment:
     #
     # Should be defined if you use network battle mode
     #
-    def diff_info(self):
+    def diff_info(self, player=None):
         return ''
 
     #
     # Should be defined if you use network battle mode
     #
-    def reset_info(self, _):
-        self.reset()
-
-    #
-    # Should be defined if you use network battle mode
-    #
-    def chance_info(self, _):
-        self.chance()
-
-    #
-    # Should be defined if you use network battle mode
-    #
-    def play_info(self, info):
-        self.play(info)
+    def update(self, info, reset):
+        raise NotImplementedError()
