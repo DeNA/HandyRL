@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
-import torch.optim as optim
 import psutil
 
 from .environment import prepare_env, make_env
@@ -310,16 +309,21 @@ class Batcher:
 
 
 class Trainer:
-    def __init__(self, args, model):
+    def __init__(self, args, model, optim):
         self.episodes = deque()
         self.args = args
         self.gpu = torch.cuda.device_count()
         self.model = model
-        self.default_lr = 3e-8
-        self.data_cnt_ema = self.args['batch_size'] * self.args['forward_steps']
-        self.params = list(self.model.parameters())
-        lr = self.default_lr * self.data_cnt_ema
-        self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
+        if optim is not None:
+            self.optim_selected = True
+            self.optim = optim
+        else:
+            self.optim_selected = False
+            self.default_lr = 3e-8
+            self.data_cnt_ema = self.args['batch_size'] * self.args['forward_steps']
+            lr = self.default_lr * self.data_cnt_ema
+            params = list(self.model.parameters())
+            self.optim = torch.optim.Adam(params, lr=lr, weight_decay=1e-5) if len(params) > 0 else None
         self.steps = 0
         self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
@@ -360,7 +364,7 @@ class Trainer:
         self.batcher.shutdown()
 
     def train(self):
-        if self.optimizer is None:  # non-parametric model
+        if self.optim is None:  # non-parametric model
             print()
             return
 
@@ -380,10 +384,10 @@ class Trainer:
 
             losses, dcnt = compute_loss(batch, self.trained_model, hidden, self.args)
 
-            self.optimizer.zero_grad()
+            self.optim.zero_grad()
             losses['total'].backward()
-            nn.utils.clip_grad_norm_(self.params, 4.0)
-            self.optimizer.step()
+            nn.utils.clip_grad_norm_(self.model.parameters(), 4.0)
+            self.optim.step()
 
             batch_cnt += 1
             data_cnt += dcnt
@@ -394,9 +398,10 @@ class Trainer:
 
         print('loss = %s' % ' '.join([k + ':' + '%.3f' % (l / data_cnt) for k, l in loss_sum.items()]))
 
-        self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.default_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
+        if not self.optim_selected:
+            self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
+            for param_group in self.optim.param_groups:
+                param_group['lr'] = self.default_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
         self.model.cpu()
         self.model.eval()
         return copy.deepcopy(self.model)
@@ -416,7 +421,7 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, args, net=None, remote=False):
+    def __init__(self, args, net=None, remote=False, optim=None):
         train_args = args['train_args']
         env_args = args['env_args']
         train_args['env'] = env_args
@@ -433,8 +438,7 @@ class Learner:
 
         # trained datum
         self.model_era = self.args['restart_epoch']
-        self.model_class = net if net is not None else self.env.net()
-        train_model = self.model_class()
+        train_model = net if net is not None else self.env.net()
         if self.model_era == 0:
             self.model = RandomModel(self.env)
         else:
@@ -454,7 +458,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, train_model)
+        self.trainer = Trainer(args, train_model, optim)
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -620,7 +624,7 @@ class Learner:
                         model = self.model
                         if model_id != self.model_era:
                             try:
-                                model = self.model_class()
+                                model = copy.deepcopy(self.model)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
