@@ -368,7 +368,6 @@ class Trainer:
         train_model.train()
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
-            # episodes were only tuple of arrays
             batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
