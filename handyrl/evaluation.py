@@ -43,7 +43,7 @@ class NetworkAgentClient:
             elif command == 'outcome':
                 print('outcome = %f' % args[0])
             elif hasattr(self.agent, command):
-                if command == 'action' or command == 'observe':
+                if command == 'action':
                     view(self.env)
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
@@ -72,11 +72,8 @@ class NetworkAgent:
     def action(self, player):
         return send_recv(self.conn, ('action', [player]))
 
-    def observe(self, player):
-        return send_recv(self.conn, ('observe', [player]))
 
-
-def exec_match(env, agents, critic, show=False, game_args={}):
+def exec_match(env, agents, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
@@ -85,15 +82,10 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     while not env.terminal():
         if show:
             view(env)
-        if show and critic is not None:
-            print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
         actions = {}
-        for p, agent in agents.items():
-            if p in turn_players:
-                actions[p] = agent.action(env, p, show=show)
-            else:
-                agent.observe(env, p, show=show)
+        for p in env.turns():
+            actions[p] = agents[p].action(env, p, show=show)
         if env.step(actions):
             return None
         if show:
@@ -104,7 +96,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     return outcome
 
 
-def exec_network_match(env, network_agents, critic, show=False, game_args={}):
+def exec_network_match(env, network_agents, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
@@ -114,16 +106,10 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     while not env.terminal():
         if show:
             view(env)
-        if show and critic is not None:
-            print('cv = ', critic.observe(env, None, show=False)[0])
-        turn_players = env.turns()
         actions = {}
-        for p, agent in network_agents.items():
-            if p in turn_players:
-                action = agent.action(p)
-                actions[p] = env.str2action(action, p)
-            else:
-                agent.observe(p)
+        if p in env.turns():
+            action = network_agents[p].action(p)
+            actions[p] = env.str2action(action, p)
         if env.step(actions):
             return None
         for p, agent in network_agents.items():
@@ -161,7 +147,7 @@ class Evaluator:
             if model is None:
                 agents[p] = build_agent(opponent, self.env)
             else:
-                agents[p] = Agent(model, self.args['observation'])
+                agents[p] = Agent(model)
 
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
@@ -178,7 +164,7 @@ def wp_func(results):
     return win / games
 
 
-def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, seed, show=False):
+def eval_process_mp_child(agents, env_args, index, in_queue, out_queue, seed, show=False):
     random.seed(seed + index)
     env = make_env({**env_args, 'id': index})
     while True:
@@ -189,14 +175,14 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         print('*** Game %d ***' % g)
         agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
         if isinstance(list(agent_map.values())[0], NetworkAgent):
-            outcome = exec_network_match(env, agent_map, critic, show=show, game_args=game_args)
+            outcome = exec_network_match(env, agent_map, show=show, game_args=game_args)
         else:
-            outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
+            outcome = exec_match(env, agent_map, show=show, game_args=game_args)
         out_queue.put((pat_idx, agent_ids, outcome))
     out_queue.put(None)
 
 
-def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_games, seed):
+def evaluate_mp(env, agents, env_args, args_patterns, num_process, num_games, seed):
     in_queue, out_queue = mp.Queue(), mp.Queue()
     args_cnt = 0
     total_results, result_map = [{} for _ in agents], [{} for _ in agents]
@@ -224,7 +210,7 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
 
     for i in range(num_process):
         in_queue.put(None)
-        args = agents[i], critic, env_args, i, in_queue, out_queue, seed
+        args = agents[i], env_args, i, in_queue, out_queue, seed
         if num_process > 1:
             mp.Process(target=eval_process_mp_child, args=args).start()
             if network_mode:
@@ -302,7 +288,6 @@ def eval_main(args, argv):
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
     agent1 = Agent(get_model(env, model_path))
-    critic = None
 
     print('%d process, %d games' % (num_process, num_games))
 
@@ -311,7 +296,7 @@ def eval_main(args, argv):
 
     agents = [agent1] + [RandomAgent() for _ in range(len(env.players()) - 1)]
 
-    evaluate_mp(env, agents, critic, env_args, {'default': {}}, num_process, num_games, seed)
+    evaluate_mp(env, agents, env_args, {'default': {}}, num_process, num_games, seed)
 
 
 def eval_server_main(args, argv):
@@ -328,7 +313,7 @@ def eval_server_main(args, argv):
     seed = random.randrange(1e8)
     print('seed = %d' % seed)
 
-    evaluate_mp(env, [None] * len(env.players()), None, env_args, {'default': {}}, num_process, num_games, seed)
+    evaluate_mp(env, [None] * len(env.players()), env_args, {'default': {}}, num_process, num_games, seed)
 
 
 def eval_client_main(args, argv):

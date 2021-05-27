@@ -7,7 +7,6 @@ env_args:
 
 train_args:
     turn_based_training: True
-    observation: False
     gamma: 0.8
     forward_steps: 16
     compress_steps: 4

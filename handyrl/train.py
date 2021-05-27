@@ -61,7 +61,7 @@ def make_batch(episodes, args):
         p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
 
         # data that is chainge by training configuration
-        if args['turn_based_training'] and not args['observation']:
+        if args['turn_based_training']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
             act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
@@ -159,7 +159,7 @@ def forward_prediction(model, hidden, batch, args):
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
-            if args['turn_based_training'] and not args['observation']:
+            if args['turn_based_training']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
                 hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)

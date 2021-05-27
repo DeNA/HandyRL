@@ -18,9 +18,6 @@ class RandomAgent:
         actions = env.legal_actions(player)
         return random.choice(actions)
 
-    def observe(self, env, player, show=False):
-        return 0.0
-
 
 class RuleBasedAgent(RandomAgent):
     def action(self, env, player, show=False):
@@ -39,11 +36,10 @@ def print_outputs(env, prob, v):
 
 
 class Agent:
-    def __init__(self, model, observation=False, temperature=0.0):
+    def __init__(self, model, temperature=0.0):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
-        self.observation = observation
         self.temperature = temperature
 
     def reset(self, env, show=False):
@@ -72,13 +68,6 @@ class Agent:
         else:
             return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
 
-    def observe(self, env, player, show=False):
-        if self.observation:
-            outputs = self.plan(env.observation(player))
-            v = outputs.get('value', None)
-            if show:
-                print_outputs(env, None, v)
-
 
 class EnsembleAgent(Agent):
     def reset(self, env, show=False):
@@ -99,5 +88,5 @@ class EnsembleAgent(Agent):
 
 
 class SoftAgent(Agent):
-    def __init__(self, model, observation=False):
-        super().__init__(model, observation=observation, temperature=1.0)
+    def __init__(self, model):
+        super().__init__(model, temperature=1.0)
