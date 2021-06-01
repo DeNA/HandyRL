@@ -489,17 +489,14 @@ class Learner:
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
 
         # store generated episodes
-        mem = psutil.virtual_memory()
-        mem_used_ratio = mem.used / mem.total
-        mem_ok = mem_used_ratio <= 0.95
-        maximum_episodes = self.args['maximum_episodes'] if mem_ok else len(self.trainer.episodes)
-
-        if not mem_ok and 'memory_over' not in self.flags:
-            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_used_ratio * 100, len(self.trainer.episodes)))
-            self.flags.add('memory_over')
-
         self.trainer.episodes.extend([e for e in episodes if e is not None])
-        while len(self.trainer.episodes) > maximum_episodes:
+        while len(self.trainer.episodes) > self.args['maximum_episodes']:
+            self.trainer.episodes.popleft()
+
+        while psutil.virtual_memory().percent >= 95:
+            if 'memory_over' not in self.flags:
+                warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_used_ratio * 100, len(self.trainer.episodes)))
+                self.flags.add('memory_over')
             self.trainer.episodes.popleft()
 
     def feed_results(self, results):
