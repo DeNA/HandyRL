@@ -19,7 +19,7 @@ class RandomAgent:
         return random.choice(actions)
 
     def observe(self, env, player, show=False):
-        return 0.0
+        return [0.0]
 
 
 class RuleBasedAgent(RandomAgent):
@@ -73,11 +73,13 @@ class Agent:
             return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
 
     def observe(self, env, player, show=False):
+        v = None
         if self.observation:
             outputs = self.plan(env.observation(player))
             v = outputs.get('value', None)
             if show:
                 print_outputs(env, None, v)
+        return v if v is not None else [0.0]
 
 
 class EnsembleAgent(Agent):
