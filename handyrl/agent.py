@@ -57,7 +57,7 @@ class Agent:
         v = outputs.get('value', None)
         mask = np.ones_like(p)
         mask[actions] = 0
-        p -= mask * 1e32
+        p = p - mask * 1e32
 
         if show:
             print_outputs(env, softmax(p), v)
