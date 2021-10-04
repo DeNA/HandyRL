@@ -1,0 +1,30 @@
+[build-system]
+requires = ["poetry-core>=1.1.5"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "handyrl"
+# Bump it to appropreate version if #183 done and ready to release.
+version = "0.0.1"
+description = "Simple framework of distributed reinforcement learning on Python/PyTorch"
+authors = ["DeNA Co., Ltd."]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+
+PyYAML = "^5.4.1"
+numpy = "^1.20.2"
+psutil = "^5.8.0"
+torch = "^1.8.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.2"
+# For handyrl/envs/kaggle/hungry_geese.py
+kaggle-environments = "^1.7.11"
+requests = "^2.25.1"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
