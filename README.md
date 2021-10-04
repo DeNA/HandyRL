@@ -53,7 +53,13 @@ pip3 install -r requirements.txt
 
 To use games of kaggle environments (e.g. Hungry Geese) you can install also additional dependencies.
 ```
-pip3 install -r handyrl/envs/kaggle/requirements.txt
+pip3 install -r requirements-dev.txt
+```
+
+Or equivalently, you can use [poetry](https://python-poetry.org/).
+
+```
+poetry install
 ```
 
 
