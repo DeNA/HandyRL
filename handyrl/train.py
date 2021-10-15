@@ -297,7 +297,7 @@ class Batcher:
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps']
+            'start': st, 'end': ed, 'total': ep['steps'],
         }
         return ep_minimum
 
