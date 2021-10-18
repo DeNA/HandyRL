@@ -307,7 +307,7 @@ class Batcher:
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'train_start': st_train, 'total': ep['steps']
+            'start': st, 'end': ed, 'train_start': st_train, 'total': ep['steps'],
         }
         return ep_minimum
 
@@ -442,14 +442,14 @@ class Learner:
         self.flags = set()
 
         # trained datum
-        self.model_era = self.args['restart_epoch']
+        self.model_epoch = self.args['restart_epoch']
         self.model_class = net if net is not None else self.env.net()
         train_model = self.model_class()
-        if self.model_era == 0:
+        if self.model_epoch == 0:
             self.model = RandomModel(self.env)
         else:
             self.model = train_model
-            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
+            self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
 
         # generated datum
         self.generation_results = {}
@@ -481,10 +481,10 @@ class Learner:
     def update_model(self, model, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
-        self.model_era += 1
+        self.model_epoch += 1
         self.model = model
         os.makedirs('models', exist_ok=True)
-        torch.save(model.state_dict(), self.model_path(self.model_era))
+        torch.save(model.state_dict(), self.model_path(self.model_epoch))
         torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
@@ -499,16 +499,16 @@ class Learner:
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
 
         # store generated episodes
-        mem = psutil.virtual_memory()
-        mem_used_ratio = mem.used / mem.total
-        mem_ok = mem_used_ratio <= 0.95
-        maximum_episodes = self.args['maximum_episodes'] if mem_ok else len(self.trainer.episodes)
+        self.trainer.episodes.extend([e for e in episodes if e is not None])
+
+        mem_percent = psutil.virtual_memory().percent
+        mem_ok = mem_percent <= 95
+        maximum_episodes = self.args['maximum_episodes'] if mem_ok else int(len(self.trainer.episodes) * 95 / mem_percent)
 
         if not mem_ok and 'memory_over' not in self.flags:
-            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_used_ratio * 100, len(self.trainer.episodes)))
+            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_percent, len(self.trainer.episodes)))
             self.flags.add('memory_over')
 
-        self.trainer.episodes.extend([e for e in episodes if e is not None])
         while len(self.trainer.episodes) > maximum_episodes:
             self.trainer.episodes.popleft()
 
@@ -532,9 +532,9 @@ class Learner:
     def update(self):
         # call update to every component
         print()
-        print('epoch %d' % self.model_era)
+        print('epoch %d' % self.model_epoch)
 
-        if self.model_era not in self.results:
+        if self.model_epoch not in self.results:
             print('win rate = Nan (0)')
         else:
             def output_wp(name, results):
@@ -544,16 +544,16 @@ class Learner:
                 print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
             if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
-                output_wp('', self.results[self.model_era])
+                output_wp('', self.results[self.model_epoch])
             else:
-                output_wp('total', self.results[self.model_era])
-                for key in sorted(list(self.results_per_opponent[self.model_era])):
-                    output_wp(key, self.results_per_opponent[self.model_era][key])
+                output_wp('total', self.results[self.model_epoch])
+                for key in sorted(list(self.results_per_opponent[self.model_epoch])):
+                    output_wp(key, self.results_per_opponent[self.model_epoch][key])
 
-        if self.model_era not in self.generation_results:
+        if self.model_epoch not in self.generation_results:
             print('generation stats = Nan (0)')
         else:
-            n, r, r2 = self.generation_results[self.model_era]
+            n, r, r2 = self.generation_results[self.model_epoch]
             mean = r / (n + 1e-6)
             std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
             print('generation stats = %.3f +- %.3f' % (mean, std))
@@ -571,7 +571,7 @@ class Learner:
         # returns as list if getting multiple requests as list
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
-        while self.model_era < self.args['epochs'] or self.args['epochs'] < 0:
+        while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
             while not self.shutdown_flag and self.num_episodes < next_update_episodes:
@@ -596,7 +596,7 @@ class Learner:
                             args['player'] = self.env.players()
                             for p in self.env.players():
                                 if p in args['player']:
-                                    args['model_id'][p] = self.model_era
+                                    args['model_id'][p] = self.model_epoch
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
@@ -608,7 +608,7 @@ class Learner:
                             args['player'] = [self.env.players()[self.num_results % len(self.env.players())]]
                             for p in self.env.players():
                                 if p in args['player']:
-                                    args['model_id'][p] = self.model_era
+                                    args['model_id'][p] = self.model_epoch
                                 else:
                                     args['model_id'][p] = -1
                             self.num_results += 1
@@ -628,7 +628,7 @@ class Learner:
                 elif req == 'model':
                     for model_id in data:
                         model = self.model
-                        if model_id != self.model_era:
+                        if model_id != self.model_epoch:
                             try:
                                 model = self.model_class()
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)

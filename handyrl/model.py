@@ -64,4 +64,7 @@ class RandomModel(nn.Module):
         self.action_length = env.action_length()
 
     def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(1, dtype=np.float32)}
+        return {
+            'policy': np.zeros(self.action_length, dtype=np.float32),
+            'value': np.zeros(1, dtype=np.float32),
+        }

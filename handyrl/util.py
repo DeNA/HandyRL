@@ -59,5 +59,5 @@ def rotate(x, max_depth=1024):
 
 
 def softmax(x):
-    x = np.exp(x - np.max(x, axis=-1))
-    return x / x.sum(axis=-1)
+    x = np.exp(x - np.max(x, axis=-1, keepdims=True))
+    return x / x.sum(axis=-1, keepdims=True)

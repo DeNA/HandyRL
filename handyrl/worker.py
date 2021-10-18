@@ -50,7 +50,8 @@ class Worker:
                     model_pool[model_id] = self.latest_model[1]
                 else:
                     # get model from server
-                    model_pool[model_id] = ModelWrapper(pickle.loads(send_recv(self.conn, ('model', model_id))))
+                    model = pickle.loads(send_recv(self.conn, ('model', model_id)))
+                    model_pool[model_id] = ModelWrapper(model)
                     # update latest model
                     if model_id > self.latest_model[0]:
                         self.latest_model = model_id, model_pool[model_id]
