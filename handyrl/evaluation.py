@@ -288,8 +288,11 @@ def get_model(env, model_path):
 
 def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
-    model = get_model(env, model_path)
-    NetworkAgentClient(Agent(model), env, conn).run()
+    agent = build_agent(model_path, env)
+    if agent is None:
+        model = get_model(env, model_path)
+        agent = Agent(model)
+    NetworkAgentClient(agent, env, conn).run()
 
 
 def eval_main(args, argv):
@@ -301,7 +304,9 @@ def eval_main(args, argv):
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-    agent1 = Agent(get_model(env, model_path))
+    agent1 = build_agent(model_path, env)
+    if agent1 is None:
+        agent1 = Agent(get_model(env, model_path))
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))
