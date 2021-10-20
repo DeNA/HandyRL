@@ -78,6 +78,12 @@ class BaseEnvironment:
         return [self.turn()]
 
     #
+    # Should be defined if you use multiplayer simultaneous action game
+    #
+    def observers(self):
+        return []
+
+    #
     # Should be defined in all games
     #
     def terminal(self):

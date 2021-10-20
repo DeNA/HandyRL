@@ -33,8 +33,9 @@ class Generator:
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
+            observers = self.env.observers()
             for player in self.env.players():
-                if player in turn_players or self.args['observation']:
+                if player in turn_players or player in observers:
                     obs = self.env.observation(player)
                     model = models[player]
                     outputs = model.inference(obs, hidden[player])
