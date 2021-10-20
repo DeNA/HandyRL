@@ -89,9 +89,10 @@ def make_batch(episodes, args):
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
-        if len(tmask) < args['forward_steps']:
+        batch_steps = args['burn_in_steps'] + args['forward_steps']
+        if len(tmask) < batch_steps:
             pad_len_b = args['burn_in_steps'] - (ep['train_start'] - ep['start'])
-            pad_len = args['forward_steps'] - len(tmask) - pad_len_b
+            pad_len = batch_steps - len(tmask) - pad_len_b
             obs = map_r(obs, lambda o: np.pad(o, [(pad_len_b, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             p = np.pad(p, [(pad_len_b, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             v = np.pad(np.concatenate([v, np.tile(oc, [pad_len, 1, 1])]), [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0)
@@ -225,6 +226,9 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args)
+    batch = map_r(batch, lambda v: v[args['burn_in_steps']:])
+    outputs = map_r(outputs, lambda v: v[args['burn_in_steps']:])
+
     actions = batch['action']
     emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
@@ -296,10 +300,9 @@ class Batcher:
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
-        trained_steps = self.args['forward_steps'] - self.args['burn_in_steps']
-        turn_candidates = 1 + max(0, ep['steps'] - trained_steps)  # change start turn by sequence length
+        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
         st_train = random.randrange(turn_candidates)
-        ed = min(st_train + trained_steps, ep['steps'])
+        ed = min(st_train + self.args['forward_steps'], ep['steps'])
         st = max(0, st_train - self.args['burn_in_steps'])
         st_block = st // self.args['compress_steps']
         ed_block = (ed - 1) // self.args['compress_steps'] + 1
