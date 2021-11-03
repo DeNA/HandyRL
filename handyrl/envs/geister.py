@@ -9,28 +9,141 @@ import itertools
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
-from ..model import BaseModel, Encoder, Head, DRC, Conv
 
 
-class GeisterNet(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
+class ConvLSTMCell(nn.Module):
+    def __init__(self, input_dim, hidden_dim, kernel_size, bias):
+        super().__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.kernel_size = kernel_size
+        self.padding = kernel_size[0] // 2, kernel_size[1] // 2
+        self.bias = bias
+
+        self.conv = nn.Conv2d(
+            in_channels=self.input_dim + self.hidden_dim,
+            out_channels=4 * self.hidden_dim,
+            kernel_size=self.kernel_size,
+            padding=self.padding,
+            bias=self.bias
+        )
+
+    def init_hidden(self, input_size, batch_size):
+        if batch_size is None:  # for inference
+            return tuple([
+                np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
+                np.zeros((self.hidden_dim, *input_size), dtype=np.float32)
+            ])
+        else:  # for training
+            return tuple([
+                torch.zeros(*batch_size, self.hidden_dim, *input_size),
+                torch.zeros(*batch_size, self.hidden_dim, *input_size)
+            ])
+
+    def forward(self, input_tensor, cur_state):
+        h_cur, c_cur = cur_state
+
+        combined = torch.cat([input_tensor, h_cur], dim=-3)  # concatenate along channel axis
+        combined_conv = self.conv(combined)
+
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=-3)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+
+        c_next = f * c_cur + i * g
+        h_next = o * torch.tanh(c_next)
+
+        return h_next, c_next
+
+
+class DRC(nn.Module):
+    def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
+        super().__init__()
+        self.num_layers = num_layers
+
+        blocks = []
+        for _ in range(self.num_layers):
+            blocks.append(ConvLSTMCell(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                kernel_size=(kernel_size, kernel_size),
+                bias=bias
+            ))
+        self.blocks = nn.ModuleList(blocks)
+
+    def init_hidden(self, input_size, batch_size):
+        hs, cs = [], []
+        for block in self.blocks:
+            h, c = block.init_hidden(input_size, batch_size)
+            hs.append(h)
+            cs.append(c)
+        return hs, cs
+
+    def forward(self, x, hidden, num_repeats):
+        if hidden is None:
+            hidden = self.init_hidden(x.shape[-2:], x.shape[:-3])
+
+        hs, cs = hidden
+        for _ in range(num_repeats):
+            for i, block in enumerate(self.blocks):
+                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+
+        return hs[-1], (hs, cs)
+
+
+class Conv2dHead(nn.Module):
+    def __init__(self, input_shape, filters, output_filters):
+        super().__init__()
+        self.outputs = input_shape[1] * input_shape[2] * output_filters
+
+        self.conv1 = nn.Conv2d(input_shape[0], filters, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn = nn.BatchNorm2d(filters)
+        self.conv2 = nn.Conv2d(filters, output_filters, kernel_size=1, bias=False)
+
+    def forward(self, x):
+        h = F.relu(self.bn(self.conv1(x)))
+        h = self.conv2(h).view(-1, self.outputs)
+        return h
+
+
+class ScalarHead(nn.Module):
+    def __init__(self, input_shape, filters, outputs):
+        super().__init__()
+        self.hidden_units = input_shape[1] * input_shape[2] * filters
+
+        self.conv = nn.Conv2d(input_shape[0], filters, kernel_size=1, bias=False)
+        self.bn = nn.BatchNorm2d(filters)
+        self.fc = nn.Linear(input_shape[1] * input_shape[2] * filters, outputs, bias=False)
+
+    def forward(self, x):
+        h = F.relu(self.bn(self.conv(x)))
+        h = self.fc(h.view(-1, self.hidden_units))
+        return h
+
+
+class GeisterNet(nn.Module):
+    def __init__(self):
+        super().__init__()
 
         layers, filters, p_filters = 3, 32, 8
-        o = env.observation()
-        input_channels = o['scalar'].shape[-1] + o['board'].shape[-3]
+        input_channels = 7 + 18  # board channels + scalar inputs
         self.input_size = (input_channels, 6, 6)
 
-        self.encoder = Encoder(self.input_size, filters)
+        self.conv1 = nn.Conv2d(input_channels, filters, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(filters)
         self.body = DRC(layers, filters, filters)
-        self.head_p1 = Conv(filters * 2, p_filters, 1, bn=False)
-        self.activation_p = nn.LeakyReLU(0.1)
-        self.head_p2 = Conv(p_filters, 4, 1, bn=False, bias=False)
+
+        self.head_p_move = Conv2dHead((filters * 2, 6, 6), p_filters, 4)
         self.head_p_set = nn.Linear(1, 70, bias=True)
-        self.head_v = Head((filters * 2, 6, 6), 1, 1)
-        self.head_r = Head((filters * 2, 6, 6), 1, 1)
+        self.head_v = ScalarHead((filters * 2, 6, 6), 1, 1)
+        self.head_r = ScalarHead((filters * 2, 6, 6), 1, 1)
 
     def init_hidden(self, batch_size=None):
         return self.body.init_hidden(self.input_size[1:], batch_size)
@@ -40,15 +153,14 @@ class GeisterNet(BaseModel):
         h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([h_s, b], -3)
 
-        h_e = self.encoder(h)
+        h_e = F.relu(self.bn1(self.conv1(h)))
         h, hidden = self.body(h_e, hidden, num_repeats=3)
-
         h = torch.cat([h_e, h], -3)
-        h_p = self.activation_p(self.head_p1(h))
-        h_p = self.head_p2(h_p).view(*h.size()[:-3], 4 * 6 * 6)
+
+        h_p_move = self.head_p_move(h)
         turn_color = s[:, :1]
         h_p_set = self.head_p_set(turn_color)
-        h_p = torch.cat([h_p, h_p_set], -1)
+        h_p = torch.cat([h_p_move, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 

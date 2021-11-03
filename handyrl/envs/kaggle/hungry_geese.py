@@ -18,7 +18,6 @@ import torch.nn.functional as F
 from kaggle_environments import make
 
 from ...environment import BaseEnvironment
-from ...model import BaseModel
 
 
 class TorusConv2d(nn.Module):
@@ -36,12 +35,12 @@ class TorusConv2d(nn.Module):
         return h
 
 
-class GeeseNet(BaseModel):
-    def __init__(self, env, args={}):
-        super().__init__(env, args)
-        input_shape = env.observation().shape
+class GeeseNet(nn.Module):
+    def __init__(self):
+        super().__init__()
         layers, filters = 12, 32
-        self.conv0 = TorusConv2d(input_shape[0], filters, (3, 3), True)
+
+        self.conv0 = TorusConv2d(17, filters, (3, 3), True)
         self.blocks = nn.ModuleList([TorusConv2d(filters, filters, (3, 3), True) for _ in range(layers)])
         self.head_p = nn.Linear(filters, 4, bias=False)
         self.head_v = nn.Linear(filters * 2, 1, bias=False)
@@ -60,6 +59,7 @@ class GeeseNet(BaseModel):
 
 class Environment(BaseEnvironment):
     ACTION = ['NORTH', 'SOUTH', 'WEST', 'EAST']
+    DIRECTION = [[-1, 0], [1, 0], [0, -1], [0, 1]]
     NUM_AGENTS = 4
 
     def __init__(self, args={}):
@@ -85,20 +85,14 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(s)
 
     def direction(self, pos_from, pos_to):
-        if pos_to is None:
+        if pos_from is None or pos_to is None:
             return None
-        x_from, y_from = pos_from // 11, pos_from % 11
-        x_to, y_to = pos_to // 11, pos_to % 11
-        if x_from == x_to:
-            if (y_from + 1) % 11 == y_to:
-                return 3
-            if (y_from - 1) % 11 == y_to:
-                return 2
-        if y_from == y_to:
-            if (x_from + 1) % 7 == x_to:
-                return 1
-            if (x_from - 1) % 7 == x_to:
-                return 0
+        x, y = pos_from // 11, pos_from % 11
+        for i, d in enumerate(self.DIRECTION):
+            nx, ny = (x + d[0]) % 7, (y + d[1]) % 11
+            if nx * 11 + ny == pos_to:
+                return i
+        return None
 
     def __str__(self):
         # output state

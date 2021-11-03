@@ -7,34 +7,12 @@ import random
 import time
 import multiprocessing as mp
 
-import numpy as np
-
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
-from .util import softmax
+from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
 
 
 network_match_port = 9876
-
-
-class RandomAgent:
-    def reset(self, env, show=False):
-        pass
-
-    def action(self, env, player, show=False):
-        actions = env.legal_actions(player)
-        return random.choice(actions)
-
-    def observe(self, env, player, show=False):
-        return 0.0
-
-
-class RuleBasedAgent(RandomAgent):
-    def action(self, env, player, show=False):
-        if hasattr(env, 'rule_based_action'):
-            return env.rule_based_action(player)
-        else:
-            return random.choice(env.legal_actions(player))
 
 
 def view(env, player=None):
@@ -51,83 +29,6 @@ def view_transition(env):
         pass
 
 
-def print_outputs(env, prob, v):
-    if hasattr(env, 'print_outputs'):
-        env.print_outputs(prob, v)
-    else:
-        print('v = %s' % v)
-        print('p = %s' % (prob * 1000).astype(int))
-
-
-class Agent:
-    def __init__(self, model, observation=False, temperature=0.0):
-        # model might be a neural net, or some planning algorithm such as game tree search
-        self.model = model
-        self.hidden = None
-        self.observation = observation
-        self.temperature = temperature
-
-    def reset(self, env, show=False):
-        self.hidden = self.model.init_hidden()
-
-    def plan(self, obs):
-        outputs = self.model.inference(obs, self.hidden)
-        self.hidden = outputs.pop('hidden', None)
-        return outputs
-
-    def action(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
-        actions = env.legal_actions(player)
-        p_ = outputs['policy']
-        v = outputs.get('value', None)
-        mask = np.ones_like(p_)
-        mask[actions] = 0
-        p = p_ - mask * 1e32
-
-        if show:
-            view(env, player=player)
-            print('p_ = %s' % (softmax(p_) * 1000).astype(int))
-            print_outputs(env, softmax(p), v)
-
-        if self.temperature == 0:
-            ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
-            return ap_list[0][0]
-        else:
-            return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
-
-    def observe(self, env, player, show=False):
-        if self.observation:
-            outputs = self.plan(env.observation(player))
-            v = outputs.get('value', None)
-        if show:
-            view(env, player=player)
-            if self.observation:
-                print_outputs(env, None, v)
-
-
-class EnsembleAgent(Agent):
-    def reset(self, env, show=False):
-        self.hidden = [model.init_hidden() for model in self.model]
-
-    def plan(self, obs):
-        outputs = {}
-        for i, model in enumerate(self.model):
-            o = model.inference(obs, self.hidden[i])
-            for k, v in o:
-                if k == 'hidden':
-                    self.hidden[i] = v
-                else:
-                    outputs[k] = outputs.get(k, []) + [o]
-        for k, vl in outputs:
-            outputs[k] = np.mean(vl, axis=0)
-        return outputs
-
-
-class SoftAgent(Agent):
-    def __init__(self, model, observation=False):
-        super().__init__(model, observation=observation, temperature=1.0)
-
-
 class NetworkAgentClient:
     def __init__(self, agent, env, conn):
         self.conn = conn
@@ -142,6 +43,8 @@ class NetworkAgentClient:
             elif command == 'outcome':
                 print('outcome = %f' % args[0])
             elif hasattr(self.agent, command):
+                if command == 'action' or command == 'observe':
+                    view(self.env)
                 ret = getattr(self.agent, command)(self.env, *args, show=True)
                 if command == 'action':
                     player = args[0]
@@ -149,6 +52,9 @@ class NetworkAgentClient:
             else:
                 ret = getattr(self.env, command)(*args)
                 if command == 'update':
+                    reset = args[1]
+                    if reset:
+                        self.agent.reset(self.env, show=True)
                     view_transition(self.env)
             self.conn.send(ret)
 
@@ -177,6 +83,8 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     for agent in agents.values():
         agent.reset(env, show=show)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -204,6 +112,8 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         info = env.diff_info(p)
         agent.update(info, True)
     while not env.terminal():
+        if show:
+            view(env)
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
@@ -225,24 +135,39 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     return outcome
 
 
+def build_agent(raw, env):
+    if raw == 'random':
+        return RandomAgent()
+    elif raw == 'rulebase':
+        return RuleBasedAgent()
+    return None
+
+
 class Evaluator:
     def __init__(self, env, args):
         self.env = env
         self.args = args
-        self.default_agent = RandomAgent()  # RuleBasedAgent, trained agent, etc.
+        self.default_opponent = 'random'
 
     def execute(self, models, args):
+        opponents = self.args.get('eval', {}).get('opponent', [])
+        if len(opponents) == 0:
+            opponent = self.default_opponent
+        else:
+            opponent = random.choice(opponents)
+
         agents = {}
         for p, model in models.items():
             if model is None:
-                agents[p] = self.default_agent
+                agents[p] = build_agent(opponent, self.env)
             else:
                 agents[p] = Agent(model, self.args['observation'])
+
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome}
+        return {'args': args, 'result': outcome, 'opponent': opponent}
 
 
 def wp_func(results):
@@ -354,17 +279,20 @@ def network_match_acception(n, env_args, num_agents, port):
 
 def get_model(env, model_path):
     import torch
-    from .model import SimpleConv2dModel as DefaultModel
-    model = env.net()(env) if hasattr(env, 'net') else DefaultModel(env)
+    from .model import ModelWrapper
+    model = env.net()()
     model.load_state_dict(torch.load(model_path))
     model.eval()
-    return model
+    return ModelWrapper(model)
 
 
 def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
-    model = get_model(env, model_path)
-    NetworkAgentClient(Agent(model), env, conn).run()
+    agent = build_agent(model_path, env)
+    if agent is None:
+        model = get_model(env, model_path)
+        agent = Agent(model)
+    NetworkAgentClient(agent, env, conn).run()
 
 
 def eval_main(args, argv):
@@ -376,7 +304,9 @@ def eval_main(args, argv):
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-    agent1 = Agent(get_model(env, model_path))
+    agent1 = build_agent(model_path, env)
+    if agent1 is None:
+        agent1 = Agent(get_model(env, model_path))
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))

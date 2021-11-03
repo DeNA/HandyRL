@@ -7,9 +7,171 @@ import copy
 import random
 
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
-from ..model import MuZero
+from ..search import MonteCarloTree
+from ..model import to_torch
+
+
+class Conv(nn.Module):
+    def __init__(self, filters0, filters1, kernel_size, bn, bias=True):
+        super().__init__()
+        if bn:
+            bias = False
+        self.conv = nn.Conv2d(
+            filters0, filters1, kernel_size,
+            stride=1, padding=kernel_size//2, bias=bias
+        )
+        self.bn = nn.BatchNorm2d(filters1) if bn else None
+
+    def forward(self, x):
+        h = self.conv(x)
+        if self.bn is not None:
+            h = self.bn(h)
+        return h
+
+
+class Head(nn.Module):
+    def __init__(self, input_size, out_filters, outputs):
+        super().__init__()
+
+        self.board_size = input_size[1] * input_size[2]
+        self.out_filters = out_filters
+
+        self.conv = Conv(input_size[0], out_filters, 1, bn=False)
+        self.activation = nn.LeakyReLU(0.1)
+        self.fc = nn.Linear(self.board_size * out_filters, outputs, bias=False)
+
+    def forward(self, x):
+        h = self.activation(self.conv(x))
+        h = self.fc(h.view(-1, self.board_size * self.out_filters))
+        return h
+
+
+class SimpleConv2dModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        layers, filters = 3, 32
+
+        self.conv = nn.Conv2d(3, filters, 3, stride=1, padding=1)
+        self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
+        self.head_p = Head((filters, 3, 3), 2, 9)
+        self.head_v = Head((filters, 3, 3), 1, 1)
+
+    def forward(self, x, hidden=None):
+        h = F.relu(self.conv(x))
+        for block in self.blocks:
+            h = F.relu(block(h))
+        h_p = self.head_p(h)
+        h_v = self.head_v(h)
+
+        return {'policy': h_p, 'value': torch.tanh(h_v)}
+
+
+class MuZero(nn.Module):
+    class Representation(nn.Module):
+        ''' Conversion from observation to inner abstract state '''
+        def __init__(self, input_dim, layers, filters):
+            super().__init__()
+            self.layer0 = Conv(input_dim, filters, 3, bn=True)
+            self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
+
+        def forward(self, x):
+            h = F.relu(self.layer0(x))
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, x):
+            self.eval()
+            with torch.no_grad():
+                rp = self(to_torch(x).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    class Prediction(nn.Module):
+        ''' Policy and value prediction from inner abstract state '''
+        def __init__(self, internal_size, num_players, action_length):
+            super().__init__()
+            self.head_p = Head(internal_size, 4, num_players * action_length)
+            self.head_v = Head(internal_size, 2, num_players)
+
+        def forward(self, rp):
+            p = self.head_p(rp)
+            v = self.head_v(rp)
+            return p, torch.tanh(v)
+
+        def inference(self, rp):
+            self.eval()
+            with torch.no_grad():
+                p, v = self(to_torch(rp).unsqueeze(0))
+            return p.cpu().numpy().squeeze(0), v.cpu().numpy().squeeze(0)
+
+    class Dynamics(nn.Module):
+        '''Abstract state transition'''
+        def __init__(self, rp_shape, layers, num_players, action_length, action_filters):
+            super().__init__()
+            self.action_shape = action_filters, rp_shape[1], rp_shape[2]
+            filters = rp_shape[0]
+            self.action_embedding = nn.Embedding(num_players * action_length, embedding_dim=np.prod(self.action_shape))
+            self.layer0 = Conv(filters + action_filters, filters, 3, bn=True)
+            self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
+
+        def forward(self, rp, a):
+            arp = self.action_embedding(a).view(-1, *self.action_shape)
+            h = torch.cat([rp, arp], dim=1)
+            h = self.layer0(h)
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, rp, a):
+            self.eval()
+            with torch.no_grad():
+                rp = self(to_torch(rp).unsqueeze(0), to_torch(a).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    def __init__(self):
+        super().__init__()
+        self.num_players = 2
+        self.action_length = 9
+        self.input_size = 3, 3, 3
+        layers, filters = 3, 32
+        internal_size = (filters, *self.input_size[1:])
+        self.planning_args = {
+            'root_noise_alpha': 0.15,
+            'root_noise_coef': 0.25,
+        }
+
+        self.nets = nn.ModuleDict({
+            'representation': self.Representation(self.input_size[0], layers, filters),
+            'prediction': self.Prediction(internal_size, self.num_players, self.action_length),
+            'dynamics': self.Dynamics(internal_size, layers, self.num_players, self.action_length, 2),
+        })
+
+    def init_hidden(self, batch_size=None):
+        return {}
+
+    def forward(self, x, hidden, action=None):
+        if 'representation' not in hidden:
+            rp = self.nets['representation'](x)
+        else:
+            rp = hidden['representation']
+        p, v = self.nets['prediction'](rp)
+        outputs = {'policy': p, 'value': v}
+
+        if action is not None:
+            next_rp = self.nets['dynamics'](rp, action)
+            outputs['hidden'] = {'representation': next_rp}
+        return outputs
+
+    def inference(self, x, hidden=None, num_simulations=30):
+        tree = MonteCarloTree(self.nets, self.planning_args)
+        p, v = tree.think(x, num_simulations)
+        return {'policy': p, 'value': v}
+
 
 
 class Environment(BaseEnvironment):

@@ -10,6 +10,7 @@ import threading
 import random
 import bz2
 import pickle
+import warnings
 from collections import deque
 
 import numpy as np
@@ -18,15 +19,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 import torch.optim as optim
+import psutil
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu_or_not, RandomModel
-from .model import SimpleConv2dModel as DefaultModel
+from .model import to_torch, to_gpu, RandomModel, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
-from .worker import WorkerCluster
+from .worker import WorkerCluster, WorkerServer
 
 
 def make_batch(episodes, args):
@@ -272,10 +273,7 @@ class Batcher:
         self.episodes = episodes
         self.shutdown_flag = False
 
-        self.executor = MultiProcessJobExecutor(
-            self._worker, self._selector(), self.args['num_batchers'],
-            buffer_length=3, num_receivers=2
-        )
+        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'], num_receivers=2)
 
     def _selector(self):
         while True:
@@ -286,7 +284,7 @@ class Batcher:
         while not self.shutdown_flag:
             episodes = conn.recv()
             batch = make_batch(episodes, self.args)
-            conn.send((batch, 1))
+            conn.send(batch)
         print('finished batcher %d' % bid)
 
     def run(self):
@@ -309,7 +307,7 @@ class Batcher:
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps']
+            'start': st, 'end': ed, 'total': ep['steps'],
         }
         return ep_minimum
 
@@ -338,6 +336,11 @@ class Trainer:
         self.updated_model = None, 0
         self.update_flag = False
         self.shutdown_flag = False
+
+        self.wrapped_model = ModelWrapper(self.model)
+        self.trained_model = self.wrapped_model
+        if self.gpu > 1:
+            self.trained_model = nn.DataParallel(self.wrapped_model)
 
     def update(self):
         if len(self.episodes) < self.args['minimum_episodes']:
@@ -372,21 +375,20 @@ class Trainer:
             return
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
-        train_model = self.model
-        if self.gpu:
-            if self.gpu > 1:
-                train_model = nn.DataParallel(self.model)
-            train_model.cuda()
-        train_model.train()
+        if self.gpu > 0:
+            self.trained_model.cuda()
+        self.trained_model.train()
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
-            # episodes were only tuple of arrays
-            batch = to_gpu_or_not(self.batcher.batch(), self.gpu)
+            batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
-            hidden = to_gpu_or_not(self.model.init_hidden([batch_size, player_count]), self.gpu)
+            hidden = self.wrapped_model.init_hidden([batch_size, player_count])
+            if self.gpu > 0:
+                batch = to_gpu(batch)
+                hidden = to_gpu(hidden)
 
-            losses, dcnt = compute_loss(batch, train_model, hidden, self.args)
+            losses, dcnt = compute_loss(batch, self.trained_model, hidden, self.args)
 
             self.optimizer.zero_grad()
             losses['total'].backward()
@@ -424,24 +426,30 @@ class Trainer:
 
 
 class Learner:
-    def __init__(self, args):
+    def __init__(self, args, net=None, remote=False):
+        train_args = args['train_args']
+        env_args = args['env_args']
+        train_args['env'] = env_args
+        args = train_args
+
         self.args = args
         random.seed(args['seed'])
 
-        self.env = make_env(args['env'])
+        self.env = make_env(env_args)
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
         self.shutdown_flag = False
+        self.flags = set()
 
         # trained datum
-        self.model_era = self.args['restart_epoch']
-        self.model_class = self.env.net() if hasattr(self.env, 'net') else DefaultModel
-        train_model = self.model_class(self.env, args)
-        if self.model_era == 0:
+        self.model_epoch = self.args['restart_epoch']
+        self.model_class = net if net is not None else self.env.net()
+        train_model = self.model_class()
+        if self.model_epoch == 0:
             self.model = RandomModel(self.env)
         else:
             self.model = train_model
-            self.model.load_state_dict(torch.load(self.model_path(self.model_era)), strict=False)
+            self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
 
         # generated datum
         self.generation_results = {}
@@ -449,10 +457,11 @@ class Learner:
 
         # evaluated datum
         self.results = {}
+        self.results_per_opponent = {}
         self.num_results = 0
 
         # multiprocess or remote connection
-        self.worker = WorkerCluster(args)
+        self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
         self.trainer = Trainer(args, train_model)
@@ -461,8 +470,7 @@ class Learner:
         self.shutdown_flag = True
         self.trainer.shutdown()
         self.worker.shutdown()
-        for thread in self.threads:
-            thread.join()
+        self.thread.join()
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
@@ -473,10 +481,10 @@ class Learner:
     def update_model(self, model, steps):
         # get latest model and save it
         print('updated model(%d)' % steps)
-        self.model_era += 1
+        self.model_epoch += 1
         self.model = model
         os.makedirs('models', exist_ok=True)
-        torch.save(model.state_dict(), self.model_path(self.model_era))
+        torch.save(model.state_dict(), self.model_path(self.model_epoch))
         torch.save(model.state_dict(), self.latest_model_path())
 
     def feed_episodes(self, episodes):
@@ -492,7 +500,16 @@ class Learner:
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
-        while len(self.trainer.episodes) > self.args['maximum_episodes']:
+
+        mem_percent = psutil.virtual_memory().percent
+        mem_ok = mem_percent <= 95
+        maximum_episodes = self.args['maximum_episodes'] if mem_ok else int(len(self.trainer.episodes) * 95 / mem_percent)
+
+        if not mem_ok and 'memory_over' not in self.flags:
+            warnings.warn("memory usage %.1f%% with buffer size %d" % (mem_percent, len(self.trainer.episodes)))
+            self.flags.add('memory_over')
+
+        while len(self.trainer.episodes) > maximum_episodes:
             self.trainer.episodes.popleft()
 
     def feed_results(self, results):
@@ -506,22 +523,37 @@ class Learner:
                 n, r, r2 = self.results.get(model_id, (0, 0, 0))
                 self.results[model_id] = n + 1, r + res, r2 + res ** 2
 
+                if model_id not in self.results_per_opponent:
+                    self.results_per_opponent[model_id] = {}
+                opponent = result['opponent']
+                n, r, r2 = self.results_per_opponent[model_id].get(opponent, (0, 0, 0))
+                self.results_per_opponent[model_id][opponent] = n + 1, r + res, r2 + res ** 2
+
     def update(self):
         # call update to every component
         print()
-        print('epoch %d' % self.model_era)
+        print('epoch %d' % self.model_epoch)
 
-        if self.model_era not in self.results:
+        if self.model_epoch not in self.results:
             print('win rate = Nan (0)')
         else:
-            n, r, r2 = self.results[self.model_era]
-            mean = r / (n + 1e-6)
-            print('win rate = %.3f (%.1f / %d)' % ((mean + 1) / 2, (r + n) / 2, n))
+            def output_wp(name, results):
+                n, r, r2 = results
+                mean = r / (n + 1e-6)
+                name_tag = ' (%s)' % name if name != '' else ''
+                print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-        if self.model_era not in self.generation_results:
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+                output_wp('', self.results[self.model_epoch])
+            else:
+                output_wp('total', self.results[self.model_epoch])
+                for key in sorted(list(self.results_per_opponent[self.model_epoch])):
+                    output_wp(key, self.results_per_opponent[self.model_epoch][key])
+
+        if self.model_epoch not in self.generation_results:
             print('generation stats = Nan (0)')
         else:
-            n, r, r2 = self.generation_results[self.model_era]
+            n, r, r2 = self.generation_results[self.model_epoch]
             mean = r / (n + 1e-6)
             std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
             print('generation stats = %.3f +- %.3f' % (mean, std))
@@ -531,12 +563,15 @@ class Learner:
             model = self.model
         self.update_model(model, steps)
 
+        # clear flags
+        self.flags = set()
+
     def server(self):
         # central conductor server
         # returns as list if getting multiple requests as list
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
-        while True:
+        while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
             while not self.shutdown_flag and self.num_episodes < next_update_episodes:
@@ -561,7 +596,7 @@ class Learner:
                             args['player'] = self.env.players()
                             for p in self.env.players():
                                 if p in args['player']:
-                                    args['model_id'][p] = self.model_era
+                                    args['model_id'][p] = self.model_epoch
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
@@ -573,7 +608,7 @@ class Learner:
                             args['player'] = [self.env.players()[self.num_results % len(self.env.players())]]
                             for p in self.env.players():
                                 if p in args['player']:
-                                    args['model_id'][p] = self.model_era
+                                    args['model_id'][p] = self.model_epoch
                                 else:
                                     args['model_id'][p] = -1
                             self.num_results += 1
@@ -593,9 +628,9 @@ class Learner:
                 elif req == 'model':
                     for model_id in data:
                         model = self.model
-                        if model_id != self.model_era:
+                        if model_id != self.model_epoch:
                             try:
-                                model = self.model_class(self.env, self.args)
+                                model = self.model_class()
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
@@ -609,29 +644,11 @@ class Learner:
             self.update()
         print('finished server')
 
-    def entry_server(self):
-        port = 9999
-        print('started entry server %d' % port)
-        conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-        while not self.shutdown_flag:
-            conn = next(conn_acceptor)
-            if conn is not None:
-                worker_args = conn.recv()
-                print('accepted connection from %s!' % worker_args['address'])
-                args = copy.deepcopy(self.args)
-                args['worker'] = worker_args
-                conn.send(args)
-                conn.close()
-        print('finished entry server')
-
     def run(self):
         try:
-            # open threads
-            self.threads = [threading.Thread(target=self.trainer.run)]
-            if self.args['remote']:
-                self.threads.append(threading.Thread(target=self.entry_server))
-            for thread in self.threads:
-                thread.start()
+            # open training thread
+            self.thread = threading.Thread(target=self.trainer.run)
+            self.thread.start()
             # open generator, evaluator
             self.worker.run()
             self.server()
@@ -641,23 +658,11 @@ class Learner:
 
 
 def train_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = False
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
-    prepare_env(env_args)  # preparing environment is needed in stand-alone mode
-    learner = Learner(train_args)
+    prepare_env(args['env_args'])  # preparing environment is needed in stand-alone mode
+    learner = Learner(args=args)
     learner.run()
 
 
 def train_server_main(args):
-    train_args = args['train_args']
-    train_args['remote'] = True
-
-    env_args = args['env_args']
-    train_args['env'] = env_args
-
-    learner = Learner(train_args)
+    learner = Learner(args=args, remote=True)
     learner.run()

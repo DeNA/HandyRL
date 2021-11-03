@@ -1,12 +1,9 @@
 
 env_args:
     env: 'TicTacToe'
-    source: 'handyrl.envs.tictactoe'
     #env: 'Geister'
-    #source: 'handyrl.envs.geister'
     #env: 'HungryGeese'
-    #source: 'handyrl.envs.kaggle.hungry_geese'
-
+    #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
 
 train_args:
     turn_based_training: True
@@ -20,6 +17,7 @@ train_args:
     batch_size: 128
     minimum_episodes: 400
     maximum_episodes: 100000
+    epochs: -1
     num_batchers: 2
     eval_rate: 0.1
     worker:
@@ -31,6 +29,8 @@ train_args:
     planning:
         root_noise_alpha: 0.15
         root_noise_coef: 0.25
+    eval:
+        opponent: ['random']
     seed: 0
     restart_epoch: 0
 
