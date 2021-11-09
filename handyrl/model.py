@@ -35,13 +35,21 @@ class ModelWrapper(nn.Module):
         super().__init__()
         self.model = model
 
+        def get_argument_names(f):
+            return f.__code__.co_varnames[:f.__code__.co_argcount]
+        self.forward_args = get_argument_names(self.model.forward)
+
     def init_hidden(self, batch_size=None):
         if hasattr(self.model, 'init_hidden'):
             return self.model.init_hidden(batch_size)
         return None
 
-    def forward(self, *args, **kwargs):
-        return self.model.forward(*args, **kwargs)
+    def forward(self, x, hidden, **kwargs):
+        # Remove 'hidden' input if it will not accepted
+        if 'hidden' not in self.forward_args:
+            return self.model.forward(x, **kwargs)
+        else:
+            return self.model.forward(x, hidden, **kwargs)
 
     def inference(self, x, hidden, **kwargs):
         # numpy array -> numpy array
