@@ -436,7 +436,8 @@ class Learner:
         self.model_class = net if net is not None else self.env.net()
         train_model = self.model_class()
         if self.model_epoch == 0:
-            self.model = RandomModel(self.env)
+            obs = self.env.observation(self.env.players()[0])
+            self.model = RandomModel(train_model, obs)
         else:
             self.model = train_model
             self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
