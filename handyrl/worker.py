@@ -52,6 +52,7 @@ class Worker:
                     # get model from server
                     model = pickle.loads(send_recv(self.conn, ('model', model_id)))
                     if model_id == 0:
+                        # use random model
                         self.env.reset()
                         obs = self.env.observation(self.env.players()[0])
                         model = RandomModel(model, obs)
