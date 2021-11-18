@@ -133,11 +133,12 @@ class MuZero(nn.Module):
                 rp = self(to_torch(rp).unsqueeze(0), to_torch(a).unsqueeze(0))
             return rp.cpu().numpy().squeeze(0)
 
-    def __init__(self):
+    def __init__(self, env, obs, action_length):
         super().__init__()
-        self.num_players = 2
-        self.action_length = 9
-        self.input_size = 3, 3, 3
+        self.num_players = len(env.players())
+        self.action_length = action_length
+        self.input_size = obs.shape
+
         layers, filters = 3, 32
         internal_size = (filters, *self.input_size[1:])
         self.planning_args = {
@@ -267,7 +268,8 @@ class Environment(BaseEnvironment):
         return [0, 1]
 
     def net(self):
-        return MuZero
+        obs = self.observation(self.players()[0])
+        return MuZero(self, obs, 9)
 
     def observation(self, player=None):
         # input feature for neural nets
