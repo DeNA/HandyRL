@@ -163,8 +163,9 @@ class GeisterNet(nn.Module):
         h_p = torch.cat([h_p_move, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
+        h_v = torch.cat([torch.tanh(h_v), h_r], -1)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
+        return {'policy': h_p, 'value': h_v, 'hidden': hidden}
 
 
 class Environment(BaseEnvironment):
@@ -432,17 +433,17 @@ class Environment(BaseEnvironment):
         return self.win_color is not None
 
     def reward(self):
-        # return immediate rewards
-        return {p: -0.01 for p in self.players()}
+        # immediate rewards
+        turn_rewards = [-0.01, -0.01]
 
-    def outcome(self):
-        # return terminal outcomes
+        # terminal reward
         outcomes = [0, 0]
         if self.win_color == self.BLACK:
             outcomes = [1, -1]
         elif self.win_color == self.WHITE:
             outcomes = [-1, 1]
-        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
+
+        return {p: [outcomes[idx], turn_rewards[idx]] for idx, p in enumerate(self.players())}
 
     def legal(self, action):
         if self.turn_count < 0:

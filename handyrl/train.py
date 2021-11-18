@@ -57,8 +57,10 @@ def make_batch(episodes, args):
         if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
+        # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))
+        p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])
+        v_zeros = np.zeros_like(moments[0]['value'][moments[0]['turn'][0]])
 
         # data that is chainge by training configuration
         if args['turn_based_training'] and not args['observation']:
@@ -77,10 +79,9 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
-        rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
-        ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
-        oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
+        v = np.array([[replace_none(m['value'][player], v_zeros) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        rew = np.array([[replace_none(m['reward'][player], v_zeros) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        ret = np.array([[replace_none(m['return'][player], v_zeros) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
         tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
@@ -93,7 +94,7 @@ def make_batch(episodes, args):
             pad_len = args['forward_steps'] - len(tmask)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
+            v = np.pad(v, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
@@ -104,31 +105,32 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
+        datum.append((p, v, act, rew, ret, emask, tmask, omask, amask, progress))
 
-    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
+    p, v, act, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
     p = to_torch(np.array(p))
     v = to_torch(np.array(v))
     act = to_torch(np.array(act))
-    oc = to_torch(np.array(oc))
     rew = to_torch(np.array(rew))
     ret = to_torch(np.array(ret))
     emask = to_torch(np.array(emask))
     tmask = to_torch(np.array(tmask))
     omask = to_torch(np.array(omask))
     amask = to_torch(np.array(amask))
+    gamma = to_torch(np.array(args['gamma']))
     progress = to_torch(np.array(progress))
 
     return {
         'observation': obs,
         'policy': p, 'value': v,
-        'action': act, 'outcome': oc,
+        'action': act,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
         'turn_mask': tmask, 'observation_mask': omask,
         'action_mask': amask,
+        'gamma': gamma,
         'progress': progress,
     }
 
@@ -201,14 +203,12 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     losses['p'] = (-log_selected_policies * turn_advantages).sum()
     if 'value' in outputs:
-        losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
-    if 'return' in outputs:
-        losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(omasks).sum()
+        losses['v'] = F.smooth_l1_loss(outputs['value'], targets['value'], reduction='none').mul(omasks).sum()
 
     entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
-    base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
+    base_loss = losses['p'] + losses.get('r', 0)
     entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
@@ -236,21 +236,18 @@ def compute_loss(batch, model, hidden, args):
         if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
             values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
-        outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
+
+        outputs_nograd['value'] = values_nograd * emasks + batch['return'] * (1 - emasks)
 
     # compute targets and advantage
     targets = {}
     advantages = {}
 
-    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs
-    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs
-
+    value_args = outputs_nograd.get('value', None), batch['return'], batch['reward'], args['lambda'], batch['gamma'], clipped_rhos, cs
     targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
-    targets['return'], advantages['return'] = compute_target(args['value_target'], *return_args)
 
     if args['policy_target'] != args['value_target']:
         _, advantages['value'] = compute_target(args['policy_target'], *value_args)
-        _, advantages['return'] = compute_target(args['policy_target'], *return_args)
 
     # compute policy advantage
     total_advantages = clipped_rhos * sum(advantages.values())
@@ -294,7 +291,7 @@ class Batcher:
         st_block = st // self.args['compress_steps']
         ed_block = (ed - 1) // self.args['compress_steps'] + 1
         ep_minimum = {
-            'args': ep['args'], 'outcome': ep['outcome'],
+            'args': ep['args'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
             'start': st, 'end': ed, 'total': ep['steps'],
@@ -480,9 +477,9 @@ class Learner:
                 continue
             for p in episode['args']['player']:
                 model_id = episode['args']['model_id'][p]
-                outcome = episode['outcome'][p]
+                rewards = episode['total_reward'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
-                self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+                self.generation_results[model_id] = n + 1, r + rewards, r2 + rewards ** 2
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
@@ -505,15 +502,15 @@ class Learner:
                 continue
             for p in result['args']['player']:
                 model_id = result['args']['model_id'][p]
-                res = result['result'][p]
+                rewards = result['total_reward'][p]
                 n, r, r2 = self.results.get(model_id, (0, 0, 0))
-                self.results[model_id] = n + 1, r + res, r2 + res ** 2
+                self.results[model_id] = n + 1, r + rewards, r2 + rewards ** 2
 
                 if model_id not in self.results_per_opponent:
                     self.results_per_opponent[model_id] = {}
                 opponent = result['opponent']
                 n, r, r2 = self.results_per_opponent[model_id].get(opponent, (0, 0, 0))
-                self.results_per_opponent[model_id][opponent] = n + 1, r + res, r2 + res ** 2
+                self.results_per_opponent[model_id][opponent] = n + 1, r + rewards, r2 + rewards ** 2
 
     def update(self):
         # call update to every component
@@ -526,8 +523,9 @@ class Learner:
             def output_wp(name, results):
                 n, r, r2 = results
                 mean = r / (n + 1e-6)
+                std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
                 name_tag = ' (%s)' % name if name != '' else ''
-                print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
+                print('eval reward%s = %.3f +- %.3f (/ %d)' % (name_tag, mean[0], std[0], n))
 
             if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
                 output_wp('', self.results[self.model_epoch])
@@ -537,12 +535,12 @@ class Learner:
                     output_wp(key, self.results_per_opponent[self.model_epoch][key])
 
         if self.model_epoch not in self.generation_results:
-            print('generation stats = Nan (0)')
+            print('gen  reward = Nan (0)')
         else:
             n, r, r2 = self.generation_results[self.model_epoch]
             mean = r / (n + 1e-6)
             std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
-            print('generation stats = %.3f +- %.3f' % (mean, std))
+            print('gen  reward = %.3f +- %.3f (/ %d)' % (mean[0], std[0], n))
 
         model, steps = self.trainer.update()
         if model is None:
