@@ -158,7 +158,7 @@ class Environment(BaseEnvironment):
         return [0, 1]
 
     def net(self):
-        return SimpleConv2dModel
+        return SimpleConv2dModel()
 
     def observation(self, player=None):
         # input feature for neural nets
