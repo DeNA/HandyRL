@@ -52,7 +52,10 @@ class Worker:
                     # get model from server
                     model = pickle.loads(send_recv(self.conn, ('model', model_id)))
                     if model_id == 0:
-                        model = RandomModel(self.env)
+                        # use random model
+                        self.env.reset()
+                        obs = self.env.observation(self.env.players()[0])
+                        model = RandomModel(model, obs)
                     model_pool[model_id] = ModelWrapper(model)
                     # update latest model
                     if model_id > self.latest_model[0]:
