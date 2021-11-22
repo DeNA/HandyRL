@@ -91,10 +91,10 @@ class MonteCarloTree:
 
         #  Return probability distribution weighted by the number of simulations
         root = self.nodes['|']
-        n = root.n + 0.1
-        p = np.log(n / n.sum())
-        v = (root.q_sum * p.reshape(-1, 1)).sum(0)
-        return p, v
+        n = root.n + 1e-4
+        p = n / n.sum()
+        v = ((root.q_sum / (root.n.reshape(-1, 1) + 1e-4)) * p.reshape(-1, 1)).sum(0)
+        return np.log(p), v
 
     def pv(self, env_):
         # Return principal variation (action sequence which is considered as the best)
