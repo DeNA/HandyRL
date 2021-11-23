@@ -71,16 +71,26 @@ class SimpleConv2dModel(nn.Module):
         return {'policy': h_p, 'value': torch.tanh(h_v)}
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, filters0, filters1):
+        super().__init__()
+        self.conv = Conv(filters0, filters1, 3, bn=True)
+
+    def forward(self, x):
+        h = self.conv(x)
+        return F.relu_(x + h)
+
+
 class MuZero(nn.Module):
     class Representation(nn.Module):
         ''' Conversion from observation to inner abstract state '''
         def __init__(self, input_dim, layers, filters):
             super().__init__()
             self.layer0 = Conv(input_dim, filters, 3, bn=True)
-            self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
+            self.blocks = nn.ModuleList([ResidualBlock(filters, filters) for _ in range(layers)])
 
         def forward(self, x):
-            h = F.relu(self.layer0(x))
+            h = F.relu_(self.layer0(x))
             for block in self.blocks:
                 h = block(h)
             return h
@@ -117,12 +127,12 @@ class MuZero(nn.Module):
             filters = rp_shape[0]
             self.action_embedding = nn.Embedding(num_players * action_length, embedding_dim=np.prod(self.action_shape))
             self.layer0 = Conv(filters + action_filters, filters, 3, bn=True)
-            self.blocks = nn.ModuleList([Conv(filters, filters, 3, bn=True) for _ in range(layers)])
+            self.blocks = nn.ModuleList([ResidualBlock(filters, filters) for _ in range(layers)])
 
         def forward(self, rp, a):
             arp = self.action_embedding(a).view(-1, *self.action_shape)
             h = torch.cat([rp, arp], dim=1)
-            h = self.layer0(h)
+            h = F.relu_(self.layer0(h))
             for block in self.blocks:
                 h = block(h)
             return h
@@ -140,6 +150,7 @@ class MuZero(nn.Module):
         self.input_size = obs.shape
 
         layers, filters = 3, 32
+        action_filters = 4
         internal_size = (filters, *self.input_size[1:])
         self.planning_args = {
             'root_noise_alpha': 0.15,
@@ -149,7 +160,7 @@ class MuZero(nn.Module):
         self.nets = nn.ModuleDict({
             'representation': self.Representation(self.input_size[0], layers, filters),
             'prediction': self.Prediction(internal_size, self.num_players, self.action_length),
-            'dynamics': self.Dynamics(internal_size, layers, self.num_players, self.action_length, 2),
+            'dynamics': self.Dynamics(internal_size, layers, self.num_players, self.action_length, action_filters),
         })
 
     def init_hidden(self, batch_size=None):
