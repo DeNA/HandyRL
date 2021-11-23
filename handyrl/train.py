@@ -208,7 +208,7 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
-    base_loss = losses['p'] + losses.get('r', 0)
+    base_loss = losses['p'] + losses.get('v', 0)
     entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
