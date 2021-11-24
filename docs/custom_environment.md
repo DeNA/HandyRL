@@ -89,15 +89,6 @@ Next, implement `reset()` which resets the game. Then `play()` or `step()` metho
     #
     def outcome(self):
         return {0: -1, 1: 1}  # {player_id: outcome} -1: loss, 0: draw, 1: win
-```
-
-`action_length()` returns the length of all legal actions. `legal_actions()` returns the available actions (indices) in the step. Note that the actions are represented by int.
-```py
-    #
-    # Should be defined in all games
-    #
-    def action_length(self):
-        return 4  # example: right(0), bottom(1), left(2), top(3)
 
     #
     # Should be defined in all games
