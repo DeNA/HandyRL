@@ -23,7 +23,7 @@ import psutil
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu, RandomModel, ModelWrapper
+from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -446,12 +446,8 @@ class Learner:
 
         # trained datum
         self.model_epoch = self.args['restart_epoch']
-        self.model_class = net if net is not None else self.env.net()
-        train_model = self.model_class()
-        if self.model_epoch == 0:
-            self.model = RandomModel(self.env)
-        else:
-            self.model = train_model
+        self.model = net if net is not None else self.env.net()
+        if self.model_epoch > 0:
             self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
 
         # generated datum
@@ -467,7 +463,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, train_model)
+        self.trainer = Trainer(args, self.model)
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -631,9 +627,9 @@ class Learner:
                 elif req == 'model':
                     for model_id in data:
                         model = self.model
-                        if model_id != self.model_epoch:
+                        if model_id != self.model_epoch and model_id > 0:
                             try:
-                                model = self.model_class()
+                                model = copy.deepcopy(self.model)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model
