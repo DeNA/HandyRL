@@ -78,10 +78,12 @@ class NetworkAgent:
 
 def exec_match(env, agents, critic, show=False, game_args={}):
     ''' match with shared game environment '''
+    total_rewards = {}
     if env.reset(game_args):
         return None
     for agent in agents.values():
         agent.reset(env, show=show)
+        total_rewards[p] = 0
     while not env.terminal():
         if show:
             view(env)
@@ -98,6 +100,8 @@ def exec_match(env, agents, critic, show=False, game_args={}):
             return None
         if show:
             view_transition(env)
+        for p, reward in env.reward().items():
+            total_rewards[p] += np.array(reward).reshape(-1)
     outcome = env.outcome()
     if show:
         print('final outcome = %s' % outcome)
@@ -106,11 +110,13 @@ def exec_match(env, agents, critic, show=False, game_args={}):
 
 def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     ''' match with divided game environment '''
+    total_rewards = {}
     if env.reset(game_args):
         return None
     for p, agent in network_agents.items():
         info = env.diff_info(p)
         agent.update(info, True)
+        total_rewards[p] = 0
     while not env.terminal():
         if show:
             view(env)
@@ -126,6 +132,8 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
                 agent.observe(p)
         if env.step(actions):
             return None
+        for p, reward in env.reward().items():
+            total_rewards[p] += np.array(reward).reshape(-1)
         for p, agent in network_agents.items():
             info = env.diff_info(p)
             agent.update(info, False)
