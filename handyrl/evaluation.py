@@ -81,7 +81,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     total_rewards = {}
     if env.reset(game_args):
         return None
-    for agent in agents.values():
+    for p, agent in agents.items():
         agent.reset(env, show=show)
         total_rewards[p] = 0
     while not env.terminal():
