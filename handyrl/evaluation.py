@@ -105,7 +105,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     outcome = env.outcome()
     if show:
         print('final outcome = %s' % outcome)
-    return outcome
+    return {'outcome': outcome, 'total_reward': total_rewards}
 
 
 def exec_network_match(env, network_agents, critic, show=False, game_args={}):
@@ -140,7 +140,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     outcome = env.outcome()
     for p, agent in network_agents.items():
         agent.outcome(outcome[p])
-    return outcome
+    return {'outcome': outcome, 'total_reward': total_rewards}
 
 
 def build_agent(raw, env):
@@ -171,11 +171,11 @@ class Evaluator:
             else:
                 agents[p] = Agent(model, self.args['observation'])
 
-        outcome = exec_match(self.env, agents, None)
-        if outcome is None:
+        result = exec_match(self.env, agents, None)
+        if result is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome, 'opponent': opponent}
+        return {'args': args, 'opponent': opponent, **result}
 
 
 def wp_func(results):
@@ -197,10 +197,10 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         print('*** Game %d ***' % g)
         agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
         if isinstance(list(agent_map.values())[0], NetworkAgent):
-            outcome = exec_network_match(env, agent_map, critic, show=show, game_args=game_args)
+            result = exec_network_match(env, agent_map, critic, show=show, game_args=game_args)
         else:
-            outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
-        out_queue.put((pat_idx, agent_ids, outcome))
+            result = exec_match(env, agent_map, critic, show=show, game_args=game_args)
+        out_queue.put((pat_idx, agent_ids, result))
     out_queue.put(None)
 
 
@@ -247,8 +247,9 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
         if ret is None:
             finished_cnt += 1
             continue
-        pat_idx, agent_ids, outcome = ret
-        if outcome is not None:
+        pat_idx, agent_ids, result = ret
+        if result is not None:
+            outcome = result['outcome']
             for idx, p in enumerate(env.players()):
                 agent_id = agent_ids[idx]
                 oc = outcome[p]
