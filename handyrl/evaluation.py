@@ -288,7 +288,7 @@ def network_match_acception(n, env_args, num_agents, port):
 def get_model(env, model_path):
     import torch
     from .model import ModelWrapper
-    model = env.net()()
+    model = env.net()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return ModelWrapper(model)
