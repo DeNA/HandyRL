@@ -23,7 +23,7 @@ import psutil
 
 from .environment import prepare_env, make_env
 from .util import map_r, bimap_r, trimap_r, rotate
-from .model import to_torch, to_gpu, RandomModel, ModelWrapper
+from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
 from .connection import accept_socket_connections
@@ -106,20 +106,8 @@ def make_batch(episodes, args):
         obss.append(obs)
         datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
-    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
-
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    p = to_torch(np.array(p))
-    v = to_torch(np.array(v))
-    act = to_torch(np.array(act))
-    oc = to_torch(np.array(oc))
-    rew = to_torch(np.array(rew))
-    ret = to_torch(np.array(ret))
-    emask = to_torch(np.array(emask))
-    tmask = to_torch(np.array(tmask))
-    omask = to_torch(np.array(omask))
-    amask = to_torch(np.array(amask))
-    progress = to_torch(np.array(progress))
+    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
@@ -433,12 +421,8 @@ class Learner:
 
         # trained datum
         self.model_epoch = self.args['restart_epoch']
-        self.model_class = net if net is not None else self.env.net()
-        train_model = self.model_class()
-        if self.model_epoch == 0:
-            self.model = RandomModel(self.env)
-        else:
-            self.model = train_model
+        self.model = net if net is not None else self.env.net()
+        if self.model_epoch > 0:
             self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
 
         # generated datum
@@ -454,7 +438,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, train_model)
+        self.trainer = Trainer(args, self.model)
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -618,9 +602,9 @@ class Learner:
                 elif req == 'model':
                     for model_id in data:
                         model = self.model
-                        if model_id != self.model_epoch:
+                        if model_id != self.model_epoch and model_id > 0:
                             try:
-                                model = self.model_class()
+                                model = copy.deepcopy(self.model)
                                 model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
                             except:
                                 # return latest model if failed to load specified model

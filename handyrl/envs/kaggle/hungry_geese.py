@@ -183,10 +183,6 @@ class Environment(BaseEnvironment):
         # return legal action list
         return list(range(len(self.ACTION)))
 
-    def action_length(self):
-        # maximum action label (it determines output size of policy function)
-        return len(self.ACTION)
-
     def players(self):
         return list(range(self.NUM_AGENTS))
 
@@ -201,7 +197,7 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(action)
 
     def net(self):
-        return GeeseNet
+        return GeeseNet()
 
     def observation(self, player=None):
         if player is None:
