@@ -106,20 +106,8 @@ def make_batch(episodes, args):
         obss.append(obs)
         datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
-    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
-
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    p = to_torch(np.array(p))
-    v = to_torch(np.array(v))
-    act = to_torch(np.array(act))
-    oc = to_torch(np.array(oc))
-    rew = to_torch(np.array(rew))
-    ret = to_torch(np.array(ret))
-    emask = to_torch(np.array(emask))
-    tmask = to_torch(np.array(tmask))
-    omask = to_torch(np.array(omask))
-    amask = to_torch(np.array(amask))
-    progress = to_torch(np.array(progress))
+    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
