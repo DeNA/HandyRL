@@ -150,15 +150,11 @@ class Environment(BaseEnvironment):
         # legal action list
         return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
 
-    def action_length(self):
-        # maximum size of policy (it determines output size of policy function)
-        return 3 * 3
-
     def players(self):
         return [0, 1]
 
     def net(self):
-        return SimpleConv2dModel
+        return SimpleConv2dModel()
 
     def observation(self, player=None):
         # input feature for neural nets
