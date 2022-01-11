@@ -278,9 +278,8 @@ def network_match_acception(n, env_args, num_agents, port):
 
 
 class OnnxModel:
-    def __init__(self, model_path, output_keys):
+    def __init__(self, model_path):
         self.model_path = model_path
-        self.output_keys = output_keys
         self.ort_session = None
 
     def init_hidden(self):
@@ -315,12 +314,16 @@ class OnnxModel:
         if not batch_input:
             ort_outputs = [o.squeeze(0) for o in ort_outputs]
 
-        assert len(self.output_keys) == len(outputs)
-        outputs = {key: outputs[i] for i, key in enumerate(self.output_keys)}
+        ort_outputs_names = [y.name for y in self.ort_session.get_outputs()]
+        assert len(ort_outputs_names) == len(outputs)
+        outputs = {key: outputs[i] for i, key in enumerate(self.output_names)}
         return outputs
 
 
 def get_model(env, model_path):
+    if model_path.endswith('.onnx'):
+        model = OnnxModel(model_path)
+        return model
     import torch
     from .model import ModelWrapper
     model = env.net()
