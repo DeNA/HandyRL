@@ -277,6 +277,49 @@ def network_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
+class OnnxModel:
+    def __init__(self, model_path, output_keys):
+        self.model_path = model_path
+        self.output_keys = output_keys
+        self.ort_session = None
+
+    def init_hidden(self):
+        # TODO RNN
+        return None        
+
+    def inference(self, x, hidden=None, batch_input=False):
+        # numpy array -> numpy array
+        if self.ort_session is None:
+            import os
+            os.environ['OMP_NUM_THREADS'] = '1'
+            os.environ['OMP_WAIT_POLICY'] = 'PASSIVE'
+
+            import onnxruntime
+            opts = onnxruntime.SessionOptions()
+            opts.intra_op_num_threads = 1
+            opts.inter_op_num_threads = 1
+            opts.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+
+            self.ort_session = onnxruntime.InferenceSession(self.model_path, sess_options=opts)
+
+        ort_inputs = {}
+        ort_input_names = [y.name for y in self.ort_session.get_inputs()]
+        def insert_input(y):
+            y = y if batch_input else np.expand_dims(y, 0)
+            ort_inputs[ort_input_names[len(ort_inputs)]] = y
+        from .util import map_r
+        map_r(x, lambda y: insert_input(y))
+        if hidden is not None:
+            map_r(hidden, lambda y: insert_input(y))
+        ort_outputs = self.ort_session.run(None, ort_inputs)
+        if not batch_input:
+            ort_outputs = [o.squeeze(0) for o in ort_outputs]
+
+        assert len(self.output_keys) == len(outputs)
+        outputs = {key: outputs[i] for i, key in enumerate(self.output_keys)}
+        return outputs
+
+
 def get_model(env, model_path):
     import torch
     from .model import ModelWrapper
