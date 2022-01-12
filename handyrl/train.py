@@ -154,7 +154,7 @@ def forward_prediction(model, hidden, batch, args):
             outputs_ = model(obs, hidden_)
             for k, o in outputs_.items():
                 if k == 'hidden':
-                    next_hidden = outputs_['hidden']
+                    next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
