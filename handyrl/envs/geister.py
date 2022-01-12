@@ -26,7 +26,7 @@ class ConvLSTMCell(nn.Module):
         self.bias = bias
 
         self.conv = nn.Conv2d(
-            in_channels=self.input_dim + self.hidden_dim,
+            in_channels=self.hidden_dim,
             out_channels=4 * self.hidden_dim,
             kernel_size=self.kernel_size,
             padding=self.padding,
@@ -45,13 +45,10 @@ class ConvLSTMCell(nn.Module):
                 torch.zeros(*batch_size, self.hidden_dim, *input_size)
             ])
 
-    def forward(self, input_tensor, cur_state):
-        h_cur, c_cur = cur_state
+    def forward(self, h_cur, c_cur):
+        conv = self.conv(h_cur)
 
-        combined = torch.cat([input_tensor, h_cur], dim=-3)  # concatenate along channel axis
-        combined_conv = self.conv(combined)
-
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=-3)
+        cc_i, cc_f, cc_o, cc_g = torch.split(conv, self.hidden_dim, dim=-3)
         i = torch.sigmoid(cc_i)
         f = torch.sigmoid(cc_f)
         o = torch.sigmoid(cc_o)
@@ -93,7 +90,7 @@ class DRC(nn.Module):
         hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
-                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+                hs[i], cs[i] = block(hs[i-1] if i > 0 else x, cs[i])
 
         return hs[-1], (hs, cs)
 
