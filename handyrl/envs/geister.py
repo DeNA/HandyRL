@@ -93,7 +93,7 @@ class DRC(nn.Module):
         hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
-                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+                hs[i], cs[i] = block(hs[i - 1] if i > 0 else x, (hs[i], cs[i]))
 
         return hs[-1], (hs, cs)
 
