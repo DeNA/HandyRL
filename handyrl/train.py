@@ -26,7 +26,6 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
-from .connection import accept_socket_connections
 from .worker import WorkerCluster, WorkerServer
 
 
