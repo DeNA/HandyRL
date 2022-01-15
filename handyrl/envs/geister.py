@@ -63,6 +63,11 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
 
+# Deep Repeated Conv-LSTM (https://arxiv.org/abs/1901.03559)
+# increases expressive power with fewer parameters
+# by repeatedly computing multi-layer convolutional LSTM.
+# When num_repeats=1, it is simply a multi-layer Conv-LSTM.
+
 class DRC(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
         super().__init__()
