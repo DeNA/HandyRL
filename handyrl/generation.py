@@ -37,7 +37,9 @@ class Generator:
                 if player in turn_players or self.args['observation']:
                     obs = self.env.observation(player)
                     model = models[player]
-                    outputs = model.inference(obs, hidden[player])
+
+                    legal_actions = self.env.legal_actions(player)
+                    outputs = model.inference(obs, hidden[player], legal_actions=legal_actions)
                     hidden[player] = outputs.get('hidden', None)
                     v = outputs.get('value', None)
 
@@ -45,16 +47,9 @@ class Generator:
                     moment['value'][player] = v
 
                     if player in turn_players:
-                        p_ = outputs['policy']
-                        legal_actions = self.env.legal_actions(player)
-                        action_mask = np.ones_like(p_) * 1e32
-                        action_mask[legal_actions] = 0
-                        p = softmax(p_ - action_mask)
-                        action = random.choices(legal_actions, weights=p[legal_actions])[0]
-
-                        moment['selected_prob'][player] = p[action]
-                        moment['action_mask'][player] = action_mask
-                        moment['action'][player] = action
+                        moment['action'][player] = outputs['action'][0]
+                        moment['selected_prob'][player] = outputs['selected_prob'][0]
+                        moment['action_mask'][player] = outputs['action_mask']
 
             err = self.env.step(moment['action'])
             if err:

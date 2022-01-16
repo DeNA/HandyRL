@@ -6,6 +6,9 @@
 import os
 os.environ['OMP_NUM_THREADS'] = '1'
 
+import copy
+import random
+
 import numpy as np
 import torch
 torch.set_num_threads(1)
@@ -63,8 +66,15 @@ class RandomModel(nn.Module):
         super().__init__()
         wrapped_model = ModelWrapper(model)
         hidden = wrapped_model.init_hidden()
-        outputs = wrapped_model.inference(x, hidden)
+        outputs = wrapped_model.inference(x, hidden, legal_actions=[])
         self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items()}
 
-    def inference(self, *args):
-        return self.output_dict
+    def inference(self, *args, **kwargs):
+        outputs = copy.deepcopy(self.output_dict)
+        outputs['action'].fill(random.choice(kwargs['legal_actions']))
+        prob = 1.0 / len(kwargs['legal_actions'])
+        outputs['selected_prob'].fill(prob)
+        outputs['entropy'].fill(-np.log(prob))
+        outputs['action_mask'].fill(1e32)
+        outputs['action_mask'][kwargs['legal_actions']] = 0
+        return outputs

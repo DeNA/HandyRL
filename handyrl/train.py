@@ -64,12 +64,12 @@ def make_batch(episodes, args):
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
-            act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
+            act = np.array([[[m['action'][m['turn'][0]]]] for m in moments], dtype=np.int64)
             amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
             prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
-            act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
+            act = np.array([[[replace_none(m['action'][player], 0)] for player in players] for m in moments], dtype=np.int64)
             amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
 
         # reshape observation
@@ -138,7 +138,9 @@ def forward_prediction(model, hidden, batch, args):
     if hidden is None:
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
-        outputs = model(obs, None)
+        action = action=batch['action'].view(-1, *batch['action'].size()[3:])
+        action_mask = batch['action_mask'].view(-1, *batch['action_mask'].size()[3:])
+        outputs = model(obs, None, action=action, action_mask=action_mask)
     else:
         # sequential computation with RNN
         outputs = {}
@@ -163,9 +165,9 @@ def forward_prediction(model, hidden, batch, args):
 
     for k, o in outputs.items():
         o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
-        if k == 'policy':
+        if k == 'selected_prob':
             # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True) - batch['action_mask']
+            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.mul(batch['observation_mask'])
@@ -193,11 +195,11 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     if 'return' in outputs:
         losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(omasks).sum()
 
-    entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
+    entropy = outputs['entropy'].mul(tmasks)
     losses['ent'] = entropy.sum()
 
     base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
-    entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
+    entropy_loss = entropy.mul(1 - batch['progress'].unsqueeze(-2) * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
     return losses, dcnt
@@ -210,7 +212,7 @@ def compute_loss(batch, model, hidden, args):
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
-    log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * emasks
+    log_selected_t_policies = torch.log(torch.clamp(outputs['selected_prob'], 1e-16, 1)) * emasks
 
     # thresholds of importance sampling
     log_rhos = log_selected_t_policies.detach() - log_selected_b_policies

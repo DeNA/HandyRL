@@ -30,16 +30,16 @@ class RuleBasedAgent(RandomAgent):
             return random.choice(env.legal_actions(player))
 
 
-def print_outputs(env, prob, v):
+def print_outputs(env, action, prob, v):
     if hasattr(env, 'print_outputs'):
-        env.print_outputs(prob, v)
+        env.print_outputs(action, prob, v)
     else:
         print('v = %f' % v)
-        print('p = %s' % (prob * 1000).astype(int))
+        print('a = %d prob = %f' % (action, prob))
 
 
 class Agent:
-    def __init__(self, model, observation=False, temperature=0.0):
+    def __init__(self, model, observation=False, temperature=1e-6):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
@@ -49,28 +49,24 @@ class Agent:
     def reset(self, env, show=False):
         self.hidden = self.model.init_hidden()
 
-    def plan(self, obs):
-        outputs = self.model.inference(obs, self.hidden)
+    def plan(self, obs, legal_actions):
+        outputs = self.model.inference(obs, self.hidden, legal_actions=legal_actions, temperature=self.temperature)
         self.hidden = outputs.pop('hidden', None)
         return outputs
 
     def action(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
-        actions = env.legal_actions(player)
-        p = outputs['policy']
+        obs = env.observation(player)
+        legal_actions = env.legal_actions(player)
+        outputs = self.plan(obs, legal_actions)
+
+        action = outputs['action']
+        prob = outputs['selected_prob']
         v = outputs.get('value', None)
-        mask = np.ones_like(p)
-        mask[actions] = 0
-        p = p - mask * 1e32
 
         if show:
-            print_outputs(env, softmax(p), v)
+            print_outputs(env, action, selected_prob, v)
 
-        if self.temperature == 0:
-            ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
-            return ap_list[0][0]
-        else:
-            return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
+        return action
 
     def observe(self, env, player, show=False):
         v = None
