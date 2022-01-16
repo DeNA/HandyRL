@@ -29,7 +29,7 @@ class Generator:
             return None
 
         while not self.env.terminal():
-            moment_keys = ['observation', 'selected_prob', 'action_mask', 'action', 'value', 'reward', 'return']
+            moment_keys = ['observation', 'selected_prob', 'action', 'value', 'reward', 'return']
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
@@ -38,8 +38,7 @@ class Generator:
                     obs = self.env.observation(player)
                     model = models[player]
 
-                    legal_actions = self.env.legal_actions(player)
-                    outputs = model.inference(obs, hidden[player], legal_actions=legal_actions)
+                    outputs = model.inference(obs, hidden[player])
                     hidden[player] = outputs.get('hidden', None)
                     v = outputs.get('value', None)
 
@@ -49,7 +48,6 @@ class Generator:
                     if player in turn_players:
                         moment['action'][player] = outputs['action'][0]
                         moment['selected_prob'][player] = outputs['selected_prob'][0]
-                        moment['action_mask'][player] = outputs['action_mask']
 
             err = self.env.step(moment['action'])
             if err:

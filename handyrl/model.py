@@ -57,24 +57,3 @@ class ModelWrapper(nn.Module):
             ht = map_r(hidden, lambda h: torch.from_numpy(np.array(h)).contiguous().unsqueeze(0) if h is not None else None)
             outputs = self.forward(xt, ht, **kwargs)
         return map_r(outputs, lambda o: o.detach().numpy().squeeze(0) if o is not None else None)
-
-
-# simple model
-
-class RandomModel(nn.Module):
-    def __init__(self, model, x):
-        super().__init__()
-        wrapped_model = ModelWrapper(model)
-        hidden = wrapped_model.init_hidden()
-        outputs = wrapped_model.inference(x, hidden, legal_actions=[])
-        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items()}
-
-    def inference(self, *args, **kwargs):
-        outputs = copy.deepcopy(self.output_dict)
-        outputs['action'].fill(random.choice(kwargs['legal_actions']))
-        prob = 1.0 / len(kwargs['legal_actions'])
-        outputs['selected_prob'].fill(prob)
-        outputs['entropy'].fill(-np.log(prob))
-        outputs['action_mask'].fill(1e32)
-        outputs['action_mask'][kwargs['legal_actions']] = 0
-        return outputs

@@ -60,19 +60,14 @@ class SimpleConv2dModel(nn.Module):
         self.head_p = Head((filters, 3, 3), 2, 9)
         self.head_v = Head((filters, 3, 3), 1, 1)
 
-    def forward(self, x, hidden=None, action=None, action_mask=None, legal_actions=None, temperature=1.0):
+    def forward(self, x, hidden=None, action=None, temperature=1.0):
         h = F.relu(self.conv(x))
         for block in self.blocks:
             h = F.relu(block(h))
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        if action_mask is None:
-            assert legal_actions is not None
-            action_mask = torch.ones_like(h_p) * 1e32
-            action_mask[:,legal_actions] = 0
-        p = (h_p - action_mask) / temperature
-
+        p = h_p / temperature
         log_prob = F.log_softmax(p, -1)
         prob = torch.exp(log_prob)
         entropy = dist.Categorical(logits=log_prob).entropy().unsqueeze(-1)
@@ -81,7 +76,7 @@ class SimpleConv2dModel(nn.Module):
             action = prob.multinomial(num_samples=1, replacement=True)
         selected_prob = prob.gather(-1, action)
 
-        return {'action': action, 'selected_prob': selected_prob, 'value': torch.tanh(h_v), 'entropy': entropy, 'action_mask': action_mask}
+        return {'action': action, 'selected_prob': selected_prob, 'value': torch.tanh(h_v), 'entropy': entropy}
 
 
 class Environment(BaseEnvironment):
@@ -119,7 +114,10 @@ class Environment(BaseEnvironment):
         # state transition function
         # action is integer (0 ~ 8)
         x, y = action // 3, action % 3
-        self.board[x, y] = self.color
+        if self.board[x, y] != 0:  # illegal action
+            self.win_color = -self.color
+        else:
+            self.board[x, y] = self.color
 
         # check winning condition
         win = self.board[x, :].sum() == 3 * self.color \

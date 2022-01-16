@@ -49,15 +49,14 @@ class Agent:
     def reset(self, env, show=False):
         self.hidden = self.model.init_hidden()
 
-    def plan(self, obs, legal_actions):
-        outputs = self.model.inference(obs, self.hidden, legal_actions=legal_actions, temperature=self.temperature)
+    def plan(self, obs):
+        outputs = self.model.inference(obs, self.hidden, temperature=self.temperature)
         self.hidden = outputs.pop('hidden', None)
         return outputs
 
     def action(self, env, player, show=False):
         obs = env.observation(player)
-        legal_actions = env.legal_actions(player)
-        outputs = self.plan(obs, legal_actions)
+        outputs = self.plan(obs)
 
         action = outputs['action']
         prob = outputs['selected_prob']

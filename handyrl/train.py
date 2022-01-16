@@ -58,19 +58,16 @@ def make_batch(episodes, args):
             players = [random.choice(players)]
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])  # template for padding
 
         # data that is chainge by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
             act = np.array([[[m['action'][m['turn'][0]]]] for m in moments], dtype=np.int64)
-            amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
             prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
             act = np.array([[[replace_none(m['action'][player], 0)] for player in players] for m in moments], dtype=np.int64)
-            amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
 
         # reshape observation
         obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
@@ -100,14 +97,13 @@ def make_batch(episodes, args):
             emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
+        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
+    prob, v, act, oc, rew, ret, emask, tmask, omask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
@@ -116,7 +112,6 @@ def make_batch(episodes, args):
         'reward': rew, 'return': ret,
         'episode_mask': emask,
         'turn_mask': tmask, 'observation_mask': omask,
-        'action_mask': amask,
         'progress': progress,
     }
 
@@ -139,8 +134,7 @@ def forward_prediction(model, hidden, batch, args):
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
         action = action=batch['action'].view(-1, *batch['action'].size()[3:])
-        action_mask = batch['action_mask'].view(-1, *batch['action_mask'].size()[3:])
-        outputs = model(obs, None, action=action, action_mask=action_mask)
+        outputs = model(obs, None, action=action)
     else:
         # sequential computation with RNN
         outputs = {}
