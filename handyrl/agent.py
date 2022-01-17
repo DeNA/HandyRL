@@ -58,8 +58,8 @@ class Agent:
         obs = env.observation(player)
         outputs = self.plan(obs)
 
-        action = outputs['action'][0]
-        prob = outputs['selected_prob'][0]
+        action = outputs['action']
+        prob = outputs['selected_prob']
         v = outputs.get('value', None)
 
         if show:

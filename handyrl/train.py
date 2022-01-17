@@ -57,16 +57,18 @@ def make_batch(episodes, args):
             players = [random.choice(players)]
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
+        prob_ones = np.ones_like(moments[0]['selected_prob'][moments[0]['turn'][0]])
+        act_zeros = np.zeros_like(moments[0]['action'][moments[0]['turn'][0]])
 
         # data that is chainge by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
-            prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
-            act = np.array([[[m['action'][m['turn'][0]]]] for m in moments], dtype=np.int64)
+            prob = np.array([[m['selected_prob'][m['turn'][0]]] for m in moments])
+            act = np.array([[m['action'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
-            prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
-            act = np.array([[[replace_none(m['action'][player], 0)] for player in players] for m in moments], dtype=np.int64)
+            prob = np.array([[replace_none(m['selected_prob'][player], prob_ones) for player in players] for m in moments])
+            act = np.array([[replace_none(m['action'][player], act_zeros) for player in players] for m in moments])
 
         # reshape observation
         obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
