@@ -59,8 +59,8 @@ class Agent:
         legal_actions = env.legal_actions(player)
         outputs = self.plan(obs, legal_actions)
 
-        action = outputs['action']
-        prob = outputs['selected_prob']
+        action = outputs['action'][0]
+        prob = outputs['selected_prob'][0]
         v = outputs.get('value', None)
 
         if show:
