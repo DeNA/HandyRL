@@ -90,7 +90,7 @@ def make_batch(episodes, args):
         if len(tmask) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmask)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            log_prob = np.pad(log_prob, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
+            log_prob = np.pad(log_prob, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
             act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
