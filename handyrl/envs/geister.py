@@ -448,6 +448,8 @@ class Environment(BaseEnvironment):
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6
             return 0 <= layout < 70
+        elif not 0 <= action < 4 * 6 * 6:
+            return False
 
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
