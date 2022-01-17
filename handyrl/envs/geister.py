@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions as dist
 
 from ..environment import BaseEnvironment
 
@@ -148,7 +149,7 @@ class GeisterNet(nn.Module):
     def init_hidden(self, batch_size=None):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
-    def forward(self, x, hidden):
+    def forward(self, x, hidden, action=None, action_mask=None, legal_actions=None, temperature=1.0):
         b, s = x['board'], x['scalar']
         h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([h_s, b], -3)
@@ -164,7 +165,21 @@ class GeisterNet(nn.Module):
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
+        if action_mask is None:
+            assert legal_actions is not None
+            action_mask = torch.ones_like(h_p) * 1e32
+            action_mask[:,legal_actions] = 0
+        p = (h_p - action_mask) / temperature
+
+        log_prob = F.log_softmax(p, -1)
+        prob = torch.exp(log_prob)
+        entropy = dist.Categorical(logits=log_prob).entropy().unsqueeze(-1)
+
+        if action is None:
+            action = prob.multinomial(num_samples=1, replacement=True)
+        selected_prob = prob.gather(-1, action)
+
+        return {'action': action, 'selected_prob': selected_prob, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden, 'entropy': entropy, 'action_mask': action_mask}
 
 
 class Environment(BaseEnvironment):
