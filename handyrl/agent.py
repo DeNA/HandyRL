@@ -63,7 +63,7 @@ class Agent:
         v = outputs.get('value', None)
 
         if show:
-            print_outputs(env, action, selected_prob, v)
+            print_outputs(env, action, prob, v)
 
         return action
 
