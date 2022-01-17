@@ -46,8 +46,8 @@ class Generator:
                     moment['value'][player] = v
 
                     if player in turn_players:
-                        moment['action'][player] = outputs['action'][0]
-                        moment['log_selected_prob'][player] = outputs['log_selected_prob'][0]
+                        moment['action'][player] = outputs['action']
+                        moment['log_selected_prob'][player] = outputs['log_selected_prob']
 
             err = self.env.step(moment['action'])
             if err:
