@@ -59,7 +59,7 @@ class Agent:
         outputs = self.plan(obs)
 
         action = outputs['action'][0]
-        prob = outputs['selected_prob'][0]
+        prob = np.exp(outputs['log_selected_prob'][0])
         v = outputs.get('value', None)
 
         if show:

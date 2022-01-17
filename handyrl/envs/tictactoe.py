@@ -67,16 +67,15 @@ class SimpleConv2dModel(nn.Module):
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
-        p = h_p / temperature
-        log_prob = F.log_softmax(p, -1)
-        prob = torch.exp(log_prob)
+        log_prob = F.log_softmax(h_p / temperature, -1)
         entropy = dist.Categorical(logits=log_prob).entropy().unsqueeze(-1)
 
         if action is None:
+            prob = torch.exp(log_prob)
             action = prob.multinomial(num_samples=1, replacement=True)
-        selected_prob = prob.gather(-1, action)
+        log_selected_prob = log_prob.gather(-1, action)
 
-        return {'action': action, 'selected_prob': selected_prob, 'value': torch.tanh(h_v), 'entropy': entropy}
+        return {'action': action, 'log_selected_prob': log_selected_prob, 'value': torch.tanh(h_v), 'entropy': entropy}
 
 
 class Environment(BaseEnvironment):

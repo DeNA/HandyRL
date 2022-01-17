@@ -29,7 +29,7 @@ class Generator:
             return None
 
         while not self.env.terminal():
-            moment_keys = ['observation', 'selected_prob', 'action', 'value', 'reward', 'return']
+            moment_keys = ['observation', 'log_selected_prob', 'action', 'value', 'reward', 'return']
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
@@ -47,7 +47,7 @@ class Generator:
 
                     if player in turn_players:
                         moment['action'][player] = outputs['action'][0]
-                        moment['selected_prob'][player] = outputs['selected_prob'][0]
+                        moment['log_selected_prob'][player] = outputs['log_selected_prob'][0]
 
             err = self.env.step(moment['action'])
             if err:

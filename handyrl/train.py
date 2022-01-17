@@ -61,11 +61,11 @@ def make_batch(episodes, args):
         # data that is chainge by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
-            prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
+            log_prob = np.array([[[m['log_selected_prob'][m['turn'][0]]]] for m in moments])
             act = np.array([[[m['action'][m['turn'][0]]]] for m in moments], dtype=np.int64)
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
-            prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
+            log_prob = np.array([[[replace_none(m['log_selected_prob'][player], 1.0)] for player in players] for m in moments])
             act = np.array([[[replace_none(m['action'][player], 0)] for player in players] for m in moments], dtype=np.int64)
 
         # reshape observation
@@ -79,7 +79,7 @@ def make_batch(episodes, args):
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        tmask = np.array([[[m['selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        tmask = np.array([[[m['log_selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
         omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
@@ -88,7 +88,7 @@ def make_batch(episodes, args):
         if len(tmask) < args['forward_steps']:
             pad_len = args['forward_steps'] - len(tmask)
             obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            prob = np.pad(prob, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
+            log_prob = np.pad(log_prob, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
             v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
             act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
@@ -99,14 +99,14 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, progress))
+        datum.append((log_prob, v, act, oc, rew, ret, emask, tmask, omask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    prob, v, act, oc, rew, ret, emask, tmask, omask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
+    log_prob, v, act, oc, rew, ret, emask, tmask, omask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'log_selected_prob': log_prob, 'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -159,7 +159,7 @@ def forward_prediction(model, hidden, batch, args):
 
     for k, o in outputs.items():
         o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
-        if k == 'selected_prob':
+        if k == 'log_selected_prob':
             # gather turn player's policies
             outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)
         else:
@@ -205,8 +205,8 @@ def compute_loss(batch, model, hidden, args):
     emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
-    log_selected_t_policies = torch.log(torch.clamp(outputs['selected_prob'], 1e-16, 1)) * emasks
+    log_selected_b_policies = batch['log_selected_prob'] * emasks
+    log_selected_t_policies = outputs['log_selected_prob'] * emasks
 
     # thresholds of importance sampling
     log_rhos = log_selected_t_policies.detach() - log_selected_b_policies
