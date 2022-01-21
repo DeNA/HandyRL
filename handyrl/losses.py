@@ -60,7 +60,8 @@ def vtrace(values, returns, rewards, lmb, gamma, rhos, cs):
 
 def compute_target(algorithm, values, returns, rewards, lmb, gamma, rhos, cs):
     if values is None:
-        return None, 0
+        # In the absence of a baseline, Monte Carlo returns are used.
+        return returns, returns
 
     if algorithm == 'MC':
         return monte_carlo(values, returns)
