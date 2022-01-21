@@ -141,7 +141,7 @@ def forward_prediction(model, hidden, batch, args):
         outputs = {}
         for t in range(batch['turn_mask'].size(1)):
             obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
-            action = action=batch['action'][:, t].view(-1, *batch['action'].size()[3:])
+            action = batch['action'][:, t].view(-1, *batch['action'].size()[3:])
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
