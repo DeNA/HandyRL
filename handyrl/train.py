@@ -54,7 +54,7 @@ def make_batch(episodes, args):
         moments_ = sum([pickle.loads(bz2.decompress(ms)) for ms in ep['moment']], [])
         moments = moments_[ep['start'] - ep['base']:ep['end'] - ep['base']]
         players = list(moments[0]['observation'].keys())
-        if not args['turn_based_training']:  # solo training
+        if not (args['turn_based_training'] or args['zero_sum_averaging']):  # solo training
             players = [random.choice(players)]
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
