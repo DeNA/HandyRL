@@ -59,9 +59,12 @@ class ModelWrapper(nn.Module):
 # simple model
 
 class RandomModel(nn.Module):
-    def __init__(self, env):
+    def __init__(self, model, x):
         super().__init__()
-        self.action_length = env.action_length()
+        wrapped_model = ModelWrapper(model)
+        hidden = wrapped_model.init_hidden()
+        outputs = wrapped_model.inference(x, hidden)
+        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items()}
 
-    def inference(self, x=None, hidden=None):
-        return {'policy': np.zeros(self.action_length, dtype=np.float32), 'value': np.zeros(1, dtype=np.float32)}
+    def inference(self, *args):
+        return self.output_dict

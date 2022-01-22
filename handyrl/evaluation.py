@@ -150,23 +150,24 @@ class Evaluator:
         self.default_opponent = 'random'
 
     def execute(self, models, args):
-        agents = {}
         opponents = self.args.get('eval', {}).get('opponent', [])
         if len(opponents) == 0:
             opponent = self.default_opponent
         else:
             opponent = random.choice(opponents)
 
+        agents = {}
         for p, model in models.items():
             if model is None:
                 agents[p] = build_agent(opponent, self.env)
             else:
                 agents[p] = Agent(model, self.args['observation'])
+
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome}
+        return {'args': args, 'result': outcome, 'opponent': opponent}
 
 
 def wp_func(results):
@@ -279,7 +280,7 @@ def network_match_acception(n, env_args, num_agents, port):
 def get_model(env, model_path):
     import torch
     from .model import ModelWrapper
-    model = env.net()()
+    model = env.net()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return ModelWrapper(model)
@@ -287,8 +288,11 @@ def get_model(env, model_path):
 
 def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
-    model = get_model(env, model_path)
-    NetworkAgentClient(Agent(model), env, conn).run()
+    agent = build_agent(model_path, env)
+    if agent is None:
+        model = get_model(env, model_path)
+        agent = Agent(model)
+    NetworkAgentClient(agent, env, conn).run()
 
 
 def eval_main(args, argv):
@@ -300,7 +304,9 @@ def eval_main(args, argv):
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-    agent1 = Agent(get_model(env, model_path))
+    agent1 = build_agent(model_path, env)
+    if agent1 is None:
+        agent1 = Agent(get_model(env, model_path))
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))
