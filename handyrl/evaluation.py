@@ -289,7 +289,7 @@ def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
     agent = build_agent(model_path, env)
     if agent is None:
-        model = load_model(model_path, env)
+        model = load_model(model_path, env.net())
         agent = Agent(model)
     NetworkAgentClient(agent, env, conn).run()
 
