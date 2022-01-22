@@ -277,10 +277,9 @@ def network_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
-def load_model(model_path, env):
+def load_model(model_path, model):
     import torch
     from .model import ModelWrapper
-    model = env.net()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return ModelWrapper(model)
@@ -306,7 +305,7 @@ def eval_main(args, argv):
 
     agent1 = build_agent(model_path, env)
     if agent1 is None:
-        model = load_model(model_path, env)
+        model = load_model(model_path, env.net())
         agent1 = Agent(model)
     critic = None
 
