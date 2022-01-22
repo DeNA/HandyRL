@@ -59,7 +59,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
         p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
 
-        # data that is chainge by training configuration
+        # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
