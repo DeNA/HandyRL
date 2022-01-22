@@ -6,8 +6,8 @@ env_args:
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
 
 train_args:
-    turn_based_training: True  # for turn-based games
-    zero_sum_debiasing: True  # for 2p zero-sum games
+    turn_based_training: False  # for turn-based games
+    zero_sum_averaging: False  # for 2p zero-sum games
     observation: False
     gamma: 0.8
     forward_steps: 16
