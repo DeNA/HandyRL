@@ -35,27 +35,29 @@ class Generator:
             turn_players = self.env.turns()
             observers = self.env.observers()
             for player in self.env.players():
-                if player in turn_players or player in observers:
-                    obs = self.env.observation(player)
-                    model = models[player]
-                    outputs = model.inference(obs, hidden[player])
-                    hidden[player] = outputs.get('hidden', None)
-                    v = outputs.get('value', None)
+                if player not in turn_players + observers:
+                    continue
 
-                    moment['observation'][player] = obs
-                    moment['value'][player] = v
+                obs = self.env.observation(player)
+                model = models[player]
+                outputs = model.inference(obs, hidden[player])
+                hidden[player] = outputs.get('hidden', None)
+                v = outputs.get('value', None)
 
-                    if player in turn_players:
-                        p_ = outputs['policy']
-                        legal_actions = self.env.legal_actions(player)
-                        action_mask = np.ones_like(p_) * 1e32
-                        action_mask[legal_actions] = 0
-                        p = p_ - action_mask
-                        action = random.choices(legal_actions, weights=softmax(p[legal_actions]))[0]
+                moment['observation'][player] = obs
+                moment['value'][player] = v
 
-                        moment['policy'][player] = p
-                        moment['action_mask'][player] = action_mask
-                        moment['action'][player] = action
+                if player in turn_players:
+                    p_ = outputs['policy']
+                    legal_actions = self.env.legal_actions(player)
+                    action_mask = np.ones_like(p_) * 1e32
+                    action_mask[legal_actions] = 0
+                    p = p_ - action_mask
+                    action = random.choices(legal_actions, weights=softmax(p[legal_actions]))[0]
+
+                    moment['policy'][player] = p
+                    moment['action_mask'][player] = action_mask
+                    moment['action'][player] = action
 
             err = self.env.step(moment['action'])
             if err:
