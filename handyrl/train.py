@@ -224,7 +224,8 @@ def compute_loss(batch, model, hidden, args):
 
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
-        if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
+        if args['zero_sum_averaging']:  # two player zerosum game
+            assert values_nograd.size(2) == 2
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
             values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
         outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
