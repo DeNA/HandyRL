@@ -277,10 +277,9 @@ def network_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
-def get_model(env, model_path):
+def load_model(model_path, model):
     import torch
     from .model import ModelWrapper
-    model = env.net()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return ModelWrapper(model)
@@ -290,7 +289,7 @@ def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
     agent = build_agent(model_path, env)
     if agent is None:
-        model = get_model(env, model_path)
+        model = load_model(model_path, env.net())
         agent = Agent(model)
     NetworkAgentClient(agent, env, conn).run()
 
@@ -306,7 +305,8 @@ def eval_main(args, argv):
 
     agent1 = build_agent(model_path, env)
     if agent1 is None:
-        agent1 = Agent(get_model(env, model_path))
+        model = load_model(model_path, env.net())
+        agent1 = Agent(model)
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))
