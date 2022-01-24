@@ -36,11 +36,11 @@ class TorusConv2d(nn.Module):
 
 
 class GeeseNet(nn.Module):
-    def __init__(self):
+    def __init__(self, obs):
         super().__init__()
         layers, filters = 12, 32
 
-        self.conv0 = TorusConv2d(17, filters, (3, 3), True)
+        self.conv0 = TorusConv2d(obs.shape[0], filters, (3, 3), True)
         self.blocks = nn.ModuleList([TorusConv2d(filters, filters, (3, 3), True) for _ in range(layers)])
         self.head_p = nn.Linear(filters, 4, bias=False)
         self.head_v = nn.Linear(filters * 2, 1, bias=False)
@@ -197,7 +197,7 @@ class Environment(BaseEnvironment):
         return self.ACTION.index(action)
 
     def net(self):
-        return GeeseNet()
+        return GeeseNet(self.observation())
 
     def observation(self, player=None):
         if player is None:
