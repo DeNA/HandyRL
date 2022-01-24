@@ -3,6 +3,7 @@
 
 # worker and gather
 
+import base64
 import random
 import threading
 import time
@@ -14,9 +15,9 @@ import pickle
 import copy
 
 from .environment import prepare_env, make_env
-from .connection import QueueCommunicator
+from .connection import QueueCommunicator, WebsocketCommunicator
 from .connection import send_recv, open_multiprocessing_connections
-from .connection import connect_socket_connection, accept_socket_connections
+from .connection import connect_websocket_connection
 from .evaluation import Evaluator
 from .generation import Generator
 from .model import ModelWrapper, RandomModel
@@ -161,6 +162,18 @@ class Gather(QueueCommunicator):
 
 
 def gather_loop(args, conn, gaid):
+    if conn is None:
+        # entry
+        conn = connect_websocket_connection(args['server_address'], 9998)
+
+        #conn.send(self.args)
+        conn.send(('entry', args))
+        args = conn.recv()
+        print('entry finished')
+
+        print(args)
+        prepare_env(args['env'])  # TODO: call once
+
     try:
         gather = Gather(args, conn, gaid)
         gather.run()
@@ -184,30 +197,13 @@ class WorkerCluster(QueueCommunicator):
             self.add_connection(conn0)
 
 
-class WorkerServer(QueueCommunicator):
+class WorkerServer(WebsocketCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
 
     def run(self):
-        # prepare listening connections
-        def worker_server(port):
-            print('started worker server %d' % port)
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-            while not self.shutdown_flag:
-                conn = next(conn_acceptor)
-                if conn is not None:
-                    worker_args = conn.recv()
-                    print('accepted connection from %s!' % worker_args['address'])
-                    args = copy.deepcopy(self.args)
-                    args['worker'] = worker_args
-                    conn.send(args)
-                    self.add_connection(conn)
-            print('finished worker server')
-
-        # use thread list of super class
-        self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-        self.threads[-1].start()
+        super().run()
 
 
 class RemoteWorkerCluster:
@@ -223,18 +219,8 @@ class RemoteWorkerCluster:
         process = []
         try:
             for i in range(self.args['num_gathers']):
-                # entry
-                conn = connect_socket_connection(self.args['server_address'], 9998)
-                conn.send(self.args)
-                args = conn.recv()
-
-                if i == 0:  # call once at every machine
-                    print(args)
-                    prepare_env(args['env'])
-
-                p = mp.Process(target=gather_loop, args=(args, conn, i))
+                p = mp.Process(target=gather_loop, args=(self.args, None, i))
                 p.start()
-                conn.close()
                 process.append(p)
             while True:
                 time.sleep(100)

@@ -3,3 +3,5 @@ numpy
 torch
 pytest
 psutil
+websocket-server
+websocket-client

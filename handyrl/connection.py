@@ -6,10 +6,14 @@ import time
 import struct
 import socket
 import pickle
+import base64
 import threading
 import queue
 import multiprocessing as mp
 import multiprocessing.connection as connection
+
+from websocket import create_connection
+from websocket_server import WebsocketServer
 
 
 def send_recv(conn, sdata):
@@ -196,6 +200,28 @@ class MultiProcessJobExecutor:
         print('finished receiver %d' % index)
 
 
+class WebsocketConnection:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def send(self, data):
+        message = base64.b64encode(pickle.dumps(data))
+        self.conn.send(message)
+
+    def recv(self):
+        message = self.conn.recv()
+        return pickle.loads(base64.b64decode(message))
+
+    def close(self):
+        self.conn.close()
+
+
+def connect_websocket_connection(host, port):
+    host = socket.gethostbyname(host)
+    conn = create_connection('ws://%s:%d' % (host, port))
+    return WebsocketConnection(conn)
+
+
 class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
@@ -262,3 +288,47 @@ class QueueCommunicator:
                         break
                     except queue.Full:
                         pass
+
+
+class WebsocketCommunicator(WebsocketServer):
+    def __init__(self):
+        super().__init__(port=9998, host='127.0.0.1')
+
+        self.input_queue = queue.Queue(maxsize=256)
+        self.output_queue = queue.Queue(maxsize=256)
+        self.shutdown_flag = False
+
+    def run(self):
+        self.set_fn_new_client(self._new_client)
+        self.set_fn_message_received(self._message_received)
+        self.run_forever(threaded=True)
+
+    def shutdown(self):
+        self.shutdown_flag = True
+        self.shutdown_gracefully()
+
+    def recv(self):
+        return self.input_queue.get()
+
+    def send(self, client, send_data):
+        self.output_queue.put((client, send_data))
+
+    @staticmethod
+    def _new_client(client, server):
+        print('New client {}:{} has joined.'.format(client['address'][0], client['address'][1]))
+
+    @staticmethod
+    def _message_received(client, server, message):
+        while not server.shutdown_flag:
+            try:
+                server.input_queue.put((client, pickle.loads(base64.b64decode(message))), timeout=0.3)
+                break
+            except queue.Full:
+                pass
+        while not server.shutdown_flag:
+            try:
+                client, reply_message = server.output_queue.get(timeout=0.3)
+                break
+            except queue.Empty:
+                continue
+        server.send_message(client, base64.b64encode(pickle.dumps(reply_message)))
