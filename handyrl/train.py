@@ -84,7 +84,7 @@ def make_batch(episodes, args):
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
         tmask = np.array([[[m['selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['observation'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
