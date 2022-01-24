@@ -206,8 +206,8 @@ class WorkerServer(QueueCommunicator):
             print('finished entry server')
 
         def worker_server(port):
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
             print('started worker server %d' % port)
+            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
             while not self.shutdown_flag:  # use super class's flag
                 conn = next(conn_acceptor)
                 if conn is not None:
