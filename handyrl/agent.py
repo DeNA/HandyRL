@@ -34,8 +34,10 @@ def print_outputs(env, prob, v):
     if hasattr(env, 'print_outputs'):
         env.print_outputs(prob, v)
     else:
-        print('v = %f' % v)
-        print('p = %s' % (prob * 1000).astype(int))
+        if v is not None:
+            print('v = %f' % v)
+        if prob is not None:
+            print('p = %s' % (prob * 1000).astype(int))
 
 
 class Agent:
