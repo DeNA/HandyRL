@@ -349,8 +349,8 @@ class Trainer:
 
     def train(self):
         if self.optimizer is None:  # non-parametric model
-            print()
-            return
+            time.sleep(0.1)
+            return self.model
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
         if self.gpu > 0:
@@ -395,7 +395,7 @@ class Trainer:
             if len(self.episodes) < self.args['minimum_episodes']:
                 time.sleep(1)
                 continue
-            if self.steps == 0:
+            if self.steps == 0 and self.optimizer is not None:
                 self.batcher.run()
                 print('started training')
             model = self.train()
