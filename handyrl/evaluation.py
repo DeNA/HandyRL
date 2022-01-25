@@ -88,11 +88,12 @@ def exec_match(env, agents, critic, show=False, game_args={}):
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in agents.items():
             if p in turn_players:
                 actions[p] = agent.action(env, p, show=show)
-            else:
+            elif p in observers:
                 agent.observe(env, p, show=show)
         if env.step(actions):
             return None
@@ -117,12 +118,13 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in network_agents.items():
             if p in turn_players:
                 action = agent.action(p)
                 actions[p] = env.str2action(action, p)
-            else:
+            elif p in observers:
                 agent.observe(p)
         if env.step(actions):
             return None
@@ -161,7 +163,7 @@ class Evaluator:
             if model is None:
                 agents[p] = build_agent(opponent, self.env)
             else:
-                agents[p] = Agent(model, self.args['observation'])
+                agents[p] = Agent(model)
 
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
