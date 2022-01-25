@@ -35,10 +35,6 @@ class ModelWrapper(nn.Module):
         super().__init__()
         self.model = model
 
-        def get_argument_names(f):
-            return f.__code__.co_varnames[:f.__code__.co_argcount]
-        self.forward_args = get_argument_names(self.model.forward)
-
     def init_hidden(self, batch_size=None):
         if hasattr(self.model, 'init_hidden'):
             if batch_size is None:  # for inference
@@ -49,10 +45,12 @@ class ModelWrapper(nn.Module):
         return None
 
     def forward(self, x, hidden, **kwargs):
-        # Remove 'hidden' input if it will not accepted
-        if 'hidden' not in self.forward_args:
-            return self.model.forward(x, **kwargs)
+        if self.model.forward.__code__.co_argcount == 1 + 1:
+            # ignore hidden state inputs if the number of arguments is just one
+            assert len(kwargs) == 0
+            return self.model.forward(x)
         else:
+            # otherwize, users should prepare an argument for hidden states
             return self.model.forward(x, hidden, **kwargs)
 
     def inference(self, x, hidden, **kwargs):
