@@ -25,7 +25,6 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
-from .connection import accept_socket_connections
 from .worker import WorkerCluster, WorkerServer
 
 
@@ -60,7 +59,7 @@ def make_batch(episodes, args):
         log_prob_zeros = np.zeros_like(moments[0]['log_selected_prob'][moments[0]['turn'][0]])
         act_zeros = np.zeros_like(moments[0]['action'][moments[0]['turn'][0]])
 
-        # data that is chainge by training configuration
+        # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             log_prob = np.array([[m['log_selected_prob'][m['turn'][0]]] for m in moments])
@@ -82,7 +81,7 @@ def make_batch(episodes, args):
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
         tmask = np.array([[[m['log_selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['observation'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
@@ -152,7 +151,7 @@ def forward_prediction(model, hidden, batch, args):
             outputs_ = model(obs, hidden_, action=action)
             for k, o in outputs_.items():
                 if k == 'hidden':
-                    next_hidden = outputs_['hidden']
+                    next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
@@ -347,8 +346,8 @@ class Trainer:
 
     def train(self):
         if self.optimizer is None:  # non-parametric model
-            print()
-            return
+            time.sleep(0.1)
+            return self.model
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
         if self.gpu > 0:
@@ -393,7 +392,7 @@ class Trainer:
             if len(self.episodes) < self.args['minimum_episodes']:
                 time.sleep(1)
                 continue
-            if self.steps == 0:
+            if self.steps == 0 and self.optimizer is not None:
                 self.batcher.run()
                 print('started training')
             model = self.train()

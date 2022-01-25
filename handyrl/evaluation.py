@@ -88,11 +88,12 @@ def exec_match(env, agents, critic, show=False, game_args={}):
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in agents.items():
             if p in turn_players:
                 actions[p] = agent.action(env, p, show=show)
-            else:
+            elif p in observers:
                 agent.observe(env, p, show=show)
         if env.step(actions):
             return None
@@ -117,12 +118,13 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in network_agents.items():
             if p in turn_players:
                 action = agent.action(p)
                 actions[p] = env.str2action(action, p)
-            else:
+            elif p in observers:
                 agent.observe(p)
         if env.step(actions):
             return None
@@ -161,7 +163,7 @@ class Evaluator:
             if model is None:
                 agents[p] = build_agent(opponent, self.env)
             else:
-                agents[p] = Agent(model, self.args['observation'])
+                agents[p] = Agent(model)
 
         outcome = exec_match(self.env, agents, None)
         if outcome is None:
@@ -277,10 +279,9 @@ def network_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
-def get_model(env, model_path):
+def load_model(model_path, model):
     import torch
     from .model import ModelWrapper
-    model = env.net()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return ModelWrapper(model)
@@ -290,7 +291,7 @@ def client_mp_child(env_args, model_path, conn):
     env = make_env(env_args)
     agent = build_agent(model_path, env)
     if agent is None:
-        model = get_model(env, model_path)
+        model = load_model(model_path, env.net())
         agent = Agent(model)
     NetworkAgentClient(agent, env, conn).run()
 
@@ -306,7 +307,8 @@ def eval_main(args, argv):
 
     agent1 = build_agent(model_path, env)
     if agent1 is None:
-        agent1 = Agent(get_model(env, model_path))
+        model = load_model(model_path, env.net())
+        agent1 = Agent(model)
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))

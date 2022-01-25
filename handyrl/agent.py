@@ -34,16 +34,17 @@ def print_outputs(env, action, prob, v):
     if hasattr(env, 'print_outputs'):
         env.print_outputs(action, prob, v)
     else:
-        print('v = %f' % v)
-        print('a = %d prob = %f' % (action, prob))
+        if v is not None:
+            print('v = %f' % v)
+        if action is not None:
+            print('a = %d prob = %f' % (action, prob))
 
 
 class Agent:
-    def __init__(self, model, observation=False, temperature=1e-6):
+    def __init__(self, model, temperature=1e-6):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
-        self.observation = observation
         self.temperature = temperature
 
     def reset(self, env, show=False):
@@ -68,12 +69,10 @@ class Agent:
         return action
 
     def observe(self, env, player, show=False):
-        v = None
-        if self.observation:
-            outputs = self.plan(env.observation(player))
-            v = outputs.get('value', None)
-            if show:
-                print_outputs(env, None, v)
+        outputs = self.plan(env.observation(player))
+        v = outputs.get('value', None)
+        if show:
+            print_outputs(env, None, v)
         return v if v is not None else [0.0]
 
 
@@ -96,5 +95,5 @@ class EnsembleAgent(Agent):
 
 
 class SoftAgent(Agent):
-    def __init__(self, model, observation=False):
-        super().__init__(model, observation=observation, temperature=1.0)
+    def __init__(self, model):
+        super().__init__(model, temperature=1.0)
