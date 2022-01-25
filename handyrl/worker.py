@@ -13,7 +13,7 @@ import multiprocessing as mp
 import pickle
 import copy
 
-from .environment import prepare_env, make_env
+from .environment import make_env
 from .connection import QueueCommunicator
 from .connection import send_recv, open_multiprocessing_connections
 from .connection import connect_socket_connection, accept_socket_connections
@@ -240,7 +240,6 @@ class RemoteWorkerCluster:
     def run(self):
         args = entry(self.args)
         print(args)
-        prepare_env(args['env'])
 
         # open worker
         process = []
