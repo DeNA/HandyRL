@@ -33,21 +33,24 @@ class Generator:
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
+            observers = self.env.observers()
             for player in self.env.players():
-                if player in turn_players or self.args['observation']:
-                    obs = self.env.observation(player)
-                    model = models[player]
+                if player not in turn_players + observers:
+                    continue
 
-                    outputs = model.inference(obs, hidden[player])
-                    hidden[player] = outputs.get('hidden', None)
-                    v = outputs.get('value', None)
+                obs = self.env.observation(player)
+                model = models[player]
 
-                    moment['observation'][player] = obs
-                    moment['value'][player] = v
+                outputs = model.inference(obs, hidden[player])
+                hidden[player] = outputs.get('hidden', None)
+                v = outputs.get('value', None)
 
-                    if player in turn_players:
-                        moment['action'][player] = outputs['action']
-                        moment['selected_prob'][player] = outputs['selected_prob']
+                moment['observation'][player] = obs
+                moment['value'][player] = v
+
+                if player in turn_players:
+                    moment['action'][player] = outputs['action']
+                    moment['selected_prob'][player] = outputs['selected_prob']
 
             err = self.env.step(moment['action'])
             if err:
