@@ -26,7 +26,6 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
-from .connection import accept_socket_connections
 from .worker import WorkerCluster, WorkerServer
 
 
@@ -60,7 +59,7 @@ def make_batch(episodes, args):
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
         p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
 
-        # data that is chainge by training configuration
+        # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
@@ -154,7 +153,7 @@ def forward_prediction(model, hidden, batch, args):
             outputs_ = model(obs, hidden_)
             for k, o in outputs_.items():
                 if k == 'hidden':
-                    next_hidden = outputs_['hidden']
+                    next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
             next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
