@@ -136,7 +136,7 @@ def forward_prediction(model, hidden, batch, args):
     if hidden is None:
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
-        action = action=batch['action'].view(-1, *batch['action'].size()[3:])
+        action = batch['action'].view(-1, *batch['action'].size()[3:])
         action_mask = batch['action_mask'].view(-1, *batch['action_mask'].size()[3:])
         outputs = model(obs, None, action=action, action_mask=action_mask)
     else:
