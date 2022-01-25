@@ -33,23 +33,26 @@ class Generator:
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
+            observers = self.env.observers()
             for player in self.env.players():
-                if player in turn_players or self.args['observation']:
-                    obs = self.env.observation(player)
-                    model = models[player]
+                if player not in turn_players + observers:
+                    continue
 
-                    legal_actions = self.env.legal_actions(player)
-                    outputs = model.inference(obs, hidden[player], legal_actions=legal_actions)
-                    hidden[player] = outputs.get('hidden', None)
-                    v = outputs.get('value', None)
+                obs = self.env.observation(player)
+                model = models[player]
 
-                    moment['observation'][player] = obs
-                    moment['value'][player] = v
+                legal_actions = self.env.legal_actions(player)
+                outputs = model.inference(obs, hidden[player], legal_actions=legal_actions)
+                hidden[player] = outputs.get('hidden', None)
+                v = outputs.get('value', None)
 
-                    if player in turn_players:
-                        moment['action'][player] = outputs['action'][0]
-                        moment['selected_prob'][player] = outputs['selected_prob'][0]
-                        moment['action_mask'][player] = outputs['action_mask']
+                moment['observation'][player] = obs
+                moment['value'][player] = v
+
+                if player in turn_players:
+                    moment['action'][player] = outputs['action'][0]
+                    moment['selected_prob'][player] = outputs['selected_prob'][0]
+                    moment['action_mask'][player] = outputs['action_mask']
 
             err = self.env.step(moment['action'])
             if err:
