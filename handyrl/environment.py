@@ -78,6 +78,12 @@ class BaseEnvironment:
         return [self.turn()]
 
     #
+    # Should be defined if players except turn player also observe game states
+    #
+    def observers(self):
+        return []
+
+    #
     # Should be defined in all games
     #
     def terminal(self):
