@@ -41,7 +41,11 @@ class ModelWrapper(nn.Module):
 
     def init_hidden(self, batch_size=None):
         if hasattr(self.model, 'init_hidden'):
-            return self.model.init_hidden(batch_size)
+            if batch_size is None:  # for inference
+                hidden = self.model.init_hidden([])
+                return map_r(hidden, lambda h: h.detach().numpy() if isinstance(h, torch.Tensor) else h)
+            else:  # for training
+                return self.model.init_hidden(batch_size)
         return None
 
     def forward(self, x, hidden, **kwargs):
