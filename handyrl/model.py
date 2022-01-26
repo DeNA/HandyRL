@@ -44,8 +44,14 @@ class ModelWrapper(nn.Module):
                 return self.model.init_hidden(batch_size)
         return None
 
-    def forward(self, *args, **kwargs):
-        return self.model.forward(*args, **kwargs)
+    def forward(self, x, hidden, **kwargs):
+        if self.model.forward.__code__.co_argcount == 1 + 1:
+            # ignore hidden state inputs if the number of arguments is just one
+            assert len(kwargs) == 0
+            return self.model.forward(x)
+        else:
+            # otherwize, users should prepare an argument for hidden states
+            return self.model.forward(x, hidden, **kwargs)
 
     def inference(self, x, hidden, **kwargs):
         # numpy array -> numpy array
