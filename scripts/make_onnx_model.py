@@ -25,7 +25,7 @@ model.eval()
 print('loaded PyTorch model from %s' % model_path)
 
 env.reset()
-obs = to_torch(env.observation(player=env.turn()))
+obs = to_torch(env.observation(player=env.turns()[0]))
 obs = map_r(obs, lambda x: x.unsqueeze(0))
 
 hidden = model.init_hidden([1]) if hasattr(model, 'init_hidden') else None
