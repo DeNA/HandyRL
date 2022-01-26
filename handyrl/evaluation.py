@@ -279,7 +279,76 @@ def network_match_acception(n, env_args, num_agents, port):
     return agents_list
 
 
+class OnnxModel:
+    def __init__(self, model_path):
+        self.model_path = model_path
+        self.ort_session = None
+
+    def _open_session(self):
+        import os
+        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['OMP_WAIT_POLICY'] = 'PASSIVE'
+
+        import onnxruntime
+        opts = onnxruntime.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+
+        self.ort_session = onnxruntime.InferenceSession(self.model_path, sess_options=opts)
+
+    def init_hidden(self):
+        if self.ort_session is None:
+            self._open_session()
+        hidden_inputs = [y for y in self.ort_session.get_inputs() if y.name.startswith('hidden')]
+        if len(hidden_inputs) == 0:
+            return None
+        import numpy as np
+        type_map = {
+            'tensor(float)': np.float32,
+            'tensor(int64)': np.int64,
+        }
+        hidden_tensors = [np.zeros(y.shape[1:], dtype=type_map[y.type]) for y in hidden_inputs]
+        return hidden_tensors
+
+    def inference(self, x, hidden=None, batch_input=False):
+        # numpy array -> numpy array
+        if self.ort_session is None:
+            self._open_session()
+
+        ort_inputs = {}
+        ort_input_names = [y.name for y in self.ort_session.get_inputs()]
+
+        import numpy as np
+        def insert_input(y):
+            y = y if batch_input else np.expand_dims(y, 0)
+            ort_inputs[ort_input_names[len(ort_inputs)]] = y
+        from .util import map_r
+        map_r(x, lambda y: insert_input(y))
+        if hidden is not None:
+            map_r(hidden, lambda y: insert_input(y))
+        ort_outputs = self.ort_session.run(None, ort_inputs)
+        if not batch_input:
+            ort_outputs = [o.squeeze(0) for o in ort_outputs]
+
+        ort_output_names = [y.name for y in self.ort_session.get_outputs()]
+        outputs = {name: ort_outputs[i] for i, name in enumerate(ort_output_names)}
+
+        hidden_outputs = []
+        for k in list(outputs.keys()):
+            if k.startswith('hidden'):
+                hidden_outputs.append(outputs.pop(k))
+        if len(hidden_outputs) == 0:
+            hidden_outputs = None
+
+        outputs = {**outputs, 'hidden': hidden_outputs}
+        return outputs
+
+
 def load_model(model_path, model):
+    if model_path.endswith('.onnx'):
+        model = OnnxModel(model_path)
+        return model
     import torch
     from .model import ModelWrapper
     model.load_state_dict(torch.load(model_path))
