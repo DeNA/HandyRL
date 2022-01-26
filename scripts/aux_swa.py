@@ -24,7 +24,7 @@ saved_model_path = os.path.join('models', 'swa.pth')
 ed, length = int(sys.argv[1]), int(sys.argv[2])
 step = 1
 if len(sys.argv) >= 4:
-    step
+    step = int(sys.argv[3])
 
 model_ids = [str(i) + '.pth' for i in range(ed - length + 1, ed + 1, step)]
 
