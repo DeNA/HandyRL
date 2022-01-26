@@ -50,7 +50,7 @@ class ModelWrapper(nn.Module):
             assert len(kwargs) == 0
             return self.model.forward(x)
         else:
-            # otherwize, users should prepare an argument for hidden states
+            # otherwise, users should prepare an argument for hidden states
             return self.model.forward(x, hidden, **kwargs)
 
     def inference(self, x, hidden, **kwargs):
