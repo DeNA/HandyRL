@@ -8,7 +8,7 @@ import torch
 sys.path.append('./')
 
 from handyrl.environment import make_env
-from handyrl.model import to_torch, ModelWrapper
+from handyrl.model import to_torch
 from handyrl.util import map_r
 
 
@@ -22,17 +22,13 @@ env = make_env(args['env_args'])
 model = env.net()
 model.load_state_dict(torch.load(model_path), strict=False)
 model.eval()
-model = ModelWrapper(model)
-
-model.load_state_dict(torch.load(model_path), strict=False)
-model.eval()
 print('loaded PyTorch model from %s' % model_path)
 
 env.reset()
 obs = to_torch(env.observation(player=env.turn()))
 obs = map_r(obs, lambda x: x.unsqueeze(0))
 
-hidden = model.init_hidden([1])
+hidden = model.init_hidden([1]) if hasattr(model, 'init_hidden') else None
 inputs = obs, hidden
 
 # You can specify meaningful names for the inputs here.
