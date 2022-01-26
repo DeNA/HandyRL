@@ -113,5 +113,5 @@ NOTE: Default opponent AI is random agent implemented in `evaluation.py`. You ca
 
 ## Use Cases
 
-*   [Month 1 Winner in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/222941)
-*   [The 5th solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
+*   [The 1st place solution in Hungry Geese (Kaggle)](https://www.kaggle.com/c/hungry-geese/discussion/263279)
+*   [The 5th place solution in Google Research Football with Manchester City F.C. (Kaggle)](https://www.kaggle.com/c/google-football/discussion/203412)
