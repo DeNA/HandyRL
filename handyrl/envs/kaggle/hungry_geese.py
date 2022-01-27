@@ -45,7 +45,7 @@ class GeeseNet(nn.Module):
         self.head_p = nn.Linear(filters, 4, bias=False)
         self.head_v = nn.Linear(filters * 2, 1, bias=False)
 
-    def forward(self, x):
+    def forward(self, x, _=None):
         h = F.relu_(self.conv0(x))
         for block in self.blocks:
             h = F.relu_(h + block(h))
