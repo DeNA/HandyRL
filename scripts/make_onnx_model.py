@@ -43,8 +43,8 @@ if hidden is not None:
 outputs = model(*inputs)
 output_names = list(outputs.keys())
 if 'hidden' in output_names:
-     index = output_names.index('hidden')
-     output_names = output_names[:index] + [name + 'o' for name in hidden_names] + output_names[index+1:]
+    index = output_names.index('hidden')
+    output_names = output_names[:index] + [name + 'o' for name in hidden_names] + output_names[index+1:]
 
 print('input =', input_names)
 print('output =', output_names)
