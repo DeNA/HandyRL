@@ -153,7 +153,7 @@ def forward_prediction(model, hidden, batch, args):
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
-                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
+                hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
             if t < args['burn_in_steps']:
                 model.eval()
                 with torch.no_grad():
