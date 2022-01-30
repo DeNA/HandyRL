@@ -59,7 +59,7 @@ class SimpleConv2dModel(nn.Module):
         self.head_p = Head((filters, 3, 3), 2, 9)
         self.head_v = Head((filters, 3, 3), 1, 1)
 
-    def forward(self, x):
+    def forward(self, x, hidden=None):
         h = F.relu(self.conv(x))
         for block in self.blocks:
             h = F.relu(block(h))
