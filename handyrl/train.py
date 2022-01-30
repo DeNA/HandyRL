@@ -135,16 +135,18 @@ def forward_prediction(model, hidden, batch, args):
     """
 
     observations = batch['observation']  # (B, T, P, ...)
+    batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
         outputs = model(obs, None)
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))
     else:
         # sequential computation with RNN
         outputs = {}
-        for t in range(batch['turn_mask'].size(1)):
-            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
+        for t in range(batch_shape[1]):
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P, ...)
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
@@ -160,17 +162,16 @@ def forward_prediction(model, hidden, batch, args):
                 if not model.training:
                     model.train()
                 outputs_ = model(obs, hidden_)
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], -1)))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
             # gather turn player's policies
             outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True) - batch['action_mask']
