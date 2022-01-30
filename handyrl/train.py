@@ -134,7 +134,7 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P, ...)
+    observations = batch['observation']  # (B, T, P or 1, ...)
     batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
@@ -146,7 +146,7 @@ def forward_prediction(model, hidden, batch, args):
         # sequential computation with RNN
         outputs = {}
         for t in range(batch_shape[1]):
-            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P, ...)
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             omask_ = batch['observation_mask'][:, t]
             omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
@@ -162,7 +162,7 @@ def forward_prediction(model, hidden, batch, args):
                 if not model.training:
                     model.train()
                 outputs_ = model(obs, hidden_)
-            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], -1)))  # (..., B, P or 1, ...)
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = o
