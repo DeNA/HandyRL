@@ -146,7 +146,7 @@ def forward_prediction(model, hidden, batch, args):
         for t in range(batch['turn_mask'].size(1)):
             obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
