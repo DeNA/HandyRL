@@ -76,7 +76,6 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
@@ -94,7 +93,6 @@ def make_batch(episodes, args):
             pad_len_a = batch_steps - len(tmask) - pad_len_b
             obs = map_r(obs, lambda o: np.pad(o, [(pad_len_b, pad_len_a)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
             prob = np.pad(prob, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1)
-            v = np.concatenate([np.pad(v, [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0), np.tile(oc, [pad_len_a, 1, 1])])
             act = np.pad(act, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
@@ -105,14 +103,14 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(pad_len_b, pad_len_a), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
+        datum.append((prob, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
+    prob, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'selected_prob': prob,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -372,8 +370,8 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             batch = self.batcher.batch()
-            batch_size = batch['value'].size(0)
-            player_count = batch['value'].size(2)
+            batch_size = batch['action'].size(0)
+            player_count = batch['action'].size(2)
             hidden = self.wrapped_model.init_hidden([batch_size, player_count])
             if self.gpu > 0:
                 batch = to_gpu(batch)
