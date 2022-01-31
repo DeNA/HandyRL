@@ -151,7 +151,7 @@ def forward_prediction(model, hidden, batch, args):
             action = batch['action'][:, t].flatten(0, 1)
             action_mask = batch['action_mask'][:, t].flatten(0, 1)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
@@ -175,9 +175,13 @@ def forward_prediction(model, hidden, batch, args):
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        if k == 'selected_prob':
-            # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)
+        if k in ['action', 'policy', 'entropy']:
+            o = o.mul(batch['turn_mask'])
+            if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
+                o = o.sum(2, keepdim=True)  # gather turn player's policies
+            if k == 'policy':
+                o = o - batch['action_mask']
+            outputs[k] = o
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.mul(batch['observation_mask'])
