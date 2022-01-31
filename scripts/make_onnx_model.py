@@ -13,7 +13,7 @@ from handyrl.util import map_r
 
 
 model_path = sys.argv[-1]
-saved_model_path = model_path + '.onnx'
+saved_model_path = model_path.rstrip('.pth') + '.onnx'
 
 with open('config.yaml') as f:
     args = yaml.safe_load(f)
@@ -43,8 +43,8 @@ if hidden is not None:
 outputs = model(*inputs)
 output_names = list(outputs.keys())
 if 'hidden' in output_names:
-     index = output_names.index('hidden')
-     output_names = output_names[:index] + [name + 'o' for name in hidden_names] + output_names[index+1:]
+    index = output_names.index('hidden')
+    output_names = output_names[:index] + [name + 'o' for name in hidden_names] + output_names[index+1:]
 
 print('input =', input_names)
 print('output =', output_names)
