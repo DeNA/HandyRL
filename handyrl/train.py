@@ -148,7 +148,7 @@ def forward_prediction(model, hidden, batch, args):
         for t in range(batch_shape[1]):
             obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
@@ -157,7 +157,7 @@ def forward_prediction(model, hidden, batch, args):
             if t < args['burn_in_steps']:
                 model.eval()
                 with torch.no_grad():
-                    outputs_= model(obs, hidden_)
+                    outputs_ = model(obs, hidden_)
             else:
                 if not model.training:
                     model.train()
