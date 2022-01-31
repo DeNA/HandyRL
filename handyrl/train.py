@@ -370,8 +370,8 @@ class Trainer:
 
         while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
             batch = self.batcher.batch()
-            batch_size = batch['action'].size(0)
-            player_count = batch['action'].size(2)
+            batch_size = batch['turn_mask'].size(0)
+            player_count = batch['turn_mask'].size(2)
             hidden = self.wrapped_model.init_hidden([batch_size, player_count])
             if self.gpu > 0:
                 batch = to_gpu(batch)
