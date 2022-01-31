@@ -130,27 +130,28 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P, ...)
+    observations = batch['observation']  # (..., B, T, P or 1, ...)
+    batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
-        obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
-        action = batch['action'].view(-1, *batch['action'].size()[3:])
+        obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
+        action = batch['action'].flatten(0, 2)
         outputs = model(obs, None, action=action)
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
         outputs = {}
-        for t in range(batch['turn_mask'].size(1)):
-            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
-            action = batch['action'][:, t].view(-1, *batch['action'].size()[3:])
+        for t in range(batch_shape[1]):
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
+            action = batch['action'][:, t].flatten(0, 1)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
-                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
-            outputs_ = model(obs, hidden_, action=action)
+                hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
             if t < args['burn_in_steps']:
                 model.eval()
                 with torch.no_grad():
@@ -159,20 +160,21 @@ def forward_prediction(model, hidden, batch, args):
                 if not model.training:
                     model.train()
                 outputs_ = model(obs, hidden_, action=action)
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
-        if k == 'log_selected_prob':
-            # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)
+        if k in ['action', 'log_selected_prob', 'entropy']:
+            o = o.mul(batch['turn_mask'])
+            if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
+                o = o.sum(2, keepdim=True)  # gather turn player's policies
+            outputs[k] = o
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.mul(batch['observation_mask'])
