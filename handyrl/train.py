@@ -137,7 +137,7 @@ def forward_prediction(model, hidden, batch, args):
         # feed-forward neural network
         obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
         action = batch['action'].flatten(0, 2)
-        outputs = model(obs, None, action=action, action_mask=action_mask)
+        outputs = model(obs, None, action=action)
         outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
@@ -174,8 +174,6 @@ def forward_prediction(model, hidden, batch, args):
             o = o.mul(batch['turn_mask'])
             if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
                 o = o.sum(2, keepdim=True)  # gather turn player's policies
-            if k == 'selected_prob':
-                o = o - batch['action_mask']
             outputs[k] = o
         else:
             # mask valid target values and cumulative rewards
