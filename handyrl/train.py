@@ -219,6 +219,7 @@ def compute_loss(batch, model, hidden, args):
 
     actions = batch['action']
     emasks = batch['episode_mask']
+    target_masks = batch['observation_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
@@ -236,14 +237,16 @@ def compute_loss(batch, model, hidden, args):
         if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
             values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
             values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
+            target_masks_inv = torch.stack([batch['observation_mask'][:, :, 1], values_nograd[:, :, 0]], dim=2)
+            target_masks = torch.clamp(target_masks + target_masks_inv, 0, 1)
         outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
 
     # compute targets and advantage
     targets = {}
     advantages = {}
 
-    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs
-    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs
+    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs, target_masks
+    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs, target_masks
 
     targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
     targets['return'], advantages['return'] = compute_target(args['value_target'], *return_args)
