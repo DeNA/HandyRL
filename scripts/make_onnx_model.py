@@ -13,7 +13,7 @@ from handyrl.util import map_r
 
 
 model_path = sys.argv[-1]
-saved_model_path = model_path + '.onnx'
+saved_model_path = model_path.rstrip('.pth') + '.onnx'
 
 with open('config.yaml') as f:
     args = yaml.safe_load(f)
