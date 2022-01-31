@@ -134,14 +134,14 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P or 1, ...)
+    observations = batch['observation']  # (..., B, T, P or 1, ...)
     batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
-        obs = map_r(observations, lambda o: o.flatten(0, 2))
+        obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
         outputs = model(obs, None)
-        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
         outputs = {}
