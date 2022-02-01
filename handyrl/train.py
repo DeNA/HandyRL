@@ -26,7 +26,6 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
-from .connection import accept_socket_connections
 from .worker import WorkerCluster, WorkerServer
 
 
@@ -58,19 +57,19 @@ def make_batch(episodes, args):
             players = [random.choice(players)]
 
         obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
+        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])  # template for padding
 
-        # data that is chainge by training configuration
+        # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
-            p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
+            prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
             act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
-            p = np.array([[replace_none(m['policy'][player], p_zeros) for player in players] for m in moments])
+            prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
             act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
-            amask = np.array([[replace_none(m['action_mask'][player], p_zeros + 1e32) for player in players] for m in moments])
+            amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
 
         # reshape observation
         obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
@@ -83,35 +82,37 @@ def make_batch(episodes, args):
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        tmask = np.array([[[m['selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['observation'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
-        if len(tmask) < args['forward_steps']:
-            pad_len = args['forward_steps'] - len(tmask)
-            obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
-            act = np.pad(act, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
-            progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
+        batch_steps = args['burn_in_steps'] + args['forward_steps']
+        if len(tmask) < batch_steps:
+            pad_len_b = args['burn_in_steps'] - (ep['train_start'] - ep['start'])
+            pad_len_a = batch_steps - len(tmask) - pad_len_b
+            obs = map_r(obs, lambda o: np.pad(o, [(pad_len_b, pad_len_a)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            prob = np.pad(prob, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1)
+            v = np.concatenate([np.pad(v, [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0), np.tile(oc, [pad_len_a, 1, 1])])
+            act = np.pad(act, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            rew = np.pad(rew, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmask = np.pad(tmask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            omask = np.pad(omask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            amask = np.pad(amask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1e32)
+            progress = np.pad(progress, [(pad_len_b, pad_len_a), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
+        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
+    prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
-        'policy': p, 'value': v,
+        'selected_prob': prob, 'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -133,42 +134,50 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P, ...)
+    observations = batch['observation']  # (..., B, T, P or 1, ...)
+    batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
-        obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
+        obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
         outputs = model(obs, None)
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
         outputs = {}
-        for t in range(batch['turn_mask'].size(1)):
-            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
+        for t in range(batch_shape[1]):
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
-                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
-            outputs_ = model(obs, hidden_)
+                hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
+            if t < args['burn_in_steps']:
+                model.eval()
+                with torch.no_grad():
+                    outputs_ = model(obs, hidden_)
+            else:
+                if not model.training:
+                    model.train()
+                outputs_ = model(obs, hidden_)
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
-                    next_hidden = outputs_['hidden']
+                    next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
-            # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask'])
-            if args['turn_based_training']:
-                outputs[k] = outputs[k].sum(2, keepdim=True)  # gather turn player's policies
-            outputs[k] = outputs[k] - batch['action_mask']
+            o = o.mul(batch['turn_mask'])
+            print(o.shape, batch['turn_mask'].shape, batch['action_mask'].shape)
+            if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
+                o = o.sum(2, keepdim=True)  # gather turn player's policies
+            outputs[k] = o - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.mul(batch['observation_mask'])
@@ -208,11 +217,15 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args)
+    if args['burn_in_steps'] > 0:
+        batch = map_r(batch, lambda v: v[args['burn_in_steps']:])
+        outputs = map_r(outputs, lambda v: v[args['burn_in_steps']:])
+
     actions = batch['action']
     emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * emasks
+    log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
     log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * emasks
 
     # thresholds of importance sampling
@@ -281,15 +294,16 @@ class Batcher:
                 break
         ep = self.episodes[ep_idx]
         turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
-        st = random.randrange(turn_candidates)
-        ed = min(st + self.args['forward_steps'], ep['steps'])
+        train_st = random.randrange(turn_candidates)
+        st = max(0, train_st - self.args['burn_in_steps'])
+        ed = min(train_st + self.args['forward_steps'], ep['steps'])
         st_block = st // self.args['compress_steps']
         ed_block = (ed - 1) // self.args['compress_steps'] + 1
         ep_minimum = {
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps'],
+            'start': st, 'end': ed, 'train_start': train_st, 'total': ep['steps'],
         }
         return ep_minimum
 
@@ -353,8 +367,8 @@ class Trainer:
 
     def train(self):
         if self.optimizer is None:  # non-parametric model
-            print()
-            return
+            time.sleep(0.1)
+            return self.model
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
         if self.gpu > 0:
@@ -399,7 +413,7 @@ class Trainer:
             if len(self.episodes) < self.args['minimum_episodes']:
                 time.sleep(1)
                 continue
-            if self.steps == 0:
+            if self.steps == 0 and self.optimizer is not None:
                 self.batcher.run()
                 print('started training')
             model = self.train()
