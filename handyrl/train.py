@@ -174,7 +174,6 @@ def forward_prediction(model, hidden, batch, args):
     for k, o in outputs.items():
         if k == 'policy':
             o = o.mul(batch['turn_mask'])
-            print(o.shape, batch['turn_mask'].shape, batch['action_mask'].shape)
             if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
                 o = o.sum(2, keepdim=True)  # gather turn player's policies
             outputs[k] = o - batch['action_mask']
