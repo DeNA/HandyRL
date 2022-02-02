@@ -571,13 +571,7 @@ class Learner:
                     data = [data]
                 send_data = []
 
-                if req == 'entry':
-                    for worker_args in data:
-                        args = copy.deepcopy(self.args)
-                        args['worker'] = worker_args
-                        send_data.append(args)
-
-                elif req == 'args':
+                if req == 'args':
                     for _ in data:
                         args = {'model_id': {}}
 
