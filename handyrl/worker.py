@@ -15,7 +15,7 @@ import pickle
 import copy
 
 from .environment import prepare_env, make_env
-from .connection import QueueCommunicator, WebsocketCommunicator
+from .connection import QueueCommunicator
 from .connection import send_recv, open_multiprocessing_connections
 from .connection import connect_websocket_connection
 from .evaluation import Evaluator
@@ -85,8 +85,8 @@ class Worker:
                 send_recv(self.conn, ('result', result))
 
 
-def make_worker_args(args, n_ga, gaid, wid, conn):
-    return args, conn, wid * n_ga + gaid
+def make_worker_args(args, n_ga, gaid, base_wid, wid, conn):
+    return args, conn, base_wid + wid * n_ga + gaid
 
 
 def open_worker(args, conn, wid):
@@ -108,10 +108,12 @@ class Gather(QueueCommunicator):
         n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
+        base_wid = args['worker'].get('base_worker_id', 0)
+
         worker_conns = open_multiprocessing_connections(
             num_workers_per_gather,
             open_worker,
-            functools.partial(make_worker_args, args, n_ga, gaid)
+            functools.partial(make_worker_args, args, n_ga, gaid, base_wid)
         )
 
         for conn in worker_conns:
@@ -166,7 +168,6 @@ def gather_loop(args, conn, gaid):
         # entry
         conn = connect_websocket_connection(args['server_address'], 9998)
 
-        #conn.send(self.args)
         conn.send(('entry', args))
         args = conn.recv()
         print('entry finished')
@@ -197,13 +198,89 @@ class WorkerCluster(QueueCommunicator):
             self.add_connection(conn0)
 
 
-class WorkerServer(WebsocketCommunicator):
+import base64
+import queue
+import socket
+from websocket import create_connection
+from websocket_server import WebsocketServer
+
+
+class WebsocketConnection:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def send(self, data):
+        message = base64.b64encode(pickle.dumps(data))
+        self.conn.send(message)
+
+    def recv(self):
+        message = self.conn.recv()
+        return pickle.loads(base64.b64decode(message))
+
+    def close(self):
+        self.conn.close()
+
+
+def connect_websocket_connection(host, port):
+    host = socket.gethostbyname(host)
+    conn = create_connection('ws://%s:%d' % (host, port))
+    return WebsocketConnection(conn)
+
+
+class WorkerServer(WebsocketServer):
     def __init__(self, args):
-        super().__init__()
+        super().__init__(port=9998, host='127.0.0.1')
+        self.input_queue = queue.Queue(maxsize=256)
+        self.output_queue = queue.Queue(maxsize=256)
+        self.shutdown_flag = False
+
         self.args = args
+        self.total_worker_count = 0
 
     def run(self):
-        super().run()
+        self.set_fn_new_client(self._new_client)
+        self.set_fn_message_received(self._message_received)
+        self.run_forever(threaded=True)
+
+    def shutdown(self):
+        self.shutdown_flag = True
+        self.shutdown_gracefully()
+
+    def recv(self):
+        return self.input_queue.get()
+
+    def send(self, client, send_data):
+        self.output_queue.put((client, send_data))
+
+    @staticmethod
+    def _new_client(client, server):
+        print('New client {}:{} has joined.'.format(client['address'][0], client['address'][1]))
+
+    @staticmethod
+    def _message_received(client, server, message):
+        message_ = pickle.loads(base64.b64decode(message))
+        if message_[0] == 'entry':
+            worker_args = message_[1]
+            print('accepted connection from %s' % worker_args['address'])
+            args = copy.deepcopy(server.args)
+            server.total_worker_count += worker_args['num_parallel']
+            args['worker'] = worker_args
+            reply_message = args
+        else:
+            while not server.shutdown_flag:
+                try:
+                    server.input_queue.put((client, message_), timeout=0.3)
+                    break
+                except queue.Full:
+                    pass
+            while not server.shutdown_flag:
+                try:
+                    client, reply_message = server.output_queue.get(timeout=0.3)
+                    break
+                except queue.Empty:
+                    continue
+        reply_message_ = base64.b64encode(pickle.dumps(reply_message))
+        server.send_message(client, reply_message_)
 
 
 class RemoteWorkerCluster:
