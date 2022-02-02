@@ -83,8 +83,8 @@ class Worker:
                 send_recv(self.conn, ('result', result))
 
 
-def make_worker_args(args, n_ga, gaid, base_wid, wid, conn):
-    return args, conn, base_wid + wid * n_ga + gaid
+def make_worker_args(args, base_wid, wid, conn):
+    return args, conn, base_wid + wid
 
 
 def open_worker(args, conn, wid):
@@ -93,25 +93,20 @@ def open_worker(args, conn, wid):
 
 
 class Gather(QueueCommunicator):
-    def __init__(self, args, conn, gaid):
-        print('started gather %d' % gaid)
+    def __init__(self, args, conn, gather_id, base_worker_id, num_workers):
+        print('started gather %d' % gather_id)
         super().__init__()
-        self.gather_id = gaid
+        self.gather_id = gather_id
         self.server_conn = conn
         self.args_queue = deque([])
         self.data_map = {'model': {}}
         self.result_send_map = {}
         self.result_send_cnt = 0
 
-        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
-
-        num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
-        base_wid = args['worker'].get('base_worker_id', 0)
-
         worker_conns = open_multiprocessing_connections(
-            num_workers_per_gather,
+            num_workers,
             open_worker,
-            functools.partial(make_worker_args, args, n_ga, gaid, base_wid)
+            functools.partial(make_worker_args, args, base_worker_id)
         )
 
         for conn in worker_conns:
@@ -161,20 +156,27 @@ class Gather(QueueCommunicator):
                     self.result_send_cnt = 0
 
 
-def gather_loop(args, conn, gaid):
+def gather_loop(args, conn, gather_id):
+    n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
+    n_pro_w = (n_pro // n_ga) + int(gather_id < n_pro % n_ga)
+    args['worker']['num_parallel_per_gather'] = n_pro_w
+    base_worker_id = 0
+
     if conn is None:
         # entry
-        conn = connect_websocket_connection(args['server_address'], 9998)
+        conn = connect_websocket_connection(args['worker']['server_address'], 9998)
 
-        conn.send(('entry', args))
+        conn.send(('entry', args['worker']))
         args = conn.recv()
         print('entry finished')
 
-        print(args)
-        prepare_env(args['env'])  # TODO: call once
+        if gather_id == 0:  # call once at every machine
+             print(args)
+             prepare_env(args['env'])
+        base_worker_id = args['worker'].get('base_worker_id', 0)
 
     try:
-        gather = Gather(args, conn, gaid)
+        gather = Gather(args, conn, gather_id, base_worker_id, n_pro_w)
         gather.run()
     finally:
         gather.shutdown()
@@ -261,7 +263,8 @@ class WorkerServer(WebsocketServer):
             worker_args = message_[1]
             print('accepted connection from %s' % worker_args['address'])
             args = copy.deepcopy(server.args)
-            server.total_worker_count += worker_args['num_parallel']
+            worker_args['base_worker_id'] = server.total_worker_count
+            server.total_worker_count += worker_args['num_parallel_per_gather']
             args['worker'] = worker_args
             reply_message = args
         else:
@@ -294,7 +297,7 @@ class RemoteWorkerCluster:
         process = []
         try:
             for i in range(self.args['num_gathers']):
-                p = mp.Process(target=gather_loop, args=(self.args, None, i))
+                p = mp.Process(target=gather_loop, args=({'worker': self.args}, None, i))
                 p.start()
                 process.append(p)
             while True:
