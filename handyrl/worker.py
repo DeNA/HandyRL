@@ -5,7 +5,6 @@
 
 import base64
 import random
-import threading
 import time
 import functools
 from socket import gethostname
@@ -17,7 +16,6 @@ import copy
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
 from .connection import send_recv, open_multiprocessing_connections
-from .connection import connect_websocket_connection
 from .evaluation import Evaluator
 from .generation import Generator
 from .model import ModelWrapper, RandomModel
