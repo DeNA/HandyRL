@@ -423,7 +423,9 @@ class Learner:
     def __init__(self, args, net=None, remote=False):
         train_args = args['train_args']
         env_args = args['env_args']
+        worker_args = args['worker_args']
         train_args['env'] = env_args
+        train_args['worker'] = worker_args
         args = train_args
 
         self.args = args

@@ -164,7 +164,8 @@ def gather_loop(args, conn, gather_id):
 
     if conn is None:
         # entry
-        conn = connect_websocket_connection(args['worker']['server_address'], 9998)
+        port = int(args['worker'].get('server_port', 9998))
+        conn = connect_websocket_connection(args['worker']['server_address'], port)
 
         conn.send(('entry', args['worker']))
         args = conn.recv()
@@ -229,7 +230,8 @@ def connect_websocket_connection(host, port):
 
 class WorkerServer(WebsocketServer):
     def __init__(self, args):
-        super().__init__(port=9998, host='127.0.0.1')
+        port = int(args['worker'].get('server_port', 9998))
+        super().__init__(port=port, host='0.0.0.0')
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
         self.shutdown_flag = False
