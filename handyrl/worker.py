@@ -210,13 +210,21 @@ class WebsocketConnection:
     def __init__(self, conn):
         self.conn = conn
 
+    @staticmethod
+    def dumps(data):
+        return base64.b64encode(pickle.dumps(data))
+
+    @staticmethod
+    def loads(message):
+        return pickle.loads(base64.b64decode(message))
+
     def send(self, data):
-        message = base64.b64encode(pickle.dumps(data))
+        message = self.dumps(data)
         self.conn.send(message)
 
     def recv(self):
         message = self.conn.recv()
-        return pickle.loads(base64.b64decode(message))
+        return self.loads(message)
 
     def close(self):
         self.conn.close()
@@ -260,7 +268,7 @@ class WorkerServer(WebsocketServer):
 
     @staticmethod
     def _message_received(client, server, message):
-        message_ = pickle.loads(base64.b64decode(message))
+        message_ = WebsocketConnection.loads(message)
         if message_[0] == 'entry':
             worker_args = message_[1]
             print('accepted connection from %s' % worker_args['address'])
@@ -282,7 +290,7 @@ class WorkerServer(WebsocketServer):
                     break
                 except queue.Empty:
                     continue
-        reply_message_ = base64.b64encode(pickle.dumps(reply_message))
+        reply_message_ = WebsocketConnection.dumps(reply_message)
         server.send_message(client, reply_message_)
 
 
