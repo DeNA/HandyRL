@@ -407,13 +407,12 @@ class Trainer:
 
     def run(self):
         print('waiting training')
+        while not self.shutdown_flag and len(self.episodes) < self.args['minimum_episodes']:
+            time.sleep(1)
+        if not self.shutdown_flag and self.optimizer is not None:
+            self.batcher.run()
+            print('started training')
         while not self.shutdown_flag:
-            if len(self.episodes) < self.args['minimum_episodes']:
-                time.sleep(1)
-                continue
-            if self.steps == 0 and self.optimizer is not None:
-                self.batcher.run()
-                print('started training')
             model = self.train()
             self.report_update(model, self.steps)
         print('finished training')
