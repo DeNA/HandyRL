@@ -340,7 +340,8 @@ class Trainer:
         if len(self.episodes) < self.args['minimum_episodes']:
             return None, 0  # return None before training
         self.update_flag = True
-        return self.update_queue.get()
+        model, steps = self.update_queue.get()
+        return model, steps
 
     def shutdown(self):
         self.shutdown_flag = True
