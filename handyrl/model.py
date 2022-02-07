@@ -6,9 +6,6 @@
 import os
 os.environ['OMP_NUM_THREADS'] = '1'
 
-import copy
-import random
-
 import numpy as np
 import torch
 torch.set_num_threads(1)
