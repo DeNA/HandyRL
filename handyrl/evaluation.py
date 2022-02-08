@@ -76,7 +76,7 @@ class NetworkAgent:
         return send_recv(self.conn, ('observe', [player]))
 
 
-def exec_match(env, env_args, agents, critic, show=False, game_args={}):
+def exec_match(env, env_args, agents, critic=None, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
@@ -104,7 +104,7 @@ def exec_match(env, env_args, agents, critic, show=False, game_args={}):
     return outcome
 
 
-def exec_network_match(env, env_args, network_agents, critic, show=False, game_args={}):
+def exec_network_match(env, env_args, network_agents, critic=None, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
@@ -163,7 +163,7 @@ class Evaluator:
             else:
                 agents[p] = Agent(model)
 
-        outcome = exec_match(self.env, self.args['env'], agents, None)
+        outcome = exec_match(self.env, self.args['env'], agents)
         if outcome is None:
             print('None episode in evaluation!')
             return None
