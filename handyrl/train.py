@@ -444,6 +444,7 @@ class Learner:
         # generated datum
         self.generation_results = {}
         self.num_episodes = 0
+        self.num_returned_episodes = 0
 
         # evaluated datum
         self.results = {}
@@ -487,6 +488,9 @@ class Learner:
                 outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+            self.num_returned_episodes += 1
+            if self.num_returned_episodes % 100 == 0:
+                print(self.num_returned_episodes, end=' ', flush=True)
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
@@ -564,7 +568,7 @@ class Learner:
         while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_episodes < next_update_episodes:
+            while not self.shutdown_flag and self.num_returned_episodes < next_update_episodes:
                 conn, (req, data) = self.worker.recv()
                 multi_req = isinstance(data, list)
                 if not multi_req:
@@ -590,8 +594,6 @@ class Learner:
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
-                            if self.num_episodes % 100 == 0:
-                                print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
