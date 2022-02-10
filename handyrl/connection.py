@@ -2,7 +2,6 @@
 # Licensed under The MIT License [see LICENSE for details]
 
 import io
-import time
 import struct
 import socket
 import pickle
