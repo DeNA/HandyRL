@@ -509,7 +509,7 @@ class Learner:
                 continue
             for p in result['args']['player']:
                 model_id = result['args']['model_id'][p]
-                res = result['result'][p]
+                res = result['outcome'][p]
                 n, r, r2 = self.results.get(model_id, (0, 0, 0))
                 self.results[model_id] = n + 1, r + res, r2 + res ** 2
 
