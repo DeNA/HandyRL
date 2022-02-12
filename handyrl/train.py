@@ -217,8 +217,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args)
     if args['burn_in_steps'] > 0:
-        batch = map_r(batch, lambda v: v[args['burn_in_steps']:])
-        outputs = map_r(outputs, lambda v: v[args['burn_in_steps']:])
+        batch = map_r(batch, lambda v: v[:, args['burn_in_steps']:] if v.size(1) > 1 else v)
+        outputs = map_r(outputs, lambda v: v[:, args['burn_in_steps']:])
 
     actions = batch['action']
     emasks = batch['episode_mask']
