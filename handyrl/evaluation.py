@@ -7,6 +7,8 @@ import random
 import time
 import multiprocessing as mp
 
+import numpy as np
+
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
@@ -312,7 +314,6 @@ class OnnxModel:
         hidden_inputs = [y for y in self.ort_session.get_inputs() if y.name.startswith('hidden')]
         if len(hidden_inputs) == 0:
             return None
-        import numpy as np
         type_map = {
             'tensor(float)': np.float32,
             'tensor(int64)': np.int64,
@@ -328,7 +329,6 @@ class OnnxModel:
         ort_inputs = {}
         ort_input_names = [y.name for y in self.ort_session.get_inputs()]
 
-        import numpy as np
         def insert_input(y):
             y = y if batch_input else np.expand_dims(y, 0)
             ort_inputs[ort_input_names[len(ort_inputs)]] = y
