@@ -61,6 +61,7 @@ class Environment(TicTacToe):
 if __name__ == '__main__':
     e = Environment()
     for _ in range(100):
+        total_rewards = {}
         e.reset()
         while not e.terminal():
             print(e)
@@ -70,5 +71,7 @@ if __name__ == '__main__':
                 print([e.action2str(a) for a in actions])
                 action_map[p] = random.choice(actions)
             e.step(action_map)
+            for p, r in e.reward().items():
+                total_rewards[p] = total_rewards.get(p, 0) + r
         print(e)
-        print(e.outcome())
+        print(total_rewards)
