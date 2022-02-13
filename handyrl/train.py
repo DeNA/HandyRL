@@ -110,7 +110,6 @@ def make_batch(episodes, args):
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
     prob, v, act, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
-    gamma = to_torch(np.array(args['gamma']))
 
     return {
         'observation': obs,
@@ -120,7 +119,6 @@ def make_batch(episodes, args):
         'episode_mask': emask,
         'turn_mask': tmask, 'observation_mask': omask,
         'action_mask': amask,
-        'gamma': gamma,
         'progress': progress,
     }
 
@@ -247,7 +245,8 @@ def compute_loss(batch, model, hidden, args):
     targets = {}
     advantages = {}
 
-    value_args = outputs_nograd.get('value', None), batch['return'], batch['reward'], args['lambda'], batch['gamma'], clipped_rhos, cs
+    gamma = torch.from_numpy(np.array(args['gamma'], dtype=np.float32)).to(batch['reward'].device)
+    value_args = outputs_nograd.get('value', None), batch['return'], batch['reward'], args['lambda'], gamma, clipped_rhos, cs
     targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
 
     if args['policy_target'] != args['value_target']:
