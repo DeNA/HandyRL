@@ -436,13 +436,13 @@ class Environment(BaseEnvironment):
         turn_rewards = [-0.01, -0.01]
 
         # terminal reward
-        outcomes = [0, 0]
+        terminal_rewards = [0, 0]
         if self.win_color == self.BLACK:
-            outcomes = [1, -1]
+            terminal_rewards = [1, -1]
         elif self.win_color == self.WHITE:
-            outcomes = [-1, 1]
+            terminal_rewards = [-1, 1]
 
-        return {p: [outcomes[idx], turn_rewards[idx]] for idx, p in enumerate(self.players())}
+        return {p: [terminal_rewards[idx], turn_rewards[idx]] for idx, p in enumerate(self.players())}
 
     def legal(self, action):
         if self.turn_count < 0:
