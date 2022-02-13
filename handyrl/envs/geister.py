@@ -34,16 +34,10 @@ class ConvLSTMCell(nn.Module):
         )
 
     def init_hidden(self, input_size, batch_size):
-        if batch_size is None:  # for inference
-            return tuple([
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32)
-            ])
-        else:  # for training
-            return tuple([
-                torch.zeros(*batch_size, self.hidden_dim, *input_size),
-                torch.zeros(*batch_size, self.hidden_dim, *input_size)
-            ])
+        return tuple([
+            torch.zeros(*batch_size, self.hidden_dim, *input_size),
+            torch.zeros(*batch_size, self.hidden_dim, *input_size)
+        ])
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
@@ -62,6 +56,11 @@ class ConvLSTMCell(nn.Module):
 
         return h_next, c_next
 
+
+# Deep Repeated Conv-LSTM (https://arxiv.org/abs/1901.03559)
+# increases expressive power with fewer parameters
+# by repeatedly computing multi-layer convolutional LSTM.
+# When num_repeats=1, it is simply a multi-layer Conv-LSTM.
 
 class DRC(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
@@ -93,7 +92,7 @@ class DRC(nn.Module):
         hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
-                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+                hs[i], cs[i] = block(hs[i - 1] if i > 0 else x, (hs[i], cs[i]))
 
         return hs[-1], (hs, cs)
 
@@ -145,7 +144,7 @@ class GeisterNet(nn.Module):
         self.head_v = ScalarHead((filters * 2, 6, 6), 1, 1)
         self.head_r = ScalarHead((filters * 2, 6, 6), 1, 1)
 
-    def init_hidden(self, batch_size=None):
+    def init_hidden(self, batch_size=[]):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
@@ -449,6 +448,8 @@ class Environment(BaseEnvironment):
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6
             return 0 <= layout < 70
+        elif not 0 <= action < 4 * 6 * 6:
+            return False
 
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
