@@ -196,9 +196,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     losses = {}
     dcnt = tmasks.sum().item()
-    turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
-    losses['p'] = (-log_selected_policies * turn_advantages).sum()
+    losses['p'] = (-log_selected_policies * total_advantages).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
     if 'return' in outputs:
