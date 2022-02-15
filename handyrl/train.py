@@ -11,6 +11,7 @@ import random
 import bz2
 import pickle
 import warnings
+import queue
 from collections import deque
 
 import numpy as np
@@ -324,10 +325,9 @@ class Trainer:
         lr = self.default_lr * self.data_cnt_ema
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
-        self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
-        self.updated_model = None, 0
         self.update_flag = False
+        self.update_queue = queue.Queue(maxsize=1)
         self.shutdown_flag = False
 
         self.wrapped_model = ModelWrapper(self.model)
@@ -339,24 +339,8 @@ class Trainer:
         if len(self.episodes) < self.args['minimum_episodes']:
             return None, 0  # return None before training
         self.update_flag = True
-        while True:
-            time.sleep(0.1)
-            model, steps = self.recheck_update()
-            if model is not None:
-                break
+        model, steps = self.update_queue.get()
         return model, steps
-
-    def report_update(self, model, steps):
-        self.lock.acquire()
-        self.update_flag = False
-        self.updated_model = model, steps
-        self.lock.release()
-
-    def recheck_update(self):
-        self.lock.acquire()
-        flag = self.update_flag
-        self.lock.release()
-        return (None, -1) if flag else self.updated_model
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -413,7 +397,8 @@ class Trainer:
             print('started training')
         while not self.shutdown_flag:
             model = self.train()
-            self.report_update(model, self.steps)
+            self.update_flag = False
+            self.update_queue.put((model, self.steps))
         print('finished training')
 
 
