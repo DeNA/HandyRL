@@ -33,8 +33,9 @@ class Generator:
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
 
             turn_players = self.env.turns()
+            observers = self.env.observers()
             for player in self.env.players():
-                if player not in turn_players and not self.args['env']['observation']:
+                if player not in turn_players + observers:
                     continue
 
                 obs = self.env.observation(player)

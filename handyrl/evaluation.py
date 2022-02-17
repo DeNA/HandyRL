@@ -76,7 +76,7 @@ class NetworkAgent:
         return send_recv(self.conn, ('observe', [player]))
 
 
-def exec_match(env, env_args, agents, critic=None, show=False, game_args={}):
+def exec_match(env, agents, critic=None, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
@@ -88,11 +88,12 @@ def exec_match(env, env_args, agents, critic=None, show=False, game_args={}):
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in agents.items():
             if p in turn_players:
                 actions[p] = agent.action(env, p, show=show)
-            elif env_args.get('observation', False):
+            elif p in observers:
                 agent.observe(env, p, show=show)
         if env.step(actions):
             return None
@@ -104,7 +105,7 @@ def exec_match(env, env_args, agents, critic=None, show=False, game_args={}):
     return outcome
 
 
-def exec_network_match(env, env_args, network_agents, critic=None, show=False, game_args={}):
+def exec_network_match(env, network_agents, critic=None, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
@@ -117,12 +118,13 @@ def exec_network_match(env, env_args, network_agents, critic=None, show=False, g
         if show and critic is not None:
             print('cv = ', critic.observe(env, None, show=False)[0])
         turn_players = env.turns()
+        observers = env.observers()
         actions = {}
         for p, agent in network_agents.items():
             if p in turn_players:
                 action = agent.action(p)
                 actions[p] = env.str2action(action, p)
-            elif env_args.get('observation', False):
+            elif p in observers:
                 agent.observe(p)
         if env.step(actions):
             return None
@@ -163,7 +165,7 @@ class Evaluator:
             else:
                 agents[p] = Agent(model)
 
-        outcome = exec_match(self.env, self.args['env'], agents)
+        outcome = exec_match(self.env, agents)
         if outcome is None:
             print('None episode in evaluation!')
             return None
@@ -189,9 +191,9 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         print('*** Game %d ***' % g)
         agent_map = {env.players()[p]: agents[ai] for p, ai in enumerate(agent_ids)}
         if isinstance(list(agent_map.values())[0], NetworkAgent):
-            outcome = exec_network_match(env, env_args, agent_map, critic, show=show, game_args=game_args)
+            outcome = exec_network_match(env, agent_map, critic, show=show, game_args=game_args)
         else:
-            outcome = exec_match(env, env_args, agent_map, critic, show=show, game_args=game_args)
+            outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
         out_queue.put((pat_idx, agent_ids, outcome))
     out_queue.put(None)
 
