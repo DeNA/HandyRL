@@ -4,7 +4,6 @@ env_args:
     #env: 'Geister'
     #env: 'HungryGeese'
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
-    observation: True
 
 train_args:
     turn_based_training: True
