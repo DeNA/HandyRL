@@ -467,7 +467,8 @@ class Learner:
             if episode is None:
                 continue
             for p in episode['args']['player']:
-                model_id = episode['args']['model_id'][p]
+                #model_id = episode['args']['model_id'][p]
+                model_id = self.model_epoch
                 outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
@@ -495,7 +496,8 @@ class Learner:
             if result is None:
                 continue
             for p in result['args']['player']:
-                model_id = result['args']['model_id'][p]
+                #model_id = result['args']['model_id'][p]
+                model_id = self.model_epoch
                 res = result['result'][p]
                 n, r, r2 = self.results.get(model_id, (0, 0, 0))
                 self.results[model_id] = n + 1, r + res, r2 + res ** 2
