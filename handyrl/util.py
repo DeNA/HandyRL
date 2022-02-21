@@ -21,14 +21,6 @@ def bimap_r(x, y, callback_fn=None):
     return callback_fn(x, y) if callback_fn is not None else None
 
 
-def trimap_r(x, y, z, callback_fn=None):
-    if isinstance(x, (list, tuple)):
-        return type(x)(trimap_r(xx, y[i], z[i], callback_fn) for i, xx in enumerate(x))
-    elif isinstance(x, dict):
-        return type(x)((key, trimap_r(xx, y[key], z[key], callback_fn)) for key, xx in x.items())
-    return callback_fn(x, y, z) if callback_fn is not None else None
-
-
 def rotate(x, max_depth=1024):
     if max_depth == 0:
         return x

@@ -23,7 +23,7 @@ import torch.optim as optim
 import psutil
 
 from .environment import prepare_env, make_env
-from .util import map_r, bimap_r, trimap_r, rotate
+from .util import map_r, bimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
@@ -169,7 +169,9 @@ def forward_prediction(model, hidden, batch, args):
                     next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
+            hidden_ = bimap_r(hidden, omask, lambda h, m: h * (1 - m))
+            next_hidden_ = bimap_r(next_hidden, omask, lambda nh, m: nh * m)
+            hidden = bimap_r(hidden_, next_hidden_, lambda h, nh: h + nh)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
