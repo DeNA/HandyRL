@@ -336,8 +336,6 @@ class Trainer:
             self.trained_model = nn.DataParallel(self.wrapped_model)
 
     def update(self):
-        if len(self.episodes) < self.args['minimum_episodes']:
-            return None, 0  # return None before training
         self.update_flag = True
         model, steps = self.update_queue.get()
         return model, steps
