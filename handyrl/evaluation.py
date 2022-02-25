@@ -37,7 +37,10 @@ class NetworkAgentClient:
 
     def run(self):
         while True:
-            command, args = self.conn.recv()
+            try:
+                command, args = self.conn.recv()
+            except ConnectionResetError:
+                break
             if command == 'quit':
                 break
             elif command == 'outcome':
