@@ -63,6 +63,10 @@ class NetworkAgent:
     def __init__(self, conn):
         self.conn = conn
 
+    def quit(self):
+        self.conn.send(('quit', None))
+        self.conn.close()
+
     def update(self, data, reset):
         return send_recv(self.conn, ('update', [data, reset]))
 
@@ -254,6 +258,11 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
         for pat_idx, results in r_map.items():
             print(pat_idx, {k: results[k] for k in sorted(results.keys(), reverse=True)}, wp_func(results))
         print('total', {k: total_results[p][k] for k in sorted(total_results[p].keys(), reverse=True)}, wp_func(total_results[p]))
+
+    if network_mode:
+        for game_agents in agents:
+            for agent in game_agents:
+                agent.quit()
 
 
 def network_match_acception(n, env_args, num_agents, port):
