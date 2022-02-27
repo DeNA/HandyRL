@@ -114,7 +114,8 @@ def make_batch(episodes, args):
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'selected_prob': prob,
+        'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
