@@ -192,6 +192,8 @@ class MultiProcessJobExecutor:
                         break
                     except queue.Full:
                         pass
+        for conn in conns:
+            conn.close()
         print('finished receiver %d' % index)
 
 
@@ -259,3 +261,5 @@ class QueueCommunicator:
                         break
                     except queue.Full:
                         pass
+        for conn in self.conns:
+            conn.close()
