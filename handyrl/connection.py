@@ -180,7 +180,7 @@ class MultiProcessJobExecutor:
                         break
                     except queue.Full:
                         pass
-        print('finished receiver %d' % index)
+        print('finished receiver')
 
 
 class QueueCommunicator:
