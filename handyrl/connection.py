@@ -114,22 +114,6 @@ def accept_socket_connections(port, timeout=None, maxsize=1024):
         yield conn
 
 
-def open_multiprocessing_connections(num_process, target, args_func):
-    # open connections
-    s_conns, g_conns = [], []
-    for _ in range(num_process):
-        conn0, conn1 = mp.Pipe(duplex=True)
-        s_conns.append(conn0)
-        g_conns.append(conn1)
-
-    # open workers
-    for i, conn in enumerate(g_conns):
-        mp.Process(target=target, args=args_func(i, conn)).start()
-        conn.close()
-
-    return s_conns
-
-
 class MultiProcessJobExecutor:
     def __init__(self, func, send_generator, num_workers, postprocess=None):
         self.send_generator = send_generator
@@ -140,7 +124,7 @@ class MultiProcessJobExecutor:
 
         for i in range(num_workers):
             conn0, conn1 = mp.Pipe(duplex=True)
-            mp.Process(target=func, args=(conn1, i)).start()
+            mp.Process(target=func, args=(conn1, i), daemon=True).start()
             conn1.close()
             self.conns.append(conn0)
             self.waiting_conns.put(conn0)

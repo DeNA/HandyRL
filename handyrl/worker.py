@@ -15,7 +15,7 @@ import copy
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
-from .connection import send_recv, open_multiprocessing_connections
+from .connection import send_recv
 from .connection import connect_socket_connection, accept_socket_connections
 from .evaluation import Evaluator
 from .generation import Generator
@@ -84,17 +84,13 @@ class Worker:
                 send_recv(self.conn, ('result', result))
 
 
-def make_worker_args(args, n_ga, gaid, base_wid, wid, conn):
-    return args, conn, base_wid + wid * n_ga + gaid
-
-
 def open_worker(args, conn, wid):
     worker = Worker(args, conn, wid)
     worker.run()
 
 
 class Gather(QueueCommunicator):
-    def __init__(self, args, conn, gaid):
+    def __init__(self, args, conn, worker_conns, gaid):
         print('started gather %d' % gaid)
         super().__init__()
         self.gather_id = gaid
@@ -103,17 +99,6 @@ class Gather(QueueCommunicator):
         self.data_map = {'model': {}}
         self.result_send_map = {}
         self.result_send_cnt = 0
-
-        n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
-
-        num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
-        base_wid = args['worker'].get('base_worker_id', 0)
-
-        worker_conns = open_multiprocessing_connections(
-            num_workers_per_gather,
-            open_worker,
-            functools.partial(make_worker_args, args, n_ga, gaid, base_wid)
-        )
 
         for conn in worker_conns:
             self.add_connection(conn)
@@ -162,8 +147,8 @@ class Gather(QueueCommunicator):
                     self.result_send_cnt = 0
 
 
-def gather_loop(args, conn, gaid):
-    gather = Gather(args, conn, gaid)
+def gather_loop(args, conn, worker_conns, gaid):
+    gather = Gather(args, conn, worker_conns, gaid)
     gather.run()
 
 
@@ -176,11 +161,25 @@ class WorkerCluster(QueueCommunicator):
         # open local connections
         if 'num_gathers' not in self.args['worker']:
             self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
+
+        gather_conns = [[] for _ in range(self.args['worker']['num_gathers'])]
+        worker_conns = []
+        for i in range(self.args['worker']['num_parallel']):
+            conn0, conn1 = mp.Pipe(duplex=True)
+            gather_conns[i % self.args['worker']['num_gathers']].append(conn0)
+            worker_conns.append(conn1)
+
         for i in range(self.args['worker']['num_gathers']):
             conn0, conn1 = mp.Pipe(duplex=True)
-            mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
+            mp.Process(target=gather_loop, args=(self.args, conn1, gather_conns[i], i), daemon=True).start()
             conn1.close()
+            for conn in gather_conns[i]:
+                conn.close()
             self.add_connection(conn0)
+
+        for i in range(self.args['worker']['num_parallel']):
+            mp.Process(target=open_worker, args=(self.args, worker_conns[i], i), daemon=True).start()
+            worker_conns[i].close()
 
 
 class WorkerServer(QueueCommunicator):
