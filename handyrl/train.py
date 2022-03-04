@@ -265,9 +265,7 @@ class Batcher:
     def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.shutdown_flag = False
-
-        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'], num_receivers=2)
+        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
@@ -275,7 +273,7 @@ class Batcher:
 
     def _worker(self, conn, bid):
         print('started batcher %d' % bid)
-        while not self.shutdown_flag:
+        while True:
             episodes = conn.recv()
             batch = make_batch(episodes, self.args)
             conn.send(batch)
@@ -308,10 +306,6 @@ class Batcher:
     def batch(self):
         return self.executor.recv()
 
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.executor.shutdown()
-
 
 class Trainer:
     def __init__(self, args, model):
@@ -328,7 +322,6 @@ class Trainer:
         self.batcher = Batcher(self.args, self.episodes)
         self.update_flag = False
         self.update_queue = queue.Queue(maxsize=1)
-        self.shutdown_flag = False
 
         self.wrapped_model = ModelWrapper(self.model)
         self.trained_model = self.wrapped_model
@@ -340,10 +333,6 @@ class Trainer:
         model, steps = self.update_queue.get()
         return model, steps
 
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.batcher.shutdown()
-
     def train(self):
         if self.optimizer is None:  # non-parametric model
             time.sleep(0.1)
@@ -354,7 +343,7 @@ class Trainer:
             self.trained_model.cuda()
         self.trained_model.train()
 
-        while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
+        while data_cnt == 0 or not self.update_flag:
             batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
@@ -388,12 +377,12 @@ class Trainer:
 
     def run(self):
         print('waiting training')
-        while not self.shutdown_flag and len(self.episodes) < self.args['minimum_episodes']:
+        while len(self.episodes) < self.args['minimum_episodes']:
             time.sleep(1)
-        if not self.shutdown_flag and self.optimizer is not None:
+        if self.optimizer is not None:
             self.batcher.run()
             print('started training')
-        while not self.shutdown_flag:
+        while True:
             model = self.train()
             self.update_flag = False
             self.update_queue.put((model, self.steps))
@@ -413,7 +402,6 @@ class Learner:
         self.env = make_env(env_args)
         eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
         self.eval_rate = max(args['eval_rate'], eval_modify_rate)
-        self.shutdown_flag = False
         self.flags = set()
 
         # trained datum
@@ -437,12 +425,6 @@ class Learner:
 
         # thread connection
         self.trainer = Trainer(args, self.model)
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.trainer.shutdown()
-        self.worker.shutdown()
-        self.thread.join()
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
@@ -549,7 +531,7 @@ class Learner:
         while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_returned_episodes < next_update_episodes:
+            while self.num_returned_episodes < next_update_episodes:
                 conn, (req, data) = self.worker.recv()
                 multi_req = isinstance(data, list)
                 if not multi_req:
@@ -618,16 +600,11 @@ class Learner:
         print('finished server')
 
     def run(self):
-        try:
-            # open training thread
-            self.thread = threading.Thread(target=self.trainer.run)
-            self.thread.start()
-            # open generator, evaluator
-            self.worker.run()
-            self.server()
-
-        finally:
-            self.shutdown()
+        # open training thread
+        threading.Thread(target=self.trainer.run, daemon=True).start()
+        # open generator, evaluator
+        self.worker.run()
+        self.server()
 
 
 def train_main(args):

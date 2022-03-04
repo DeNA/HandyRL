@@ -163,11 +163,8 @@ class Gather(QueueCommunicator):
 
 
 def gather_loop(args, conn, gaid):
-    try:
-        gather = Gather(args, conn, gaid)
-        gather.run()
-    finally:
-        gather.shutdown()
+    gather = Gather(args, conn, gaid)
+    gather.run()
 
 
 class WorkerCluster(QueueCommunicator):
@@ -197,7 +194,7 @@ class WorkerServer(QueueCommunicator):
         def entry_server(port):
             print('started entry server %d' % port)
             conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-            while not self.shutdown_flag:
+            while True:
                 conn = next(conn_acceptor)
                 if conn is not None:
                     worker_args = conn.recv()
@@ -213,17 +210,14 @@ class WorkerServer(QueueCommunicator):
         def worker_server(port):
             print('started worker server %d' % port)
             conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-            while not self.shutdown_flag:
+            while True:
                 conn = next(conn_acceptor)
                 if conn is not None:
                     self.add_connection(conn)
             print('finished worker server')
 
-        # use thread list of super class
-        self.threads.append(threading.Thread(target=entry_server, args=(9999,)))
-        self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-        self.threads[-2].start()
-        self.threads[-1].start()
+        threading.Thread(target=entry_server, args=(9999,), daemon=True).start()
+        threading.Thread(target=worker_server, args=(9998,), daemon=True).start()
 
 
 def entry(worker_args):

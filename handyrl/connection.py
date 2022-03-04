@@ -131,15 +131,12 @@ def open_multiprocessing_connections(num_process, target, args_func):
 
 
 class MultiProcessJobExecutor:
-    def __init__(self, func, send_generator, num_workers, postprocess=None, num_receivers=1):
+    def __init__(self, func, send_generator, num_workers, postprocess=None):
         self.send_generator = send_generator
         self.postprocess = postprocess
-        self.num_receivers = num_receivers
         self.conns = []
         self.waiting_conns = queue.Queue()
-        self.shutdown_flag = False
         self.output_queue = queue.Queue(maxsize=8)
-        self.threads = []
 
         for i in range(num_workers):
             conn0, conn1 = mp.Pipe(duplex=True)
@@ -148,26 +145,18 @@ class MultiProcessJobExecutor:
             self.conns.append(conn0)
             self.waiting_conns.put(conn0)
 
-    def shutdown(self):
-        self.shutdown_flag = True
-        for thread in self.threads:
-            thread.join()
-
     def recv(self):
         return self.output_queue.get()
 
     def start(self):
-        self.threads.append(threading.Thread(target=self._sender))
-        for i in range(self.num_receivers):
-            self.threads.append(threading.Thread(target=self._receiver, args=(i,)))
-        for thread in self.threads:
-            thread.start()
+        threading.Thread(target=self._sender, daemon=True).start()
+        threading.Thread(target=self._receiver, daemon=True).start()
 
     def _sender(self):
         print('start sender')
-        while not self.shutdown_flag:
+        while True:
             data = next(self.send_generator)
-            while not self.shutdown_flag:
+            while True:
                 try:
                     conn = self.waiting_conns.get(timeout=0.3)
                     conn.send(data)
@@ -176,17 +165,16 @@ class MultiProcessJobExecutor:
                     pass
         print('finished sender')
 
-    def _receiver(self, index):
-        print('start receiver %d' % index)
-        conns = [conn for i, conn in enumerate(self.conns) if i % self.num_receivers == index]
-        while not self.shutdown_flag:
-            tmp_conns = connection.wait(conns)
+    def _receiver(self):
+        print('start receiver')
+        while True:
+            tmp_conns = connection.wait(self.conns)
             for conn in tmp_conns:
                 data = conn.recv()
                 self.waiting_conns.put(conn)
                 if self.postprocess is not None:
                     data = self.postprocess(data)
-                while not self.shutdown_flag:
+                while True:
                     try:
                         self.output_queue.put(data, timeout=0.3)
                         break
@@ -202,18 +190,8 @@ class QueueCommunicator:
         self.conns = []
         for conn in conns:
             self.add_connection(conn)
-        self.shutdown_flag = False
-        self.threads = [
-            threading.Thread(target=self._send_thread),
-            threading.Thread(target=self._recv_thread),
-        ]
-        for thread in self.threads:
-            thread.start()
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        for thread in self.threads:
-            thread.join()
+        threading.Thread(target=self._send_thread, daemon=True).start()
+        threading.Thread(target=self._recv_thread, daemon=True).start()
 
     def recv(self):
         return self.input_queue.get()
@@ -229,7 +207,7 @@ class QueueCommunicator:
         self.conns.remove(conn)
 
     def _send_thread(self):
-        while not self.shutdown_flag:
+        while True:
             try:
                 conn, send_data = self.output_queue.get(timeout=0.3)
             except queue.Empty:
@@ -242,7 +220,7 @@ class QueueCommunicator:
                 self.disconnect(conn)
 
     def _recv_thread(self):
-        while not self.shutdown_flag:
+        while True:
             conns = connection.wait(self.conns, timeout=0.3)
             for conn in conns:
                 try:
@@ -253,7 +231,7 @@ class QueueCommunicator:
                 except EOFError:
                     self.disconnect(conn)
                     continue
-                while not self.shutdown_flag:
+                while True:
                     try:
                         self.input_queue.put((conn, recv_data), timeout=0.3)
                         break
