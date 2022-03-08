@@ -140,30 +140,20 @@ class MultiProcessJobExecutor:
         print('start sender')
         while True:
             data = next(self.send_generator)
-            while True:
-                try:
-                    conn = self.waiting_conns.get(timeout=0.3)
-                    conn.send(data)
-                    break
-                except queue.Empty:
-                    pass
+            conn = self.waiting_conns.get()
+            conn.send(data)
         print('finished sender')
 
     def _receiver(self):
         print('start receiver')
         while True:
-            tmp_conns = connection.wait(self.conns)
-            for conn in tmp_conns:
+            conns = connection.wait(self.conns)
+            for conn in conns:
                 data = conn.recv()
                 self.waiting_conns.put(conn)
                 if self.postprocess is not None:
                     data = self.postprocess(data)
-                while True:
-                    try:
-                        self.output_queue.put(data, timeout=0.3)
-                        break
-                    except queue.Full:
-                        pass
+                self.output_queue.put(data)
         print('finished receiver')
 
 
@@ -192,10 +182,7 @@ class QueueCommunicator:
 
     def _send_thread(self):
         while True:
-            try:
-                conn, send_data = self.output_queue.get(timeout=0.3)
-            except queue.Empty:
-                continue
+            conn, send_data = self.output_queue.get()
             try:
                 conn.send(send_data)
             except ConnectionResetError:
@@ -215,9 +202,4 @@ class QueueCommunicator:
                 except EOFError:
                     self.disconnect(conn)
                     continue
-                while True:
-                    try:
-                        self.input_queue.put((conn, recv_data), timeout=0.3)
-                        break
-                    except queue.Full:
-                        pass
+                self.input_queue.put((conn, recv_data))
