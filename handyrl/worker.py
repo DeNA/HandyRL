@@ -6,7 +6,6 @@
 import random
 import threading
 import time
-import functools
 from socket import gethostname
 from collections import deque
 import multiprocessing as mp
@@ -152,34 +151,46 @@ def gather_loop(args, conn, worker_conns, gaid):
     gather.run()
 
 
+def open_gathers(args, remote):
+    if 'num_gathers' not in args['worker']:
+        args['worker']['num_gathers'] = 1 + max(0, args['worker']['num_parallel'] - 1) // 16
+
+    gather_conns = [[] for _ in range(args['worker']['num_gathers'])]
+    worker_conns = []
+    server_conns = []  # server side (local only)
+
+    for i in range(args['worker']['num_parallel']):
+        conn0, conn1 = mp.Pipe(duplex=True)
+        gather_conns[i % args['worker']['num_gathers']].append(conn0)
+        worker_conns.append(conn1)
+
+    for i in range(args['worker']['num_gathers']):
+        if remote:
+            conn = connect_socket_connection(args['worker']['server_address'], 9998)
+        else:
+            conn0, conn = mp.Pipe(duplex=True)
+        mp.Process(target=gather_loop, args=(args, conn, gather_conns[i], i), daemon=True).start()
+        conn.close()
+        for conn in gather_conns[i]:
+            conn.close()
+        server_conns.append(conn0)
+
+    for i in range(args['worker']['num_parallel']):
+        mp.Process(target=open_worker, args=(args, worker_conns[i], i), daemon=True).start()
+        worker_conns[i].close()
+
+    return server_conns
+
+
 class WorkerCluster(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
 
     def run(self):
-        # open local connections
-        if 'num_gathers' not in self.args['worker']:
-            self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
-
-        gather_conns = [[] for _ in range(self.args['worker']['num_gathers'])]
-        worker_conns = []
-        for i in range(self.args['worker']['num_parallel']):
-            conn0, conn1 = mp.Pipe(duplex=True)
-            gather_conns[i % self.args['worker']['num_gathers']].append(conn0)
-            worker_conns.append(conn1)
-
-        for i in range(self.args['worker']['num_gathers']):
-            conn0, conn1 = mp.Pipe(duplex=True)
-            mp.Process(target=gather_loop, args=(self.args, conn1, gather_conns[i], i), daemon=True).start()
-            conn1.close()
-            for conn in gather_conns[i]:
-                conn.close()
-            self.add_connection(conn0)
-
-        for i in range(self.args['worker']['num_parallel']):
-            mp.Process(target=open_worker, args=(self.args, worker_conns[i], i), daemon=True).start()
-            worker_conns[i].close()
+        server_conns = open_gathers(self.args, remote=False)
+        for conn in server_conns:
+            self.add_connection(conn)
 
 
 class WorkerServer(QueueCommunicator):
@@ -230,9 +241,6 @@ def entry(worker_args):
 class RemoteWorkerCluster:
     def __init__(self, args):
         args['address'] = gethostname()
-        if 'num_gathers' not in args:
-            args['num_gathers'] = 1 + max(0, args['num_parallel'] - 1) // 16
-
         self.args = args
 
     def run(self):
@@ -240,20 +248,9 @@ class RemoteWorkerCluster:
         print(args)
         prepare_env(args['env'])
 
-        # open worker
-        process = []
-        try:
-            for i in range(self.args['num_gathers']):
-                conn = connect_socket_connection(self.args['server_address'], 9998)
-                p = mp.Process(target=gather_loop, args=(args, conn, i))
-                p.start()
-                conn.close()
-                process.append(p)
-            while True:
-                time.sleep(100)
-        finally:
-            for p in process:
-                p.terminate()
+        open_gathers(args, remote=True)
+        while True:
+            time.sleep(100)
 
 
 def worker_main(args):
