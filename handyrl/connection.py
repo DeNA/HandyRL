@@ -87,12 +87,6 @@ def accept_socket_connection(sock):
         return None
 
 
-def listen_socket_connections(n, port):
-    sock = open_socket_connection(port)
-    sock.listen(n)
-    return [accept_socket_connection(sock) for _ in range(n)]
-
-
 def connect_socket_connection(host, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
