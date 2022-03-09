@@ -138,12 +138,19 @@ class MultiProcessJobExecutor:
         self.waiting_conns = queue.Queue()
         self.output_queue = queue.Queue(maxsize=8)
 
+        self.processes = []
         for i in range(num_workers):
             conn0, conn1 = mp.Pipe(duplex=True)
-            mp.Process(target=func, args=(conn1, i)).start()
+            p = mp.Process(target=func, args=(conn1, i))
+            p.start()
+            self.processes.append(p)
             conn1.close()
             self.conns.append(conn0)
             self.waiting_conns.put(conn0)
+
+    def shutdown(self):
+        for p in self.processes:
+            p.terminate()
 
     def recv(self):
         return self.output_queue.get()

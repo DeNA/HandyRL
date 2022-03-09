@@ -171,6 +171,11 @@ class WorkerCluster(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
+        self.processes = []
+
+    def shutdown(self):
+        for p in self.processes:
+            p.terminate()
 
     def run(self):
         # open local connections
@@ -178,7 +183,9 @@ class WorkerCluster(QueueCommunicator):
             self.args['worker']['num_gathers'] = 1 + max(0, self.args['worker']['num_parallel'] - 1) // 16
         for i in range(self.args['worker']['num_gathers']):
             conn0, conn1 = mp.Pipe(duplex=True)
-            mp.Process(target=gather_loop, args=(self.args, conn1, i)).start()
+            p = mp.Process(target=gather_loop, args=(self.args, conn1, i))
+            p.start()
+            self.processes.append(p)
             conn1.close()
             self.add_connection(conn0)
 
@@ -188,6 +195,9 @@ class WorkerServer(QueueCommunicator):
         super().__init__()
         self.args = args
         self.total_worker_count = 0
+
+    def shutdown(self):
+        pass
 
     def run(self):
         # prepare listening connections

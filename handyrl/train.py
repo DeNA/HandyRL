@@ -605,6 +605,8 @@ class Learner:
         # open generator, evaluator
         self.worker.run()
         self.server()
+        self.worker.shutdown()
+        self.trainer.batcher.executor.shutdown()
 
 
 def train_main(args):
