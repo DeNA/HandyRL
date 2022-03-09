@@ -414,7 +414,7 @@ def eval_client_main(args, argv):
             host = argv[1] if len(argv) >= 2 else 'localhost'
             conn = connect_socket_connection(host, network_match_port)
             env_args = conn.recv()
-        except EOFError:
+        except ConnectionResetError:
             break
 
         model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
