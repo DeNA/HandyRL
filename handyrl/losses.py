@@ -68,7 +68,7 @@ def compute_target(algorithm, values, returns, rewards, lmb, gamma, rhos, cs, ma
     if algorithm == 'MC':
         return monte_carlo(values, returns)
 
-    lambda_ = lmb + (1 - lmb) * masks
+    lambda_ = lmb + (1 - lmb) * (1 - masks)
 
     if algorithm == 'TD':
         return temporal_difference(values, returns, rewards, lambda_, gamma)
