@@ -140,7 +140,7 @@ def exec_network_match(env, network_agents, critic=None, show=False, game_args={
     return outcome
 
 
-def build_agent(raw, env):
+def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
     elif raw == 'rulebase':
