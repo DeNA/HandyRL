@@ -11,6 +11,7 @@ import random
 import bz2
 import pickle
 import warnings
+import queue
 from collections import deque
 
 import numpy as np
@@ -56,8 +57,9 @@ def make_batch(episodes, args):
         if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])  # template for padding
+        # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))
+        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])
 
         # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
@@ -112,7 +114,8 @@ def make_batch(episodes, args):
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'selected_prob': prob,
+        'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -324,10 +327,9 @@ class Trainer:
         lr = self.default_lr * self.data_cnt_ema
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
-        self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
-        self.updated_model = None, 0
         self.update_flag = False
+        self.update_queue = queue.Queue(maxsize=1)
         self.shutdown_flag = False
 
         self.wrapped_model = ModelWrapper(self.model)
@@ -336,27 +338,9 @@ class Trainer:
             self.trained_model = nn.DataParallel(self.wrapped_model)
 
     def update(self):
-        if len(self.episodes) < self.args['minimum_episodes']:
-            return None, 0  # return None before training
         self.update_flag = True
-        while True:
-            time.sleep(0.1)
-            model, steps = self.recheck_update()
-            if model is not None:
-                break
+        model, steps = self.update_queue.get()
         return model, steps
-
-    def report_update(self, model, steps):
-        self.lock.acquire()
-        self.update_flag = False
-        self.updated_model = model, steps
-        self.lock.release()
-
-    def recheck_update(self):
-        self.lock.acquire()
-        flag = self.update_flag
-        self.lock.release()
-        return (None, -1) if flag else self.updated_model
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -406,15 +390,15 @@ class Trainer:
 
     def run(self):
         print('waiting training')
+        while not self.shutdown_flag and len(self.episodes) < self.args['minimum_episodes']:
+            time.sleep(1)
+        if not self.shutdown_flag and self.optimizer is not None:
+            self.batcher.run()
+            print('started training')
         while not self.shutdown_flag:
-            if len(self.episodes) < self.args['minimum_episodes']:
-                time.sleep(1)
-                continue
-            if self.steps == 0 and self.optimizer is not None:
-                self.batcher.run()
-                print('started training')
             model = self.train()
-            self.report_update(model, self.steps)
+            self.update_flag = False
+            self.update_queue.put((model, self.steps))
         print('finished training')
 
 
@@ -443,6 +427,7 @@ class Learner:
         # generated datum
         self.generation_results = {}
         self.num_episodes = 0
+        self.num_returned_episodes = 0
 
         # evaluated datum
         self.results = {}
@@ -486,6 +471,9 @@ class Learner:
                 outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+            self.num_returned_episodes += 1
+            if self.num_returned_episodes % 100 == 0:
+                print(self.num_returned_episodes, end=' ', flush=True)
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
@@ -532,7 +520,8 @@ class Learner:
                 name_tag = ' (%s)' % name if name != '' else ''
                 print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+            keys = self.results_per_opponent[self.model_epoch]
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1 and len(keys) <= 1:
                 output_wp('', self.results[self.model_epoch])
             else:
                 output_wp('total', self.results[self.model_epoch])
@@ -563,7 +552,7 @@ class Learner:
         while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_episodes < next_update_episodes:
+            while not self.shutdown_flag and self.num_returned_episodes < next_update_episodes:
                 conn, (req, data) = self.worker.recv()
                 multi_req = isinstance(data, list)
                 if not multi_req:
@@ -589,8 +578,6 @@ class Learner:
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
-                            if self.num_episodes % 100 == 0:
-                                print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
