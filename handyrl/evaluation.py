@@ -300,18 +300,21 @@ class OnnxModel:
 
         self.ort_session = onnxruntime.InferenceSession(self.model_path, sess_options=opts)
 
-    def init_hidden(self):
+    def init_hidden(self, batch_size=None):
         if self.ort_session is None:
             self._open_session()
         hidden_inputs = [y for y in self.ort_session.get_inputs() if y.name.startswith('hidden')]
         if len(hidden_inputs) == 0:
             return None
+
+        if batch_size is None:
+            batch_size = []
         import numpy as np
         type_map = {
             'tensor(float)': np.float32,
             'tensor(int64)': np.int64,
         }
-        hidden_tensors = [np.zeros(y.shape[1:], dtype=type_map[y.type]) for y in hidden_inputs]
+        hidden_tensors = [np.zeros(batch_size + list(y.shape[1:]), dtype=type_map[y.type]) for y in hidden_inputs]
         return hidden_tensors
 
     def inference(self, x, hidden=None, batch_input=False):
