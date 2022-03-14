@@ -24,7 +24,7 @@ if __name__ == '__main__':
         main(args)
     elif mode == '--worker' or mode == '-w':
         from handyrl.worker import worker_main as main
-        main(args)
+        main(args, sys.argv[2:])
     elif mode == '--eval' or mode == '-e':
         from handyrl.evaluation import eval_main as main
         main(args, sys.argv[2:])
