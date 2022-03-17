@@ -1,0 +1,87 @@
+
+# Usage: python3 script/make_swa_model.py [FINAL_EPOCH] [EPOCHS] [EPOCH_STEP]
+
+import os
+import sys
+
+sys.path.append('./')
+
+import yaml
+
+import torch
+from torch.optim.swa_utils import AveragedModel
+
+from handyrl.environment import make_env
+
+
+#
+# SWA (running equal averaging)
+#
+
+model_dir = 'models'
+saved_model_path = os.path.join('models', 'swa.pth')
+
+ed, length = int(sys.argv[1]), int(sys.argv[2])
+step = 1
+if len(sys.argv) >= 4:
+    step = int(sys.argv[3])
+
+model_ids = [str(i) + '.pth' for i in range(ed - length + 1, ed + 1, step)]
+
+with open('config.yaml') as f:
+    args = yaml.safe_load(f)
+
+env = make_env(args['env_args'])
+model = env.net()
+model.load_state_dict(torch.load(os.path.join(model_dir, model_ids[0])), strict=True)
+
+def _avg_fn(averaged_model_parameter, model_parameter, num_averaged):
+    return averaged_model_parameter + (model_parameter - averaged_model_parameter) / (num_averaged + 1)
+
+swa_model = AveragedModel(model, avg_fn=_avg_fn)
+
+for model_id in model_ids:
+    model.load_state_dict(torch.load(os.path.join(model_dir, model_id)), strict=True)
+    swa_model.update_parameters(model)
+
+# Update BN
+def _get_running_stats(module, running_stats):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        if module not in running_stats:
+            running_stats[module] = {}
+        running_stats[module]['running_mean'] = module.running_mean
+        running_stats[module]['running_var'] = module.running_var
+
+# get averaged running stats from SWA model
+averaged_running_stats = {}
+for model_id in model_ids:
+    running_stats = {}
+    model.load_state_dict(torch.load(os.path.join(model_dir, model_id)), strict=True)
+    model.apply(lambda module: _get_running_stats(module, running_stats))
+    for name, module in dict(model.named_modules()).items():
+        if not issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+            continue
+        if name not in averaged_running_stats:
+            averaged_running_stats[name] = {
+                'running_mean': torch.zeros_like(module.running_mean),
+                'running_var': torch.zeros_like(module.running_var),}
+        averaged_running_stats[name]['running_mean'] += module.running_mean / len(model_ids)
+        averaged_running_stats[name]['running_var'] += module.running_var / len(model_ids)
+
+# set averaged running stats into SWA model
+for name, module in dict(swa_model.module.named_modules()).items():
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        module.running_mean.copy_(averaged_running_stats[name]['running_mean'])
+        module.running_var.copy_(averaged_running_stats[name]['running_var'])
+
+# Save SWA model
+torch.save(swa_model.module.state_dict(), saved_model_path)
+
+print('Saved %s' % saved_model_path)
+
+#
+# Test (load in strict=True)
+#
+
+model = env.net()
+model.load_state_dict(torch.load(saved_model_path), strict=True)
