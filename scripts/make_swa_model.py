@@ -45,19 +45,10 @@ for model_id in model_ids:
     swa_model.update_parameters(model)
 
 # Update BN
-def _get_running_stats(module, running_stats):
-    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
-        if module not in running_stats:
-            running_stats[module] = {}
-        running_stats[module]['running_mean'] = module.running_mean
-        running_stats[module]['running_var'] = module.running_var
-
 # get averaged running stats from SWA model
 averaged_running_stats = {}
 for model_id in model_ids:
-    running_stats = {}
     model.load_state_dict(torch.load(os.path.join(model_dir, model_id)), strict=True)
-    model.apply(lambda module: _get_running_stats(module, running_stats))
     for name, module in dict(model.named_modules()).items():
         if not issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
             continue
