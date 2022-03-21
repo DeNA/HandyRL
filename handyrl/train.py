@@ -57,8 +57,9 @@ def make_batch(episodes, args):
         if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])  # template for padding
+        # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))
+        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])
 
         # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
@@ -113,7 +114,8 @@ def make_batch(episodes, args):
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'selected_prob': prob,
+        'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -500,7 +502,8 @@ class Learner:
                 name_tag = ' (%s)' % name if name != '' else ''
                 print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+            keys = self.results_per_opponent[self.model_epoch]
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1 and len(keys) <= 1:
                 output_wp('', self.results[self.model_epoch])
             else:
                 output_wp('total', self.results[self.model_epoch])
