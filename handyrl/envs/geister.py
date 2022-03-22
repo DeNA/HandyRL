@@ -343,8 +343,9 @@ class Environment(BaseEnvironment):
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
             s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
-        s += 'color = ' + self.C[self.color] + '\n'
-        s += 'record = ' + self.record_string()
+        s += 'remained = B:%d R:%d b:%d r:%d' % tuple(self.piece_cnt) + '\n'
+        s += 'turn = ' + str(self.turn_count).ljust(3) + ' color = ' + self.C[self.color]
+        # s += 'record = ' + self.record_string()
         return s
 
     def _set(self, layout):
