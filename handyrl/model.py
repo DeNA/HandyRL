@@ -71,7 +71,7 @@ class RandomModel(nn.Module):
         wrapped_model = ModelWrapper(model)
         hidden = wrapped_model.init_hidden()
         outputs = wrapped_model.inference(x, hidden, legal_actions=[])
-        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items()}
+        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items() if key != 'hidden'}
 
     def inference(self, *args, **kwargs):
         outputs = copy.deepcopy(self.output_dict)

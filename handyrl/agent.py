@@ -85,12 +85,12 @@ class EnsembleAgent(Agent):
         outputs = {}
         for i, model in enumerate(self.model):
             o = model.inference(obs, self.hidden[i])
-            for k, v in o:
+            for k, v in o.items():
                 if k == 'hidden':
                     self.hidden[i] = v
                 else:
-                    outputs[k] = outputs.get(k, []) + [o]
-        for k, vl in outputs:
+                    outputs[k] = outputs.get(k, []) + [v]
+        for k, vl in outputs.items():
             outputs[k] = np.mean(vl, axis=0)
         return outputs
 
