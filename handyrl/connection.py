@@ -2,7 +2,6 @@
 # Licensed under The MIT License [see LICENSE for details]
 
 import io
-import time
 import struct
 import socket
 import pickle
@@ -200,8 +199,7 @@ class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
-        self.conns = {}
-        self.conn_index = 0
+        self.conns = []
         for conn in conns:
             self.add_connection(conn)
         self.shutdown_flag = False
@@ -224,12 +222,11 @@ class QueueCommunicator:
         self.output_queue.put((conn, send_data))
 
     def add_connection(self, conn):
-        self.conns[conn] = self.conn_index
-        self.conn_index += 1
+        self.conns.append(conn)
 
     def disconnect(self, conn):
         print('disconnected')
-        self.conns.pop(conn, None)
+        self.conns.remove(conn)
 
     def _send_thread(self):
         while not self.shutdown_flag:
