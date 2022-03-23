@@ -37,7 +37,10 @@ class NetworkAgentClient:
 
     def run(self):
         while True:
-            command, args = self.conn.recv()
+            try:
+                command, args = self.conn.recv()
+            except ConnectionResetError:
+                break
             if command == 'quit':
                 break
             elif command == 'outcome':
@@ -76,7 +79,7 @@ class NetworkAgent:
         return send_recv(self.conn, ('observe', [player]))
 
 
-def exec_match(env, agents, critic, show=False, game_args={}):
+def exec_match(env, agents, critic=None, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
@@ -105,7 +108,7 @@ def exec_match(env, agents, critic, show=False, game_args={}):
     return outcome
 
 
-def exec_network_match(env, network_agents, critic, show=False, game_args={}):
+def exec_network_match(env, network_agents, critic=None, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
@@ -137,7 +140,7 @@ def exec_network_match(env, network_agents, critic, show=False, game_args={}):
     return outcome
 
 
-def build_agent(raw, env):
+def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
     elif raw == 'rulebase':
@@ -165,7 +168,7 @@ class Evaluator:
             else:
                 agents[p] = Agent(model)
 
-        outcome = exec_match(self.env, agents, None)
+        outcome = exec_match(self.env, agents)
         if outcome is None:
             print('None episode in evaluation!')
             return None
@@ -297,18 +300,21 @@ class OnnxModel:
 
         self.ort_session = onnxruntime.InferenceSession(self.model_path, sess_options=opts)
 
-    def init_hidden(self):
+    def init_hidden(self, batch_size=None):
         if self.ort_session is None:
             self._open_session()
         hidden_inputs = [y for y in self.ort_session.get_inputs() if y.name.startswith('hidden')]
         if len(hidden_inputs) == 0:
             return None
+
+        if batch_size is None:
+            batch_size = []
         import numpy as np
         type_map = {
             'tensor(float)': np.float32,
             'tensor(int64)': np.int64,
         }
-        hidden_tensors = [np.zeros(y.shape[1:], dtype=type_map[y.type]) for y in hidden_inputs]
+        hidden_tensors = [np.zeros(batch_size + list(y.shape[1:]), dtype=type_map[y.type]) for y in hidden_inputs]
         return hidden_tensors
 
     def inference(self, x, hidden=None, batch_input=False):
@@ -414,7 +420,7 @@ def eval_client_main(args, argv):
             host = argv[1] if len(argv) >= 2 else 'localhost'
             conn = connect_socket_connection(host, network_match_port)
             env_args = conn.recv()
-        except EOFError:
+        except ConnectionResetError:
             break
 
         model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
