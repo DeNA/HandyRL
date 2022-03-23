@@ -11,6 +11,7 @@ import random
 import bz2
 import pickle
 import warnings
+import queue
 from collections import deque
 
 import numpy as np
@@ -56,8 +57,9 @@ def make_batch(episodes, args):
         if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])  # template for padding
+        # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))
+        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])
 
         # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
@@ -112,7 +114,8 @@ def make_batch(episodes, args):
 
     return {
         'observation': obs,
-        'selected_prob': prob, 'value': v,
+        'selected_prob': prob,
+        'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -134,46 +137,49 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P, ...)
+    observations = batch['observation']  # (..., B, T, P or 1, ...)
+    batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
-        obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
+        obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
         outputs = model(obs, None)
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
         outputs = {}
-        for t in range(batch['turn_mask'].size(1)):
-            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
+        for t in range(batch_shape[1]):
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             if args['turn_based_training'] and not args['observation']:
                 hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             else:
-                hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
+                hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
             if t < args['burn_in_steps']:
                 model.eval()
                 with torch.no_grad():
-                    outputs_= model(obs, hidden_)
+                    outputs_ = model(obs, hidden_)
             else:
                 if not model.training:
                     model.train()
                 outputs_ = model(obs, hidden_)
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
-            # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True) - batch['action_mask']
+            o = o.mul(batch['turn_mask'])
+            if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
+                o = o.sum(2, keepdim=True)  # gather turn player's policies
+            outputs[k] = o - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
             outputs[k] = o.mul(batch['observation_mask'])
@@ -193,9 +199,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     losses = {}
     dcnt = tmasks.sum().item()
-    turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
-    losses['p'] = (-log_selected_policies * turn_advantages).sum()
+    losses['p'] = (-log_selected_policies * total_advantages).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
     if 'return' in outputs:
@@ -214,8 +219,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args)
     if args['burn_in_steps'] > 0:
-        batch = map_r(batch, lambda v: v[args['burn_in_steps']:])
-        outputs = map_r(outputs, lambda v: v[args['burn_in_steps']:])
+        batch = map_r(batch, lambda v: v[:, args['burn_in_steps']:] if v.size(1) > 1 else v)
+        outputs = map_r(outputs, lambda v: v[:, args['burn_in_steps']:])
 
     actions = batch['action']
     emasks = batch['episode_mask']
@@ -322,10 +327,9 @@ class Trainer:
         lr = self.default_lr * self.data_cnt_ema
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
-        self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
-        self.updated_model = None, 0
         self.update_flag = False
+        self.update_queue = queue.Queue(maxsize=1)
         self.shutdown_flag = False
 
         self.wrapped_model = ModelWrapper(self.model)
@@ -334,27 +338,9 @@ class Trainer:
             self.trained_model = nn.DataParallel(self.wrapped_model)
 
     def update(self):
-        if len(self.episodes) < self.args['minimum_episodes']:
-            return None, 0  # return None before training
         self.update_flag = True
-        while True:
-            time.sleep(0.1)
-            model, steps = self.recheck_update()
-            if model is not None:
-                break
+        model, steps = self.update_queue.get()
         return model, steps
-
-    def report_update(self, model, steps):
-        self.lock.acquire()
-        self.update_flag = False
-        self.updated_model = model, steps
-        self.lock.release()
-
-    def recheck_update(self):
-        self.lock.acquire()
-        flag = self.update_flag
-        self.lock.release()
-        return (None, -1) if flag else self.updated_model
 
     def shutdown(self):
         self.shutdown_flag = True
@@ -404,15 +390,15 @@ class Trainer:
 
     def run(self):
         print('waiting training')
+        while not self.shutdown_flag and len(self.episodes) < self.args['minimum_episodes']:
+            time.sleep(1)
+        if not self.shutdown_flag and self.optimizer is not None:
+            self.batcher.run()
+            print('started training')
         while not self.shutdown_flag:
-            if len(self.episodes) < self.args['minimum_episodes']:
-                time.sleep(1)
-                continue
-            if self.steps == 0 and self.optimizer is not None:
-                self.batcher.run()
-                print('started training')
             model = self.train()
-            self.report_update(model, self.steps)
+            self.update_flag = False
+            self.update_queue.put((model, self.steps))
         print('finished training')
 
 
@@ -441,6 +427,7 @@ class Learner:
         # generated datum
         self.generation_results = {}
         self.num_episodes = 0
+        self.num_returned_episodes = 0
 
         # evaluated datum
         self.results = {}
@@ -484,6 +471,9 @@ class Learner:
                 outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+            self.num_returned_episodes += 1
+            if self.num_returned_episodes % 100 == 0:
+                print(self.num_returned_episodes, end=' ', flush=True)
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
@@ -530,7 +520,8 @@ class Learner:
                 name_tag = ' (%s)' % name if name != '' else ''
                 print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+            keys = self.results_per_opponent[self.model_epoch]
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1 and len(keys) <= 1:
                 output_wp('', self.results[self.model_epoch])
             else:
                 output_wp('total', self.results[self.model_epoch])
@@ -561,7 +552,7 @@ class Learner:
         while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
             # no update call before storing minimum number of episodes + 1 age
             next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_episodes < next_update_episodes:
+            while not self.shutdown_flag and self.num_returned_episodes < next_update_episodes:
                 conn, (req, data) = self.worker.recv()
                 multi_req = isinstance(data, list)
                 if not multi_req:
@@ -587,8 +578,6 @@ class Learner:
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
-                            if self.num_episodes % 100 == 0:
-                                print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
