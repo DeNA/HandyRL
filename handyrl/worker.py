@@ -266,7 +266,7 @@ class RemoteWorkerCluster:
 def worker_main(args, argv):
     # offline generation worker
     worker_args = args['worker_args']
-    if len(argv) >= 1: 
+    if len(argv) >= 1:
         worker_args['num_parallel'] = int(argv[0])
 
     worker = RemoteWorkerCluster(args=worker_args)
