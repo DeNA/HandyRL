@@ -56,7 +56,8 @@ class Agent:
         return outputs
 
     def action(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
+        obs = env.observation(player)
+        outputs = self.plan(obs)
         actions = env.legal_actions(player)
         p = outputs['policy']
         v = outputs.get('value', None)
@@ -74,7 +75,8 @@ class Agent:
             return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
 
     def observe(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
+        obs = env.observation(player)
+        outputs = self.plan(obs)
         v = outputs.get('value', None)
         if show:
             print_outputs(env, None, v)
