@@ -183,8 +183,8 @@ class QueueCommunicator:
         threading.Thread(target=self._send_thread, daemon=True).start()
         threading.Thread(target=self._recv_thread, daemon=True).start()
 
-    def recv(self):
-        return self.input_queue.get()
+    def recv(self, timeout=None):
+        return self.input_queue.get(timeout=timeout)
 
     def send(self, conn, send_data):
         self.output_queue.put((conn, send_data))
