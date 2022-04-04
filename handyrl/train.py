@@ -549,17 +549,24 @@ class Learner:
         # returns as list if getting multiple requests as list
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
-        while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
-            # no update call before storing minimum number of episodes + 1 age
-            next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_returned_episodes < next_update_episodes:
-                conn, (req, data) = self.worker.recv()
-                multi_req = isinstance(data, list)
-                if not multi_req:
-                    data = [data]
-                send_data = []
+        # no update call before storing minimum number of episodes + 1 epoch
+        next_update_episodes = prev_update_episodes + self.args['update_episodes']
 
-                if req == 'args':
+        while len(self.worker.conns) > 0:
+            try:
+                conn, (req, data) = self.worker.recv(timeout=0.3)
+            except queue.Empty:
+                continue
+
+            multi_req = isinstance(data, list)
+            if not multi_req:
+                data = [data]
+            send_data = []
+
+            if req == 'args':
+                if self.shutdown_flag:
+                    send_data = [None] * len(data)
+                else:
                     for _ in data:
                         args = {'model_id': {}}
 
@@ -591,33 +598,38 @@ class Learner:
 
                         send_data.append(args)
 
-                elif req == 'episode':
-                    # report generated episodes
-                    self.feed_episodes(data)
-                    send_data = [None] * len(data)
+            elif req == 'episode':
+                # report generated episodes
+                self.feed_episodes(data)
+                send_data = [None] * len(data)
 
-                elif req == 'result':
-                    # report evaluation results
-                    self.feed_results(data)
-                    send_data = [None] * len(data)
+            elif req == 'result':
+                # report evaluation results
+                self.feed_results(data)
+                send_data = [None] * len(data)
 
-                elif req == 'model':
-                    for model_id in data:
-                        model = self.model
-                        if model_id != self.model_epoch and model_id > 0:
-                            try:
-                                model = copy.deepcopy(self.model)
-                                model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
-                            except:
-                                # return latest model if failed to load specified model
-                                pass
-                        send_data.append(pickle.dumps(model))
+            elif req == 'model':
+                for model_id in data:
+                    model = self.model
+                    if model_id != self.model_epoch and model_id > 0:
+                        try:
+                            model = copy.deepcopy(self.model)
+                            model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
+                        except:
+                            # return latest model if failed to load specified model
+                            pass
+                    send_data.append(pickle.dumps(model))
 
-                if not multi_req and len(send_data) == 1:
-                    send_data = send_data[0]
-                self.worker.send(conn, send_data)
-            prev_update_episodes = next_update_episodes
-            self.update()
+            if not multi_req and len(send_data) == 1:
+                send_data = send_data[0]
+            self.worker.send(conn, send_data)
+
+            if self.num_returned_episodes >= next_update_episodes:
+                prev_update_episodes = next_update_episodes
+                next_update_episodes = prev_update_episodes + self.args['update_episodes']
+                self.update()
+                if self.args['epochs'] >= 0 and self.model_epoch >= self.args['epochs']:
+                    self.shutdown_flag = True
         print('finished server')
 
     def run(self):

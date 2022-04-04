@@ -12,6 +12,7 @@ from collections import deque
 import multiprocessing as mp
 import pickle
 import copy
+import queue
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
@@ -65,6 +66,8 @@ class Worker:
     def run(self):
         while True:
             args = send_recv(self.conn, ('args', None))
+            if args is None:
+                break
             role = args['role']
 
             models = {}
@@ -125,8 +128,12 @@ class Gather(QueueCommunicator):
         print('finished gather %d' % self.gather_id)
 
     def run(self):
-        while True:
-            conn, (command, args) = self.recv()
+        while len(self.conns) > 0:
+            try:
+                conn, (command, args) = self.recv(timeout=0.3)
+            except queue.Empty:
+                continue
+
             if command == 'args':
                 # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:

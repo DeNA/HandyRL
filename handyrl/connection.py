@@ -215,8 +215,8 @@ class QueueCommunicator:
         for thread in self.threads:
             thread.join()
 
-    def recv(self):
-        return self.input_queue.get()
+    def recv(self, timeout=None):
+        return self.input_queue.get(timeout=timeout)
 
     def send(self, conn, send_data):
         self.output_queue.put((conn, send_data))
