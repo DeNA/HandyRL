@@ -200,27 +200,25 @@ class WorkerServer(QueueCommunicator):
         # prepare listening connections
         def entry_server(port):
             print('started entry server %d' % port)
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
+            conn_acceptor = accept_socket_connections(port=port)
             while True:
                 conn = next(conn_acceptor)
-                if conn is not None:
-                    worker_args = conn.recv()
-                    print('accepted connection from %s!' % worker_args['address'])
-                    worker_args['base_worker_id'] = self.total_worker_count
-                    self.total_worker_count += worker_args['num_parallel']
-                    args = copy.deepcopy(self.args)
-                    args['worker'] = worker_args
-                    conn.send(args)
-                    conn.close()
+                worker_args = conn.recv()
+                print('accepted connection from %s!' % worker_args['address'])
+                worker_args['base_worker_id'] = self.total_worker_count
+                self.total_worker_count += worker_args['num_parallel']
+                args = copy.deepcopy(self.args)
+                args['worker'] = worker_args
+                conn.send(args)
+                conn.close()
             print('finished entry server')
 
         def worker_server(port):
             print('started worker server %d' % port)
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
+            conn_acceptor = accept_socket_connections(port=port)
             while True:
                 conn = next(conn_acceptor)
-                if conn is not None:
-                    self.add_connection(conn)
+                self.add_connection(conn)
             print('finished worker server')
 
         threading.Thread(target=entry_server, args=(9999,), daemon=True).start()
