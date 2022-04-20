@@ -263,7 +263,11 @@ class RemoteWorkerCluster:
                 p.terminate()
 
 
-def worker_main(args):
+def worker_main(args, argv):
     # offline generation worker
-    worker = RemoteWorkerCluster(args=args['worker_args'])
+    worker_args = args['worker_args']
+    if len(argv) >= 1:
+        worker_args['num_parallel'] = int(argv[0])
+
+    worker = RemoteWorkerCluster(args=worker_args)
     worker.run()
