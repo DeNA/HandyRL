@@ -183,6 +183,9 @@ class QueueCommunicator:
         threading.Thread(target=self._send_thread, daemon=True).start()
         threading.Thread(target=self._recv_thread, daemon=True).start()
 
+    def connection_count(self):
+        return len(self.conns)
+
     def recv(self, timeout=None):
         return self.input_queue.get(timeout=timeout)
 
