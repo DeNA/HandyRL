@@ -24,7 +24,7 @@ class RandomAgent:
 
 class RuleBasedAgent(RandomAgent):
     def __init__(self, key=None):
-        self.key = None
+        self.key = key
 
     def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
