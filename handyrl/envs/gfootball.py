@@ -111,12 +111,12 @@ def feature_from_states(states, info, number):
 
     HISTORY_LENGTH = 8
 
-    obs_history_ = [s['observation'][number] for s in reversed(states[-HISTORY_LENGTH:])]
-    obs_history = obs_history_ + [obs_history_[-1]] * (HISTORY_LENGTH - len(obs_history_))
-    obs = obs_history[0]
+    obs_history_ = [s['observation'][number] for s in states[-HISTORY_LENGTH:]]
+    obs_history = [obs_history_[0]] * (HISTORY_LENGTH - len(obs_history_)) + obs_history_
+    obs = obs_history[-1]
 
-    action_history_ = [s['action'][number] for s in reversed(states[-HISTORY_LENGTH:])]
-    action_history = action_history_ + [0] * (HISTORY_LENGTH - len(action_history_ ))
+    action_history_ = [s['action'][number] for s in states[-HISTORY_LENGTH:]]
+    action_history = [0] * (HISTORY_LENGTH - len(action_history_ )) + action_history_
 
     """
     ・left players (x)
