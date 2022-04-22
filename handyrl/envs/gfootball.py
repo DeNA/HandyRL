@@ -652,8 +652,16 @@ class Environment(BaseEnvironment):
 
         return state
 
-    def rule_based_action(self, player=None, number=0):
-        return 19
+    def rule_based_action(self, player=None, number=0, key=None):
+        if key is None:
+            key = 'builtin_ai'
+
+        if key == 'builtin_ai':
+            return 19
+        elif key == 'idle':
+            return 14
+        elif key == 'right':
+            return 5
 
     def net(self):
         return FootballNet()
