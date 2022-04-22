@@ -652,6 +652,9 @@ class Environment(BaseEnvironment):
 
         return state
 
+    def rule_based_action(self, player=None, number=0):
+        return 19
+
     def net(self):
         return FootballNet()
 
