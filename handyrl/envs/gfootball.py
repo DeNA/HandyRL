@@ -295,6 +295,8 @@ def feature_from_states(states, info, number):
         left_minus_ball_y,
         left_minus_ball_direction_x,
         left_minus_ball_direction_y,
+        left_player_direction_x,
+        left_player_direction_y,
     ]).astype(np.float32)
 
     cnn_right = np.stack([
@@ -312,8 +314,6 @@ def feature_from_states(states, info, number):
         right_minus_ball_y,
         right_minus_ball_direction_x,
         right_minus_ball_direction_y,
-        left_player_direction_x,
-        left_player_direction_y,
         right_player_direction_x,
         right_player_direction_y,
     ]).astype(np.float32)
