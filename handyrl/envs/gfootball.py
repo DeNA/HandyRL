@@ -57,6 +57,12 @@ class FootballNet(nn.Module):
 
         def forward(self, x):
             x = x['cnn_feature']
+            x = torch.cat([
+                x['2d'],
+                x['left'].unsqueeze(-1).repeat(1, 1, 1, 11),
+                x['right'].unsqueeze(-2).repeat(1, 1, 11, 1),
+                x['scalar'].unsqueeze(-1).unsqueeze(-1).repeat(1, 1, 11, 11),
+            ], 1)
             x = self.conv1(x)
             x = self.pool1(x)
             x = self.conv2(x)
@@ -145,120 +151,118 @@ def feature_from_states(states, info, number):
 
     # left players
     obs_left_team = np.array(obs['left_team'])
-    left_player_x = np.repeat(obs_left_team[:, 0][..., None], 11, axis=1)
-    left_player_y = np.repeat(obs_left_team[:, 1][..., None], 11, axis=1)
+    left_player_x = obs_left_team[:, 0]
+    left_player_y = obs_left_team[:, 1]
 
     # right players
     obs_right_team = np.array(obs['right_team'])
-    right_player_x = np.repeat(obs_right_team[:, 0][..., None], 11, axis=1).transpose(1, 0)
-    right_player_y = np.repeat(obs_right_team[:, 1][..., None], 11, axis=1).transpose(1, 0)
+    right_player_x = obs_right_team[:, 0]
+    right_player_y = obs_right_team[:, 1]
 
     # ball
     obs_ball = np.array(obs['ball'])
-    ball_x = np.ones((11, 11)) * obs_ball[0]
-    ball_y = np.ones((11, 11)) * obs_ball[1]
-    ball_z = np.ones((11, 11)) * obs_ball[2]
+    ball_x = obs_ball[0]
+    ball_y = obs_ball[1]
+    ball_z = obs_ball[2]
 
     # goal
     left_goal, right_goal = [-1, 0], [1, 0]
-    left_goal_x = np.ones((11, 11)) * left_goal[0]
-    left_goal_y = np.ones((11, 11)) * left_goal[1]
-    right_goal_x = np.ones((11, 11)) * right_goal[0]
-    right_goal_y = np.ones((11, 11)) * right_goal[1]
+    left_goal_x = left_goal[0]
+    left_goal_y = left_goal[1]
+    right_goal_x = right_goal[0]
+    right_goal_y = right_goal[1]
 
     # side line
     side_line_y = [-.42, .42]
-    side_line_y_top = np.ones((11, 11)) * side_line_y[0]
-    side_line_y_bottom = np.ones((11, 11)) * side_line_y[1]
+    side_line_y_top = side_line_y[0]
+    side_line_y_bottom = side_line_y[1]
 
     # active
     active = np.array(obs['active'])
-    active_player_x = np.repeat(obs_left_team[active][0][..., None, None], 11, axis=1).repeat(11, axis=0)
-    active_player_y = np.repeat(obs_left_team[active][1][..., None, None], 11, axis=1).repeat(11, axis=0)
+    active_player_x = obs_left_team[active][0]
+    active_player_y = obs_left_team[active][1]
 
     # left players - right players
     left_minus_right_player_x = obs_left_team[:, 0][..., None] - obs_right_team[:, 0]
     left_minus_right_player_y = obs_left_team[:, 1][..., None] - obs_right_team[:, 1]
 
     # left players - ball
-    left_minus_ball_x = (obs_left_team[:, 0][..., None] - obs_ball[0]).repeat(11, axis=1)
-    left_minus_ball_y = (obs_left_team[:, 1][..., None] - obs_ball[1]).repeat(11, axis=1)
+    left_minus_ball_x = obs_left_team[:, 0] - obs_ball[0]
+    left_minus_ball_y = obs_left_team[:, 1] - obs_ball[1]
 
     # left players - right goal
-    left_minus_right_goal_x = (obs_left_team[:, 0][..., None] - right_goal[0]).repeat(11, axis=1)
-    left_minus_right_goal_y = (obs_left_team[:, 1][..., None] - right_goal[1]).repeat(11, axis=1)
+    left_minus_right_goal_x = obs_left_team[:, 0] - right_goal[0]
+    left_minus_right_goal_y = obs_left_team[:, 1] - right_goal[1]
 
     # left players - left goal
-    left_minus_left_goal_x = (obs_left_team[:, 0][..., None] - left_goal[0]).repeat(11, axis=1)
-    left_minus_left_goal_y = (obs_left_team[:, 1][..., None] - left_goal[1]).repeat(11, axis=1)
+    left_minus_left_goal_x = obs_left_team[:, 0] - left_goal[0]
+    left_minus_left_goal_y = obs_left_team[:, 1] - left_goal[1]
 
     # right players - right goal
-    right_minus_right_goal_x = (obs_right_team[:, 0][..., None] - right_goal[0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_right_goal_y = (obs_right_team[:, 1][..., None] - right_goal[1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_right_goal_x = obs_right_team[:, 0] - right_goal[0]
+    right_minus_right_goal_y = obs_right_team[:, 1] - right_goal[1]
 
     # right players - left goal
-    right_minus_left_goal_x = (obs_right_team[:, 0][..., None] - left_goal[0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_left_goal_y = (obs_right_team[:, 1][..., None] - left_goal[1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_left_goal_x = obs_right_team[:, 0] - left_goal[0]
+    right_minus_left_goal_y = obs_right_team[:, 1] - left_goal[1]
 
     # left players (x) - active
-    left_minus_active_x = (obs_left_team[:, 0][..., None] - obs_left_team[active][0]).repeat(11, axis=1)
-    left_minus_active_y = (obs_left_team[:, 1][..., None] - obs_left_team[active][1]).repeat(11, axis=1)
+    left_minus_active_x = obs_left_team[:, 0] - obs_left_team[active][0]
+    left_minus_active_y = obs_left_team[:, 1] - obs_left_team[active][1]
 
     # right player - ball
-    right_minus_ball_x = (obs_right_team[:, 0][..., None] - obs_ball[0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_ball_y = (obs_right_team[:, 1][..., None] - obs_ball[1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_ball_x = obs_right_team[:, 0] - obs_ball[0]
+    right_minus_ball_y = obs_right_team[:, 1] - obs_ball[1]
 
     # right player - active
-    right_minus_active_x = (obs_right_team[:, 0][..., None] - obs_left_team[active][0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_active_y = (obs_right_team[:, 1][..., None] - obs_left_team[active][1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_active_x = obs_right_team[:, 0] - obs_left_team[active][0]
+    right_minus_active_y = obs_right_team[:, 1] - obs_left_team[active][1]
 
     # left player - side line
-    left_minus_side_top = np.abs(obs_left_team[:, 1][..., None] - side_line_y[0]).repeat(11, axis=1)
-    left_minus_side_bottom = np.abs(obs_left_team[:, 1][..., None] - side_line_y[1]).repeat(11, axis=1)
+    left_minus_side_top = np.abs(obs_left_team[:, 1] - side_line_y[0])
+    left_minus_side_bottom = np.abs(obs_left_team[:, 1] - side_line_y[1])
 
     # right player - side line
-    right_minus_side_top = np.abs(obs_right_team[:, 1][..., None] - side_line_y[0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_side_bottom = np.abs(obs_right_team[:, 1][..., None] - side_line_y[1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_side_top = np.abs(obs_right_team[:, 1] - side_line_y[0])
+    right_minus_side_bottom = np.abs(obs_right_team[:, 1] - side_line_y[1])
 
     # left players direction
     obs_left_team_direction = np.array(obs['left_team_direction'])
-    left_player_direction_x = np.repeat(obs_left_team_direction[:, 0][..., None], 11, axis=1)
-    left_player_direction_y = np.repeat(obs_left_team_direction[:, 1][..., None], 11, axis=1)
+    left_player_direction_x = obs_left_team_direction[:, 0]
+    left_player_direction_y = obs_left_team_direction[:, 1]
 
     # right players direction
     obs_right_team_direction = np.array(obs['right_team_direction'])
-    right_player_direction_x = np.repeat(obs_right_team_direction[:, 0][..., None], 11, axis=1).transpose(1, 0)
-    right_player_direction_y = np.repeat(obs_right_team_direction[:, 1][..., None], 11, axis=1).transpose(1, 0)
+    right_player_direction_x = obs_right_team_direction[:, 0]
+    right_player_direction_y = obs_right_team_direction[:, 1]
 
     # ball direction
     obs_ball_direction = np.array(obs['ball_direction'])
-    ball_direction_x = np.ones((11, 11)) * obs_ball_direction[0]
-    ball_direction_y = np.ones((11, 11)) * obs_ball_direction[1]
-    ball_direction_z = np.ones((11, 11)) * obs_ball_direction[2]
+    ball_direction_x = obs_ball_direction[0]
+    ball_direction_y = obs_ball_direction[1]
+    ball_direction_z = obs_ball_direction[2]
 
     # left players direction - right players direction
     left_minus_right_player_direction_x = obs_left_team_direction[:, 0][..., None] - obs_right_team_direction[:, 0]
     left_minus_right_player_direction_y = obs_left_team_direction[:, 1][..., None] - obs_right_team_direction[:, 1]
 
     # left players direction - ball direction
-    left_minus_ball_direction_x = (obs_left_team_direction[:, 0][..., None] - obs_ball_direction[0]).repeat(11, axis=1)
-    left_minus_ball_direction_y = (obs_left_team_direction[:, 1][..., None] - obs_ball_direction[1]).repeat(11, axis=1)
+    left_minus_ball_direction_x = obs_left_team_direction[:, 0] - obs_ball_direction[0]
+    left_minus_ball_direction_y = obs_left_team_direction[:, 1] - obs_ball_direction[1]
 
     # right players direction - ball direction
-    right_minus_ball_direction_x = (obs_right_team_direction[:, 0][..., None] - obs_ball_direction[0]).repeat(11, axis=1).transpose(1, 0)
-    right_minus_ball_direction_y = (obs_right_team_direction[:, 1][..., None] - obs_ball_direction[1]).repeat(11, axis=1).transpose(1, 0)
+    right_minus_ball_direction_x = obs_right_team_direction[:, 0] - obs_ball_direction[0]
+    right_minus_ball_direction_y = obs_right_team_direction[:, 1] - obs_ball_direction[1]
 
     # ball rotation
     obs_ball_rotation = np.array(obs['ball_rotation'])
-    ball_rotation_x = np.ones((11, 11)) * obs_ball_rotation[0]
-    ball_rotation_y = np.ones((11, 11)) * obs_ball_rotation[1]
-    ball_rotation_z = np.ones((11, 11)) * obs_ball_rotation[2]
+    ball_rotation_x = obs_ball_rotation[0]
+    ball_rotation_y = obs_ball_rotation[1]
+    ball_rotation_z = obs_ball_rotation[2]
 
-    cnn_feature = np.stack([
-        left_player_x,
-        left_player_y,
-        right_player_x,
-        right_player_y,
+    cnn_scalar = np.stack([
+        active_player_x,
+        active_player_y,
         ball_x,
         ball_y,
         ball_z,
@@ -268,46 +272,57 @@ def feature_from_states(states, info, number):
         right_goal_y,
         side_line_y_top,
         side_line_y_bottom,
-        active_player_x,
-        active_player_y,
-        left_minus_right_player_x,
-        left_minus_right_player_y,
+        ball_direction_x,
+        ball_direction_y,
+        ball_direction_z,
+        ball_rotation_x,
+        ball_rotation_y,
+        ball_rotation_z,
+    ]).astype(np.float32)
+
+    cnn_left = np.stack([
+        left_player_x,
+        left_player_y,
+        left_minus_active_x,
+        left_minus_active_y,
         left_minus_right_goal_x,
         left_minus_right_goal_y,
         left_minus_left_goal_x,
         left_minus_left_goal_y,
+        left_minus_side_top,
+        left_minus_side_bottom,
+        left_minus_ball_x,
+        left_minus_ball_y,
+        left_minus_ball_direction_x,
+        left_minus_ball_direction_y,
+    ]).astype(np.float32)
+
+    cnn_right = np.stack([
+        right_player_x,
+        right_player_y,
+        right_minus_active_x,
+        right_minus_active_y,
         right_minus_right_goal_x,
         right_minus_right_goal_y,
         right_minus_left_goal_x,
         right_minus_left_goal_y,
-        left_minus_side_top,
-        left_minus_side_bottom,
         right_minus_side_top,
         right_minus_side_bottom,
         right_minus_ball_x,
         right_minus_ball_y,
-        right_minus_active_x,
-        right_minus_active_y,
-        left_minus_ball_x,
-        left_minus_ball_y,
-        left_minus_active_x,
-        left_minus_active_y,
-        ball_direction_x,
-        ball_direction_y,
-        ball_direction_z,
-        left_minus_ball_direction_x,
-        left_minus_ball_direction_y,
         right_minus_ball_direction_x,
         right_minus_ball_direction_y,
         left_player_direction_x,
         left_player_direction_y,
         right_player_direction_x,
         right_player_direction_y,
+    ]).astype(np.float32)
+
+    cnn_2d = np.stack([
+        left_minus_right_player_x,
+        left_minus_right_player_y,
         left_minus_right_player_direction_x,
         left_minus_right_player_direction_y,
-        ball_rotation_x,
-        ball_rotation_y,
-        ball_rotation_z,
     ], axis=0).astype(np.float32)
 
     # ball
@@ -451,7 +466,12 @@ def feature_from_states(states, info, number):
             'b2o': b2o_distance
         },
         # CNN
-        'cnn_feature': cnn_feature,
+        'cnn_feature': {
+            'scalar': cnn_scalar,
+            'left': cnn_left,
+            'right': cnn_right,
+            '2d': cnn_2d
+        },
         'action_history': action_history
     }
 
