@@ -144,7 +144,7 @@ def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
     elif raw.startswith('rulebase'):
-        key = rulebase.split('-')[1] if '-' in raw else None
+        key = raw.split('-')[1] if '-' in raw else None
         return RuleBasedAgent(key)
     return None
 
