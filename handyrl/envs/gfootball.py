@@ -524,6 +524,7 @@ class GameMode(enum.IntEnum):
 class Environment(BaseEnvironment):
     ACTION_LEN = 19
     CONTROLLED_PLAYERS = 1
+    FINISH_BY_GOAL = True
 
     def __init__(self, args=None):
         self.env = None
@@ -539,7 +540,8 @@ class Environment(BaseEnvironment):
                 env_name="11_vs_11_stochastic",
                 representation='raw',
                 number_of_left_players_agent_controls=self.CONTROLLED_PLAYERS,
-                number_of_right_players_agent_controls=self.CONTROLLED_PLAYERS)
+                number_of_right_players_agent_controls=self.CONTROLLED_PLAYERS,
+                other_config_options={'action_set': 'v2'})
 
         obs = self.env.reset()
         self.update({'observation': obs, 'action': [0] * self.CONTROLLED_PLAYERS * 2}, reset=True)
@@ -587,7 +589,7 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return self.done \
             or len(self.states) > self.limit_step \
-            or sum(self.score().values()) > 0  # finish after first goal
+            or (self.FINISH_BY_GOAL and sum(self.score().values()) > 0)
 
     def score(self):
         if len(self.states) == 0:
@@ -609,10 +611,10 @@ class Environment(BaseEnvironment):
     def outcome(self):
         scores = self.score()
         if scores[0] > scores[1]:
-            return [1, -1]
+            return {0: 1, 1: -1}
         elif scores[0] < scores[1]:
-            return [-1, 1]
-        return [0, 0]
+            return {0: -1, 1: 1}
+        return {0: 0, 1: 0}
 
     def legal_actions(self, player, number=0):
         # legal action list
@@ -666,9 +668,8 @@ if __name__ == '__main__':
             #print(e.raw_observation(0)[0]['steps_left'])
             action_list = [0, 0]
             action_list[0] = random.choice(e.legal_actions(0))
-            action_list[1] = random.choice(e.legal_actions(1))
+            action_list[1] = 19
             print(len(e.states), action_list)
             e.step(action_list)
-            print(e.reward())
-        print(e.score())
+            print(e.score())
         print(e.outcome())
