@@ -23,9 +23,12 @@ class RandomAgent:
 
 
 class RuleBasedAgent(RandomAgent):
+    def __init__(self, key=None):
+        self.key = None
+
     def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
-            return env.rule_based_action(player)
+            return env.rule_based_action(player, key=self.key)
         else:
             return random.choice(env.legal_actions(player))
 

@@ -143,8 +143,9 @@ def exec_network_match(env, network_agents, critic=None, show=False, game_args={
 def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
-    elif raw == 'rulebase':
-        return RuleBasedAgent()
+    elif raw.startswith('rulebase'):
+        key = raw.split('-')[1] if '-' in raw else None
+        return RuleBasedAgent(key)
     return None
 
 
