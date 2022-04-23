@@ -327,7 +327,7 @@ def feature_from_states(states, info, number):
         left_minus_right_player_y,
         left_minus_right_player_direction_x,
         left_minus_right_player_direction_y,
-    ], axis=0).astype(np.float32)
+    ]).astype(np.float32)
 
     # ball
     BALL_OWEND_1HOT = {-1: [0, 0], 0: [1, 0], 1: [0, 1]}
@@ -452,23 +452,23 @@ def feature_from_states(states, info, number):
         # features
         'ball': ball_features,
         'match': match_features,
-        'player': {
-            'self': left_team_features,
-            'opp': right_team_features
-        },
+        #'player': {
+        #    'self': left_team_features,
+        #    'opp': right_team_features
+        #},
         'control': control_features,
-        'player_index': {
-            'self': left_team_indice,
-            'opp': right_team_indice
-        },
+        #'player_index': {
+        #    'self': left_team_indice,
+        #    'opp': right_team_indice
+        #},
         'mode_index': mode_index,
         'control_flag': control_flag,
         # distances
-        'distance': {
-            'p2p': p2p_distance,
-            'p2bo': p2bo_distance,
-            'b2o': b2o_distance
-        },
+        #'distance': {
+        #    'p2p': p2p_distance,
+        #    'p2bo': p2bo_distance,
+        #    'b2o': b2o_distance
+        #},
         # CNN
         'cnn_feature': {
             'scalar': cnn_scalar,
@@ -554,7 +554,6 @@ class Environment(BaseEnvironment):
         self.env = None
         args = args if args is not None else {}
         self.limit_step = args.get('limit_step', 1000)
-        self.controlled_players = 1
 
     def reset(self, args=None):
         if self.env is None:
