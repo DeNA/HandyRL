@@ -18,15 +18,19 @@ class FootballNet(nn.Module):
             self.fc = nn.Linear(units0, units1)
             self.bn = nn.BatchNorm1d(units1)
             self.head_p = nn.Linear(units1, 19, bias=False)
-            self.head_v = nn.Linear(units1, 1, bias=False)
+            #self.head_v = nn.Linear(units1, 1, bias=False)
             self.head_r = nn.Linear(units1, 1, bias=False)
 
         def forward(self, x):
             h = F.relu_(self.bn(self.fc(x)))
             p = self.head_p(h)
-            v = self.head_v(h)
+            #v = self.head_v(h)
             r = self.head_r(h)
-            return {'policy': p, 'value': v, 'return': r}
+            return {
+                'policy': p,
+                #'value': v,
+                'return': r
+            }
 
     class CNNModel(nn.Module):
         def __init__(self, final_filters):
@@ -109,7 +113,7 @@ class FootballNet(nn.Module):
 def feature_from_states(states, info, number):
     # observation list to input tensor
 
-    HISTORY_LENGTH = 8
+    HISTORY_LENGTH = 20
 
     obs_history_ = [s['observation'][number] for s in states[-HISTORY_LENGTH:]]
     obs_history = [obs_history_[0]] * (HISTORY_LENGTH - len(obs_history_)) + obs_history_
@@ -549,7 +553,7 @@ class Environment(BaseEnvironment):
     def __init__(self, args=None):
         self.env = None
         args = args if args is not None else {}
-        self.limit_step = args.get('limit_step', 600)
+        self.limit_step = args.get('limit_step', 1000)
         self.controlled_players = 1
 
     def reset(self, args=None):
@@ -559,10 +563,14 @@ class Environment(BaseEnvironment):
             self.env = create_environment(
                 env_name="11_vs_11_stochastic",
                 representation='raw',
+                write_full_episode_dumps=True,
+                logdir='videos',
+                write_video=True,
                 number_of_left_players_agent_controls=self.CONTROLLED_PLAYERS,
                 number_of_right_players_agent_controls=self.CONTROLLED_PLAYERS,
-                other_config_options={'action_set': 'v2'})
+                other_config_options={'action_set': 'v2', 'video_quality_level': 2})
 
+        self.env.render()
         obs = self.env.reset()
         self.update({'observation': obs, 'action': [0] * self.CONTROLLED_PLAYERS * 2}, reset=True)
 
@@ -620,6 +628,8 @@ class Environment(BaseEnvironment):
     def reward(self):
         prev_score = self.prev_score
         score = self.score()
+
+        print(prev_score, score)
 
         rewards = {}
         for p in self.players():
@@ -702,5 +712,7 @@ if __name__ == '__main__':
             action_list[1] = 19
             print(len(e.states), action_list)
             e.step(action_list)
-            print(e.score())
+            print(e.reward())
+            if sum(e.score().values()) > 0:
+                print('goal!')
         print(e.outcome())
