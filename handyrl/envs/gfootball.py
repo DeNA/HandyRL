@@ -567,7 +567,7 @@ class Environment(BaseEnvironment):
                 write_video=True,
                 number_of_left_players_agent_controls=self.CONTROLLED_PLAYERS,
                 number_of_right_players_agent_controls=self.CONTROLLED_PLAYERS,
-                other_config_options={'action_set': 'v2', 'video_quality_level': 2})
+                other_config_options={'action_set': 'v2'})
 
         self.env.render()
         obs = self.env.reset()
