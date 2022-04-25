@@ -177,7 +177,7 @@ class QueueCommunicator:
     def __init__(self, conns=[]):
         self.input_queue = queue.Queue(maxsize=256)
         self.output_queue = queue.Queue(maxsize=256)
-        self.conns = []
+        self.conns = set()
         for conn in conns:
             self.add_connection(conn)
         threading.Thread(target=self._send_thread, daemon=True).start()
@@ -190,11 +190,11 @@ class QueueCommunicator:
         self.output_queue.put((conn, send_data))
 
     def add_connection(self, conn):
-        self.conns.append(conn)
+        self.conns.add(conn)
 
     def disconnect(self, conn):
         print('disconnected')
-        self.conns.remove(conn)
+        self.conns.discard(conn)
 
     def _send_thread(self):
         while True:
