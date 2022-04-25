@@ -127,7 +127,7 @@ class Gather(QueueCommunicator):
         print('finished gather %d' % self.gather_id)
 
     def run(self):
-        while len(self.conns) > 0:
+        while self.connection_count() > 0:
             try:
                 conn, (command, args) = self.recv(timeout=0.3)
             except queue.Empty:

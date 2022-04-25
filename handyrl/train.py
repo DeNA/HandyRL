@@ -535,7 +535,7 @@ class Learner:
         # no update call before storing minimum number of episodes + 1 epoch
         next_update_episodes = prev_update_episodes + self.args['update_episodes']
 
-        while len(self.worker.conns) > 0 or not self.shutdown_flag:
+        while self.worker.connection_count() > 0 or not self.shutdown_flag:
             try:
                 conn, (req, data) = self.worker.recv(timeout=0.3)
             except queue.Empty:
