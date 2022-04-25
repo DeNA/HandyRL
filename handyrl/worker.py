@@ -121,8 +121,7 @@ class Gather(QueueCommunicator):
         for conn in worker_conns:
             self.add_connection(conn)
 
-        self.args_buf_len = 1 + len(worker_conns) // 4
-        self.result_buf_len = 1 + len(worker_conns) // 4
+        self.buffer_length = 1 + len(worker_conns) // 4
 
     def __del__(self):
         print('finished gather %d' % self.gather_id)
@@ -138,7 +137,7 @@ class Gather(QueueCommunicator):
                 # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:
                     # get multiple arguments from server and store them
-                    self.server_conn.send((command, [None] * self.args_buf_len))
+                    self.server_conn.send((command, [None] * self.buffer_length))
                     self.args_queue += self.server_conn.recv()
 
                 next_args = self.args_queue.popleft()
@@ -160,7 +159,7 @@ class Gather(QueueCommunicator):
                 self.result_send_map[command].append(args)
                 self.result_send_cnt += 1
 
-                if self.result_send_cnt >= self.result_buf_len:
+                if self.result_send_cnt >= self.buffer_length:
                     # send datum to server after buffering certain number of datum
                     for command, args_list in self.result_send_map.items():
                         self.server_conn.send((command, args_list))
