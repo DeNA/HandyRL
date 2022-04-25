@@ -351,10 +351,11 @@ class OnnxModel:
         return outputs
 
 
-def load_model(model_path, model):
+def load_model(model_path, model=None):
     if model_path.endswith('.onnx'):
         model = OnnxModel(model_path)
         return model
+    assert model is not None
     import torch
     from .model import ModelWrapper
     model.load_state_dict(torch.load(model_path))
