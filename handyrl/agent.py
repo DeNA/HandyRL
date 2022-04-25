@@ -44,11 +44,12 @@ def print_outputs(env, prob, v):
 
 
 class Agent:
-    def __init__(self, model, temperature=0.0):
+    def __init__(self, model, temperature=0.0, observation=True):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
         self.temperature = temperature
+        self.observation = observation
 
     def reset(self, env, show=False):
         self.hidden = self.model.init_hidden()
@@ -78,12 +79,14 @@ class Agent:
             return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
 
     def observe(self, env, player, show=False):
-        obs = env.observation(player)
-        outputs = self.plan(obs)
-        v = outputs.get('value', None)
-        if show:
-            print_outputs(env, None, v)
-        return v if v is not None else [0.0]
+        v = None
+        if self.observation:
+            obs = env.observation(player)
+            outputs = self.plan(obs)
+            v = outputs.get('value', None)
+            if show:
+                print_outputs(env, None, v)
+        return v
 
 
 class EnsembleAgent(Agent):
