@@ -143,8 +143,9 @@ def exec_network_match(env, network_agents, critic=None, show=False, game_args={
 def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
-    elif raw == 'rulebase':
-        return RuleBasedAgent()
+    elif raw.startswith('rulebase'):
+        key = raw.split('-')[1] if '-' in raw else None
+        return RuleBasedAgent(key)
     return None
 
 
@@ -351,10 +352,11 @@ class OnnxModel:
         return outputs
 
 
-def load_model(model_path, model):
+def load_model(model_path, model=None):
     if model_path.endswith('.onnx'):
         model = OnnxModel(model_path)
         return model
+    assert model is not None
     import torch
     from .model import ModelWrapper
     model.load_state_dict(torch.load(model_path))

@@ -23,9 +23,12 @@ class RandomAgent:
 
 
 class RuleBasedAgent(RandomAgent):
+    def __init__(self, key=None):
+        self.key = None
+
     def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
-            return env.rule_based_action(player)
+            return env.rule_based_action(player, key=self.key)
         else:
             return random.choice(env.legal_actions(player))
 
@@ -57,7 +60,8 @@ class Agent:
         return outputs
 
     def action(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
+        obs = env.observation(player)
+        outputs = self.plan(obs)
         actions = env.legal_actions(player)
         p = outputs['policy']
         v = outputs.get('value', None)
@@ -77,7 +81,8 @@ class Agent:
     def observe(self, env, player, show=False):
         v = None
         if self.observation:
-            outputs = self.plan(env.observation(player))
+            obs = env.observation(player)
+            outputs = self.plan(obs)
             v = outputs.get('value', None)
             if show:
                 print_outputs(env, None, v)
