@@ -33,18 +33,18 @@ class RuleBasedAgent(RandomAgent):
             return random.choice(env.legal_actions(player))
 
 
-def print_outputs(env, prob, v):
+def print_outputs(env, action, prob, v):
     if hasattr(env, 'print_outputs'):
-        env.print_outputs(prob, v)
+        env.print_outputs(action, prob, v)
     else:
         if v is not None:
             print('v = %f' % v)
-        if prob is not None:
-            print('p = %s' % (prob * 1000).astype(int))
+        if action is not None:
+            print('a = %d prob = %f' % (action, prob))
 
 
 class Agent:
-    def __init__(self, model, temperature=0.0, observation=True):
+    def __init__(self, model, temperature=1e-6, observation=True):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
@@ -55,28 +55,22 @@ class Agent:
         self.hidden = self.model.init_hidden()
 
     def plan(self, obs):
-        outputs = self.model.inference(obs, self.hidden)
+        outputs = self.model.inference(obs, self.hidden, temperature=self.temperature)
         self.hidden = outputs.pop('hidden', None)
         return outputs
 
     def action(self, env, player, show=False):
         obs = env.observation(player)
         outputs = self.plan(obs)
-        actions = env.legal_actions(player)
-        p = outputs['policy']
+
+        action = outputs['action']
+        prob = np.exp(outputs['log_selected_prob'])
         v = outputs.get('value', None)
-        mask = np.ones_like(p)
-        mask[actions] = 0
-        p = p - mask * 1e32
 
         if show:
-            print_outputs(env, softmax(p), v)
+            print_outputs(env, action, prob, v)
 
-        if self.temperature == 0:
-            ap_list = sorted([(a, p[a]) for a in actions], key=lambda x: -x[1])
-            return ap_list[0][0]
-        else:
-            return random.choices(np.arange(len(p)), weights=softmax(p / self.temperature))[0]
+        return action
 
     def observe(self, env, player, show=False):
         v = None

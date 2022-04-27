@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions as dist
 
 from ..environment import BaseEnvironment
 
@@ -147,7 +148,7 @@ class GeisterNet(nn.Module):
     def init_hidden(self, batch_size=[]):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
-    def forward(self, x, hidden):
+    def forward(self, x, hidden, action=None, temperature=1.0):
         b, s = x['board'], x['scalar']
         h_s = s.view(*s.size(), 1, 1).repeat(1, 1, 6, 6)
         h = torch.cat([h_s, b], -3)
@@ -163,7 +164,16 @@ class GeisterNet(nn.Module):
         h_v = self.head_v(h)
         h_r = self.head_r(h)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
+        log_prob = F.log_softmax(h_p / temperature, -1)
+        prob = torch.exp(log_prob)
+        entropy = dist.Categorical(logits=log_prob).entropy().unsqueeze(-1)
+
+        if action is None:
+            prob = torch.exp(log_prob)
+            action = prob.multinomial(num_samples=1, replacement=True)
+        log_selected_prob = log_prob.gather(-1, action)
+
+        return {'action': action, 'log_selected_prob': log_selected_prob, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden, 'entropy': entropy}
 
 
 class Environment(BaseEnvironment):
@@ -357,6 +367,10 @@ class Environment(BaseEnvironment):
 
     def play(self, action, _=None):
         # state transition
+        if not self.legal(action):
+            self.win_color = self.opponent(self.color)
+            return
+
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6
             return self._set(layout)
