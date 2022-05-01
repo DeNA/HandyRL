@@ -140,10 +140,10 @@ class GeisterNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(filters)
         self.body = DRC(layers, filters, filters)
 
-        self.head_p_move = Conv2dHead((filters * 2, 6, 6), p_filters, 4)
+        self.head_p_move = Conv2dHead((filters, 6, 6), p_filters, 4)
         self.head_p_set = nn.Linear(1, 70, bias=True)
-        self.head_v = ScalarHead((filters * 2, 6, 6), v_filters, 1)
-        self.head_r = ScalarHead((filters * 2, 6, 6), v_filters, 1)
+        self.head_v = ScalarHead((filters, 6, 6), v_filters, 1)
+        self.head_r = ScalarHead((filters, 6, 6), v_filters, 1)
 
     def init_hidden(self, batch_size=[]):
         return self.body.init_hidden(self.input_size[1:], batch_size)
@@ -155,7 +155,6 @@ class GeisterNet(nn.Module):
 
         h_e = F.relu(self.bn1(self.conv1(h)))
         h, hidden = self.body(h_e, hidden, num_repeats=3)
-        h = torch.cat([h_e, h], -3)
 
         h_p_move = self.head_p_move(h)
         turn_color = s[:, :1]
