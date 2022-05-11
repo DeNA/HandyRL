@@ -111,7 +111,7 @@ class FootballRecurrentNet(nn.Module):
         units = 128
 
         self.units = units
-        self.fc1 = nn.Linear(125, units)
+        self.fc1 = nn.Linear(133, units)
         self.fc2 = nn.Linear(units, units)
         self.rnn_blocks = nn.ModuleList([nn.LSTMCell(units, units) for _ in range(4)])
         self.fc3 = nn.Linear(units, units)
@@ -211,6 +211,15 @@ def convert_observation_115_plus_alpha(observation, fixed_positions):
 
         # sticky actions
         o.extend(obs['sticky_actions'])
+
+        # subjective pose
+        if obs['active'] != -1:
+            o.extend(obs['left_team'][obs['active']])
+            o.extend(obs['left_team_direction'][obs['active']])
+            o.extend(obs['ball'][:2] - obs['left_team'][obs['active']])
+            o.extend(obs['ball_direction'][:2] - obs['left_team_direction'][obs['active']])
+        else:
+            o.extend([-1] * 8)
 
         final_obs.append(o)
 
