@@ -132,7 +132,7 @@ class FootballRecurrentNet(nn.Module):
             h, c_ = block(h, hidden_)
             next_hidden.append((h, c_))
 
-        h = F.relu_(h)
+        h = F.relu_(self.fc3(h))
         p = self.fcp(h)
         v = self.fcv(h)
         r = self.fcr(h)
