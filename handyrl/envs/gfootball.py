@@ -105,7 +105,129 @@ class FootballNet(nn.Module):
         return o
 
 
+class FootballRecurrentNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        units = 128
+
+        self.units = units
+        self.fc1 = nn.Linear(133, units)
+        self.fc2 = nn.Linear(units, units)
+        self.rnn_blocks = nn.ModuleList([nn.LSTMCell(units, units) for _ in range(4)])
+        self.fc3 = nn.Linear(units, units)
+        self.fcp = nn.Linear(units, 19, bias=False)
+        self.fcv = nn.Linear(units, 1, bias=False)
+        self.fcr = nn.Linear(units, 1, bias=False)
+
+    def init_hidden(self, batch_size):
+        return [(torch.zeros(*batch_size, self.units),
+                 torch.zeros(*batch_size, self.units)) for _ in self.rnn_blocks]
+
+    def forward(self, x, hidden):
+        h = x
+        h = F.relu_(self.fc1(h))
+        h = F.relu_(self.fc2(h))
+        next_hidden = []
+        for block, hidden_ in zip(self.rnn_blocks, hidden):
+            h, c_ = block(h, hidden_)
+            next_hidden.append((h, c_))
+
+        h = F.relu_(self.fc3(h))
+        p = self.fcp(h)
+        v = torch.tanh(self.fcv(h))
+        r = torch.tanh(self.fcr(h))
+
+        return {'policy': p, 'value': v, 'return': r, 'hidden': next_hidden}
+
+
+# https://github.com/google-research/football/blob/12f93de031e7f7c105f32924d113b1f7e6d77349/gfootball/env/wrappers.py
+
+def convert_observation_115_plus_alpha(observation, fixed_positions):
+    """Converts an observation into simple115 (or simple115v2) format.
+    Args:
+      observation: observation that the environment returns
+      fixed_positions: Players and positions are always occupying 88 fields
+                       (even if the game is played 1v1).
+                       If True, the position of the player will be the same - no
+                       matter how many players are on the field:
+                       (so first 11 pairs will belong to the first team, even
+                       if it has less players).
+                       If False, then the position of players from team2
+                       will depend on number of players in team1).
+    Returns:
+      (N, 115) shaped representation, where N stands for the number of players
+      being controlled.
+    """
+
+    def do_flatten(obj):
+        """Run flatten on either python list or numpy array."""
+        if type(obj) == list:
+            return np.array(obj).flatten()
+        return obj.flatten()
+
+    final_obs = []
+    for obs in observation:
+        o = []
+        if fixed_positions:
+            for i, name in enumerate(['left_team', 'left_team_direction',
+                                    'right_team', 'right_team_direction']):
+                o.extend(do_flatten(obs[name]))
+                # If there were less than 11vs11 players we backfill missing values
+                # with -1.
+                if len(o) < (i + 1) * 22:
+                    o.extend([-1] * ((i + 1) * 22 - len(o)))
+        else:
+            o.extend(do_flatten(obs['left_team']))
+            o.extend(do_flatten(obs['left_team_direction']))
+            o.extend(do_flatten(obs['right_team']))
+            o.extend(do_flatten(obs['right_team_direction']))
+
+        # If there were less than 11vs11 players we backfill missing values with
+        # -1.
+        # 88 = 11 (players) * 2 (teams) * 2 (positions & directions) * 2 (x & y)
+        if len(o) < 88:
+            o.extend([-1] * (88 - len(o)))
+
+        # ball position
+        o.extend(obs['ball'])
+        # ball direction
+        o.extend(obs['ball_direction'])
+        # one hot encoding of which team owns the ball
+        if obs['ball_owned_team'] == -1:
+            o.extend([1, 0, 0])
+        if obs['ball_owned_team'] == 0:
+            o.extend([0, 1, 0])
+        if obs['ball_owned_team'] == 1:
+            o.extend([0, 0, 1])
+
+        active = [0] * 11
+        if obs['active'] != -1:
+            active[obs['active']] = 1
+        o.extend(active)
+
+        game_mode = [0] * 7
+        game_mode[obs['game_mode']] = 1
+        o.extend(game_mode)
+
+        # sticky actions
+        o.extend(obs['sticky_actions'])
+
+        # subjective pose
+        if obs['active'] != -1:
+            o.extend(obs['left_team'][obs['active']])
+            o.extend(obs['left_team_direction'][obs['active']])
+            o.extend(obs['ball'][:2] - obs['left_team'][obs['active']])
+            o.extend(obs['ball_direction'][:2] - obs['left_team_direction'][obs['active']])
+        else:
+            o.extend([-1] * 8)
+
+        final_obs.append(o)
+
+    return np.array(final_obs, dtype=np.float32)
+
+
 # feature
+
 def feature_from_states(states, info, number):
     # observation list to input tensor
 
@@ -651,7 +773,9 @@ class Environment(BaseEnvironment):
     def observation(self, player, number=0):
         # input feature for neural nets
         info = {'half_step': self.half_step}
-        return feature_from_states(self.states, info, player * self.CONTROLLED_PLAYERS + number)
+        index = player * self.CONTROLLED_PLAYERS + number
+        #return feature_from_states(self.states, info, )
+        return convert_observation_115_plus_alpha(self.states[-1]['observation'], True)[index]
 
     def _preprocess_state(self, state):
         if state is None:
@@ -689,7 +813,8 @@ class Environment(BaseEnvironment):
             return 5
 
     def net(self):
-        return FootballNet()
+        #return FootballNet()
+        return FootballRecurrentNet()
 
 
 if __name__ == '__main__':
