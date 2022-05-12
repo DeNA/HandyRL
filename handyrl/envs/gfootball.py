@@ -24,8 +24,8 @@ class FootballNet(nn.Module):
         def forward(self, x):
             h = F.relu_(self.bn(self.fc(x)))
             p = self.head_p(h)
-            v = self.head_v(h)
-            r = self.head_r(h)
+            v = torch.tanh(self.head_v(h))
+            r = torch.tanh(self.head_r(h))
             return {'policy': p, 'value': v, 'return': r}
 
     class CNNModel(nn.Module):
