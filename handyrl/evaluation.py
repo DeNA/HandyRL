@@ -81,6 +81,7 @@ class NetworkAgent:
 
 def exec_match(env, agents, critic=None, show=False, game_args={}):
     ''' match with shared game environment '''
+    game_args['show'] = show
     if env.reset(game_args):
         return None
     for agent in agents.values():
@@ -110,6 +111,7 @@ def exec_match(env, agents, critic=None, show=False, game_args={}):
 
 def exec_network_match(env, network_agents, critic=None, show=False, game_args={}):
     ''' match with divided game environment '''
+    game_args['show'] = show
     if env.reset(game_args):
         return None
     for p, agent in network_agents.items():

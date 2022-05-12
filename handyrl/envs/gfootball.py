@@ -674,20 +674,28 @@ class Environment(BaseEnvironment):
         self.limit_step = args.get('limit_step', 1000)
 
     def reset(self, args=None):
+        if args is None:
+            args = {}
+        show = args.get('show', False)
+
         if self.env is None:
             from gfootball.env import create_environment
 
             self.env = create_environment(
                 env_name="11_vs_11_stochastic",
                 representation='raw',
-                write_full_episode_dumps=True,
+                write_full_episode_dumps=show,
                 logdir='videos',
-                write_video=True,
+                write_video=show,
                 number_of_left_players_agent_controls=self.CONTROLLED_PLAYERS,
                 number_of_right_players_agent_controls=self.CONTROLLED_PLAYERS,
-                other_config_options={'action_set': 'v2'})
+                other_config_options={
+                    'action_set': 'v2',
+                    'video_format': 'webm',
+                })
 
-        self.env.render()
+        if show:
+            self.env.render()
         obs = self.env.reset()
         self.update({'observation': obs, 'action': [0] * self.CONTROLLED_PLAYERS * 2}, reset=True)
 
