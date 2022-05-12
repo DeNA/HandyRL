@@ -18,19 +18,15 @@ class FootballNet(nn.Module):
             self.fc = nn.Linear(units0, units1)
             self.bn = nn.BatchNorm1d(units1)
             self.head_p = nn.Linear(units1, 19, bias=False)
-            #self.head_v = nn.Linear(units1, 1, bias=False)
+            self.head_v = nn.Linear(units1, 1, bias=False)
             self.head_r = nn.Linear(units1, 1, bias=False)
 
         def forward(self, x):
             h = F.relu_(self.bn(self.fc(x)))
             p = self.head_p(h)
-            #v = self.head_v(h)
-            r = self.head_r(h)
-            return {
-                'policy': p,
-                #'value': v,
-                'return': r
-            }
+            v = torch.tanh(self.head_v(h))
+            r = torch.tanh(self.head_r(h))
+            return {'policy': p, 'value': v, 'return': r}
 
     class CNNModel(nn.Module):
         def __init__(self, final_filters):
