@@ -134,8 +134,8 @@ class FootballRecurrentNet(nn.Module):
 
         h = F.relu_(self.fc3(h))
         p = self.fcp(h)
-        v = self.fcv(h)
-        r = self.fcr(h)
+        v = torch.tanh(self.fcv(h))
+        r = torch.tanh(self.fcr(h))
 
         return {'policy': p, 'value': v, 'return': r, 'hidden': next_hidden}
 
