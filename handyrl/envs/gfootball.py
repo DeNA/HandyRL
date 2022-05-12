@@ -757,8 +757,6 @@ class Environment(BaseEnvironment):
         prev_score = self.prev_score
         score = self.score()
 
-        print(prev_score, score)
-
         rewards = {}
         for p in self.players():
             r = 1.0 * (score[p] - prev_score[p]) - 1.0 * (score[1 - p] - prev_score[1 - p])
