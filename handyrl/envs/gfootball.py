@@ -142,7 +142,7 @@ class FootballRecurrentNet(nn.Module):
 
 # https://github.com/google-research/football/blob/12f93de031e7f7c105f32924d113b1f7e6d77349/gfootball/env/wrappers.py
 
-def convert_observation_115_plus_alpha(observation, fixed_positions):
+def convert_observation_115_plus_alpha(obs, num, fixed_positions):
     """Converts an observation into simple115 (or simple115v2) format.
     Args:
       observation: observation that the environment returns
@@ -165,65 +165,61 @@ def convert_observation_115_plus_alpha(observation, fixed_positions):
             return np.array(obj).flatten()
         return obj.flatten()
 
-    final_obs = []
-    for obs in observation:
-        o = []
-        if fixed_positions:
-            for i, name in enumerate(['left_team', 'left_team_direction',
-                                    'right_team', 'right_team_direction']):
-                o.extend(do_flatten(obs[name]))
-                # If there were less than 11vs11 players we backfill missing values
-                # with -1.
-                if len(o) < (i + 1) * 22:
-                    o.extend([-1] * ((i + 1) * 22 - len(o)))
-        else:
-            o.extend(do_flatten(obs['left_team']))
-            o.extend(do_flatten(obs['left_team_direction']))
-            o.extend(do_flatten(obs['right_team']))
-            o.extend(do_flatten(obs['right_team_direction']))
+    o = []
+    if fixed_positions:
+        for i, name in enumerate(['left_team', 'left_team_direction',
+                                'right_team', 'right_team_direction']):
+            o.extend(do_flatten(obs[name]))
+            # If there were less than 11vs11 players we backfill missing values
+            # with -1.
+            if len(o) < (i + 1) * 22:
+                o.extend([-1] * ((i + 1) * 22 - len(o)))
+    else:
+        o.extend(do_flatten(obs['left_team']))
+        o.extend(do_flatten(obs['left_team_direction']))
+        o.extend(do_flatten(obs['right_team']))
+        o.extend(do_flatten(obs['right_team_direction']))
 
-        # If there were less than 11vs11 players we backfill missing values with
-        # -1.
-        # 88 = 11 (players) * 2 (teams) * 2 (positions & directions) * 2 (x & y)
-        if len(o) < 88:
-            o.extend([-1] * (88 - len(o)))
+    # If there were less than 11vs11 players we backfill missing values with
+    # -1.
+    # 88 = 11 (players) * 2 (teams) * 2 (positions & directions) * 2 (x & y)
+    if len(o) < 88:
+        o.extend([-1] * (88 - len(o)))
 
-        # ball position
-        o.extend(obs['ball'])
-        # ball direction
-        o.extend(obs['ball_direction'])
-        # one hot encoding of which team owns the ball
-        if obs['ball_owned_team'] == -1:
-            o.extend([1, 0, 0])
-        if obs['ball_owned_team'] == 0:
-            o.extend([0, 1, 0])
-        if obs['ball_owned_team'] == 1:
-            o.extend([0, 0, 1])
+    # ball position
+    o.extend(obs['ball'])
+    # ball direction
+    o.extend(obs['ball_direction'])
+    # one hot encoding of which team owns the ball
+    if obs['ball_owned_team'] == -1:
+        o.extend([1, 0, 0])
+    if obs['ball_owned_team'] == 0:
+        o.extend([0, 1, 0])
+    if obs['ball_owned_team'] == 1:
+        o.extend([0, 0, 1])
 
-        active = [0] * 11
-        if obs['active'] != -1:
-            active[obs['active']] = 1
-        o.extend(active)
+    active = [0] * 11
+    if obs['active'] != -1:
+        active[obs['active']] = 1
+    o.extend(active)
 
-        game_mode = [0] * 7
-        game_mode[obs['game_mode']] = 1
-        o.extend(game_mode)
+    game_mode = [0] * 7
+    game_mode[obs['game_mode']] = 1
+    o.extend(game_mode)
 
-        # sticky actions
-        o.extend(obs['sticky_actions'])
+    # sticky actions
+    o.extend(obs['sticky_actions'])
 
-        # subjective pose
-        if obs['active'] != -1:
-            o.extend(obs['left_team'][obs['active']])
-            o.extend(obs['left_team_direction'][obs['active']])
-            o.extend(obs['ball'][:2] - obs['left_team'][obs['active']])
-            o.extend(obs['ball_direction'][:2] - obs['left_team_direction'][obs['active']])
-        else:
-            o.extend([-1] * 8)
+    # subjective pose
+    if obs['active'] != -1:
+        o.extend(obs['left_team'][obs['active']])
+        o.extend(obs['left_team_direction'][obs['active']])
+        o.extend(obs['ball'][:2] - obs['left_team'][obs['active']])
+        o.extend(obs['ball_direction'][:2] - obs['left_team_direction'][obs['active']])
+    else:
+        o.extend([-1] * 8)
 
-        final_obs.append(o)
-
-    return np.array(final_obs, dtype=np.float32)
+    return np.array(o, dtype=np.float32)
 
 
 # feature
@@ -784,7 +780,7 @@ class Environment(BaseEnvironment):
         info = {'half_step': self.half_step}
         index = player * self.CONTROLLED_PLAYERS + number
         #return feature_from_states(self.states, info, )
-        return convert_observation_115_plus_alpha(self.states[-1]['observation'], True)[index]
+        return convert_observation_115_plus_alpha(self.states[-1]['observation'][index], index, True)
 
     def _preprocess_state(self, state):
         if state is None:
