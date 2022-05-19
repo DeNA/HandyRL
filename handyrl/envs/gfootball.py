@@ -108,7 +108,7 @@ class FootballNet(nn.Module):
 class FootballRecurrentNet(nn.Module):
     def __init__(self):
         super().__init__()
-        units = 192
+        units = 256
 
         self.units = units
         self.fc1 = nn.Linear(133, units)
@@ -739,6 +739,9 @@ class Environment(BaseEnvironment):
         return self.done \
             or len(self.states) > self.limit_step \
             or (self.FINISH_BY_GOAL and sum(self.score().values()) > 0)
+
+    def __str__(self):
+        return 'step ' + str(len(self.states)) + ' ' + str(list(self.score().values()))
 
     def view_transition(self):
         print(self.states[-1]['action'])
