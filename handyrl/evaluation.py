@@ -58,7 +58,8 @@ class NetworkAgentClient:
                     reset = args[1]
                     if reset:
                         self.agent.reset(self.env, show=True)
-                    view_transition(self.env)
+                    else:
+                        view_transition(self.env)
             self.conn.send(ret)
 
 
