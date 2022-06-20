@@ -70,5 +70,5 @@ class RandomModel(nn.Module):
         outputs = wrapped_model.inference(x, hidden)
         self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items() if key != 'hidden'}
 
-    def inference(self, *args):
+    def inference(self, *args, **kwargs):
         return self.output_dict
