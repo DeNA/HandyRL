@@ -316,10 +316,10 @@ class Trainer:
         self.args = args
         self.gpu = torch.cuda.device_count()
         self.model = model
-        self.default_lr = 3e-8
+        self.default_lr = 3e-6
         self.data_cnt_ema = self.args['batch_size'] * self.args['forward_steps']
         self.params = list(self.model.parameters())
-        lr = self.default_lr * self.data_cnt_ema
+        lr = self.default_lr * (self.data_cnt_ema ** 0.5)
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
         self.batcher = Batcher(self.args, self.episodes)
@@ -373,7 +373,7 @@ class Trainer:
 
         self.data_cnt_ema = self.data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.default_lr * self.data_cnt_ema / (1 + self.steps * 1e-5)
+            param_group['lr'] = self.default_lr * (self.data_cnt_ema ** 0.5) / (1 + self.steps * 1e-5)
         self.model.cpu()
         self.model.eval()
         return copy.deepcopy(self.model)
