@@ -250,6 +250,9 @@ class WorkerServer(WebsocketServer):
         self.args = args
         self.total_worker_count = 0
 
+    def connection_count(self):
+        return len(self.clients)
+
     def run(self):
         self.set_fn_new_client(self._new_client)
         self.set_fn_message_received(self._message_received)
@@ -259,8 +262,8 @@ class WorkerServer(WebsocketServer):
         self.shutdown_flag = True
         self.shutdown_gracefully()
 
-    def recv(self):
-        return self.input_queue.get()
+    def recv(self, timeout=None):
+        return self.input_queue.get(timeout=timeout)
 
     def send(self, client, send_data):
         self.output_queue.put((client, send_data))
