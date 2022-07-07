@@ -229,7 +229,8 @@ def compute_loss(batch, model, hidden, args, reg_model=None):
     outputs = forward_prediction(model, hidden, batch, args)
     outputs_reg = None
     if reg_model is not None:
-        outputs_reg = forward_prediction(reg_model, hidden, batch, args)
+        with torch.no_grad():
+            outputs_reg = forward_prediction(reg_model, hidden, batch, args)
     if args['burn_in_steps'] > 0:
         batch = map_r(batch, lambda v: v[:, args['burn_in_steps']:] if v.size(1) > 1 else v)
         outputs = map_r(outputs, lambda v: v[:, args['burn_in_steps']:])
