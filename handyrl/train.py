@@ -397,7 +397,6 @@ class Trainer:
             self.reg_model = copy.deepcopy(self.model)
         self.model.cpu()
         self.model.eval()
-        print(F.softmax(self.model.fc.bias, -1).detach())
         return copy.deepcopy(self.model)
 
     def run(self):
