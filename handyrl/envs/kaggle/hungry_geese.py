@@ -186,7 +186,7 @@ class Environment(BaseEnvironment):
     def players(self):
         return list(range(self.NUM_AGENTS))
 
-    def rule_based_action(self, player):
+    def rule_based_action(self, player, key=None):
         from kaggle_environments.envs.hungry_geese.hungry_geese import Observation, Configuration, Action, GreedyAgent
         action_map = {'N': Action.NORTH, 'S': Action.SOUTH, 'W': Action.WEST, 'E': Action.EAST}
 
