@@ -520,6 +520,10 @@ class Learner:
             std = (r2 / (n + 1e-6) - mean ** 2) ** 0.5
             print('generation stats = %.3f +- %.3f' % (mean, std))
 
+        if self.model_epoch == 0:
+            self.num_episodes = 0
+            self.num_results = 0
+
         model, steps = self.trainer.update()
         if model is None:
             model = self.model
