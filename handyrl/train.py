@@ -403,8 +403,8 @@ class Learner:
         random.seed(args['seed'])
 
         self.env = make_env(env_args)
-        eval_modify_rate = (args['update_episodes'] ** 0.85) / args['update_episodes']
-        self.eval_rate = max(args['eval_rate'], eval_modify_rate)
+        self.eval_rate_fn = lambda n: (n ** self.args['eval_coef']) / n
+        self.eval_rate = self.eval_rate_fn(self.args['minimum_episodes'] + self.args['update_episodes'])
         self.shutdown_flag = False
         self.flags = set()
 
@@ -525,6 +525,8 @@ class Learner:
             model = self.model
         self.update_model(model, steps)
 
+        # update evaluation ratio
+        self.eval_rate = self.eval_rate_fn(self.args['update_episodes'])
         # clear flags
         self.flags = set()
 
