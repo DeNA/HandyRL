@@ -288,7 +288,7 @@ class Batcher:
         while True:
             ep_count = min(len(self.episodes), self.args['maximum_episodes'])
             ep_idx = random.randrange(ep_count)
-            accept_rate = 1 - (ep_count - 1 - ep_idx) / self.args['maximum_episodes']
+            accept_rate = 1 - (ep_count - 1 - ep_idx) / ep_count
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
