@@ -7,9 +7,12 @@
 
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 n = 15
+
 
 def kernel(n):
     a = np.array(list(range(1, 1 + (n+1)//2)) + list(range(1 + n//2,1,-1)))
@@ -34,7 +37,7 @@ def get_wp_list(path):
             step_list.append(int(line.split('(')[1].rstrip().rstrip(')')))
         if line.startswith('win rate'):
             elms = line.split()
-            opponent = elms[2].lstrip('(').rstrip(')')
+            opponent = elms[2].lstrip('(').rstrip(')') if elms[2] != '=' else 'total'
             games = int(elms[-1].lstrip('(').rstrip(')'))
             wp = float(elms[-4]) if games > 0 else 0.0
             epoch_data_list[-1][opponent] = {'w': games * wp, 'n': games}
@@ -69,8 +72,6 @@ def get_wp_list(path):
     return clipped_epoch_list, clipped_step_list, clipped_game_list, averaged_wp_lists, start_epoch
 
 
-import matplotlib.pyplot as plt
-import seaborn as sns
 flatui = ["#9b59b6", "#95a5a6", "#34495e", "#3498db", "#e74c3c", "#2ecc71", "#b22222"]
 sns.set_palette(sns.color_palette(flatui, 24))
 
@@ -84,8 +85,6 @@ ax = fig.add_subplot(1, 1, 1)
 
 last_win_rate = {}
 for opponent in opponents:
-    if opponent == 'total':
-        continue
     wp_list = averaged_wp_lists[opponent]
     start = start_epoch[opponent]
     # ax.plot(clipped_epoch_list[start:], wp_list[start:], label=opponent)

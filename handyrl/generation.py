@@ -39,6 +39,8 @@ class Generator:
             for player in self.env.players():
                 if player not in turn_players + observers:
                     continue
+                if player not in turn_players and player in args['player'] and not self.args['observation']:
+                    continue
 
                 obs = self.env.observation(player)
                 model = models[player]

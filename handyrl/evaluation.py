@@ -39,7 +39,10 @@ class NetworkAgentClient:
 
     def run(self):
         while True:
-            command, args = self.conn.recv()
+            try:
+                command, args = self.conn.recv()
+            except ConnectionResetError:
+                break
             if command == 'quit':
                 break
             elif command == 'reward':
@@ -57,7 +60,8 @@ class NetworkAgentClient:
                     reset = args[1]
                     if reset:
                         self.agent.reset(self.env, show=True)
-                    view_transition(self.env)
+                    else:
+                        view_transition(self.env)
             self.conn.send(ret)
 
 
@@ -145,11 +149,12 @@ def exec_network_match(env, network_agents, critic=None, show=False, game_args={
     return total_rewards
 
 
-def build_agent(raw, env):
+def build_agent(raw, env=None):
     if raw == 'random':
         return RandomAgent()
-    elif raw == 'rulebase':
-        return RuleBasedAgent()
+    elif raw.startswith('rulebase'):
+        key = raw.split('-')[1] if '-' in raw else None
+        return RuleBasedAgent(key)
     return None
 
 
@@ -305,18 +310,21 @@ class OnnxModel:
 
         self.ort_session = onnxruntime.InferenceSession(self.model_path, sess_options=opts)
 
-    def init_hidden(self):
+    def init_hidden(self, batch_size=None):
         if self.ort_session is None:
             self._open_session()
         hidden_inputs = [y for y in self.ort_session.get_inputs() if y.name.startswith('hidden')]
         if len(hidden_inputs) == 0:
             return None
+
+        if batch_size is None:
+            batch_size = []
         import numpy as np
         type_map = {
             'tensor(float)': np.float32,
             'tensor(int64)': np.int64,
         }
-        hidden_tensors = [np.zeros(y.shape[1:], dtype=type_map[y.type]) for y in hidden_inputs]
+        hidden_tensors = [np.zeros(batch_size + list(y.shape[1:]), dtype=type_map[y.type]) for y in hidden_inputs]
         return hidden_tensors
 
     def inference(self, x, hidden=None, batch_input=False):
@@ -353,10 +361,11 @@ class OnnxModel:
         return outputs
 
 
-def load_model(model_path, model):
+def load_model(model_path, model=None):
     if model_path.endswith('.onnx'):
         model = OnnxModel(model_path)
         return model
+    assert model is not None
     import torch
     from .model import ModelWrapper
     model.load_state_dict(torch.load(model_path))
@@ -378,14 +387,18 @@ def eval_main(args, argv):
     prepare_env(env_args)
     env = make_env(env_args)
 
-    model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
+    model_paths = argv[0].split(':') if len(argv) >= 1 else ['models/latest.pth']
     num_games = int(argv[1]) if len(argv) >= 2 else 100
     num_process = int(argv[2]) if len(argv) >= 3 else 1
 
-    agent1 = build_agent(model_path, env)
-    if agent1 is None:
-        model = load_model(model_path, env.net())
-        agent1 = Agent(model)
+    def resolve_agent(model_path):
+        agent = build_agent(model_path, env)
+        if agent is None:
+            model = load_model(model_path, env.net())
+            agent = Agent(model)
+        return agent
+
+    main_agent = resolve_agent(model_paths[0])
     critic = None
 
     print('%d process, %d games' % (num_process, num_games))
@@ -393,7 +406,8 @@ def eval_main(args, argv):
     seed = random.randrange(1e8)
     print('seed = %d' % seed)
 
-    agents = [agent1] + [RandomAgent() for _ in range(len(env.players()) - 1)]
+    opponent = model_paths[1] if len(model_paths) > 1 else 'random'
+    agents = [main_agent] + [resolve_agent(opponent) for _ in range(len(env.players()) - 1)]
 
     evaluate_mp(env, agents, critic, env_args, {'default': {}}, num_process, num_games, seed)
 
@@ -422,7 +436,7 @@ def eval_client_main(args, argv):
             host = argv[1] if len(argv) >= 2 else 'localhost'
             conn = connect_socket_connection(host, network_match_port)
             env_args = conn.recv()
-        except EOFError:
+        except ConnectionResetError:
             break
 
         model_path = argv[0] if len(argv) >= 1 else 'models/latest.pth'
