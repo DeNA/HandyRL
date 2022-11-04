@@ -147,7 +147,7 @@ def forward_prediction(model, hidden, batch, args):
         outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
-        outputs = {}
+        outputs = []
         for t in range(batch_shape[1]):
             obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             omask_ = batch['observation_mask'][:, t]
@@ -166,13 +166,10 @@ def forward_prediction(model, hidden, batch, args):
                     model.train()
                 outputs_ = model(obs, hidden_)
             outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
-            for k, o in outputs_.items():
-                if k == 'hidden':
-                    next_hidden = o
-                else:
-                    outputs[k] = outputs.get(k, []) + [o]
+            next_hidden = outputs_.pop('hidden')
             hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
-        outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
+            outputs.append(outputs_)
+        outputs = bimap_r(outputs[0], rotate(outputs), lambda _, o: torch.stack(o, dim=1) if None not in o else None)
 
     for k, o in outputs.items():
         if k == 'policy':
