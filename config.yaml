@@ -1,6 +1,6 @@
-
 env_args:
     env: 'TicTacToe'
+    multidiscrete: True
     #env: 'Geister'
     #env: 'HungryGeese'
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
@@ -35,4 +35,3 @@ train_args:
 worker_args:
     server_address: ''
     num_parallel: 8
-

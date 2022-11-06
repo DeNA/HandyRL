@@ -396,6 +396,10 @@ class Learner:
     def __init__(self, args, net=None, remote=False):
         train_args = args['train_args']
         env_args = args['env_args']
+        
+        if not "multidiscrete" in env_args:
+            env_args["multidiscrete"] = False
+        
         train_args['env'] = env_args
         args = train_args
 
@@ -411,6 +415,10 @@ class Learner:
         # trained datum
         self.model_epoch = self.args['restart_epoch']
         self.model = net if net is not None else self.env.net()
+        
+        if env_args["multidiscrete"] and not hasattr(self.model, "nvec"):
+            raise Exception("multidiscrete argument set to True but model has no nvec attribute set. Please set nvec in your model in the format [nb of actions of first indepent action set, nb of actions in second indepent action set, ...]")
+            
         if self.model_epoch > 0:
             self.model.load_state_dict(torch.load(self.model_path(self.model_epoch)), strict=False)
 
