@@ -3,7 +3,7 @@ from PIL import Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ...environment import BaseEnvironment
+from ..environment import BaseEnvironment
 
 class TorusConv2d(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size, bn):
@@ -27,7 +27,7 @@ class GeeseNet(nn.Module):
 
         self.conv0 = TorusConv2d(4, filters, (3, 3), True)
         self.blocks = nn.ModuleList([TorusConv2d(filters, filters, (3, 3), True) for _ in range(layers)])
-        self.head_p = nn.Linear(filters, 8, bias=False)
+        self.head_p = nn.Linear(filters, 9, bias=False)
         self.head_v = nn.Linear(filters * 2, 1, bias=False)
 
     def forward(self, x, _=None):
@@ -67,7 +67,8 @@ class Environment(BaseEnvironment):
         pos = np.array([np.tile(np.arange(10), 10), np.repeat(np.arange(10), 10)]).T
         idxs = np.arange(10*10).tolist()
         for p in self.players():
-            choice = idxs.pop(np.random.choice(idxs))
+            choice = np.random.choice(idxs)
+            idxs.remove(choice)
             self._players[p] = {"pos": pos[choice]}
             self.board[pos[choice][0], pos[choice][1]] = p+1
             
