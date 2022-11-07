@@ -1,6 +1,5 @@
 env_args:
     env: 'TicTacToe'
-    multidiscrete: True
     #env: 'Geister'
     #env: 'HungryGeese'
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
