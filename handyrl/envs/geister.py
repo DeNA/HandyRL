@@ -34,16 +34,10 @@ class ConvLSTMCell(nn.Module):
         )
 
     def init_hidden(self, input_size, batch_size):
-        if batch_size is None:  # for inference
-            return tuple([
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32),
-                np.zeros((self.hidden_dim, *input_size), dtype=np.float32)
-            ])
-        else:  # for training
-            return tuple([
-                torch.zeros(*batch_size, self.hidden_dim, *input_size),
-                torch.zeros(*batch_size, self.hidden_dim, *input_size)
-            ])
+        return tuple([
+            torch.zeros(*batch_size, self.hidden_dim, *input_size),
+            torch.zeros(*batch_size, self.hidden_dim, *input_size)
+        ])
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
@@ -62,6 +56,11 @@ class ConvLSTMCell(nn.Module):
 
         return h_next, c_next
 
+
+# Deep Repeated Conv-LSTM (https://arxiv.org/abs/1901.03559)
+# increases expressive power with fewer parameters
+# by repeatedly computing multi-layer convolutional LSTM.
+# When num_repeats=1, it is simply a multi-layer Conv-LSTM.
 
 class DRC(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, kernel_size=3, bias=True):
@@ -93,7 +92,7 @@ class DRC(nn.Module):
         hs, cs = hidden
         for _ in range(num_repeats):
             for i, block in enumerate(self.blocks):
-                hs[i], cs[i] = block(x, (hs[i], cs[i]))
+                hs[i], cs[i] = block(hs[i - 1] if i > 0 else x, (hs[i], cs[i]))
 
         return hs[-1], (hs, cs)
 
@@ -132,7 +131,8 @@ class GeisterNet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        layers, filters, p_filters = 3, 32, 8
+        layers, filters = 3, 32
+        p_filters, v_filters = 8, 2
         input_channels = 7 + 18  # board channels + scalar inputs
         self.input_size = (input_channels, 6, 6)
 
@@ -140,12 +140,12 @@ class GeisterNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(filters)
         self.body = DRC(layers, filters, filters)
 
-        self.head_p_move = Conv2dHead((filters * 2, 6, 6), p_filters, 4)
+        self.head_p_move = Conv2dHead((filters, 6, 6), p_filters, 4)
         self.head_p_set = nn.Linear(1, 70, bias=True)
-        self.head_v = ScalarHead((filters * 2, 6, 6), 1, 1)
-        self.head_r = ScalarHead((filters * 2, 6, 6), 1, 1)
+        self.head_v = ScalarHead((filters, 6, 6), v_filters, 1)
+        self.head_r = ScalarHead((filters, 6, 6), v_filters, 1)
 
-    def init_hidden(self, batch_size=None):
+    def init_hidden(self, batch_size=[]):
         return self.body.init_hidden(self.input_size[1:], batch_size)
 
     def forward(self, x, hidden):
@@ -155,7 +155,6 @@ class GeisterNet(nn.Module):
 
         h_e = F.relu(self.bn1(self.conv1(h)))
         h, hidden = self.body(h_e, hidden, num_repeats=3)
-        h = torch.cat([h_e, h], -3)
 
         h_p_move = self.head_p_move(h)
         turn_color = s[:, :1]
@@ -190,10 +189,11 @@ class Environment(BaseEnvironment):
 
     def __init__(self, args=None):
         super().__init__()
+        self.args = args if args is not None else {}
         self.reset()
 
-    def reset(self, args={}):
-        self.args = args
+    def reset(self, args=None):
+        self.game_args = args if args is not None else {}
         self.board = -np.ones((6, 6), dtype=np.int32)  # (x, y) -1 is empty
         self.color = self.BLACK
         self.turn_count = -2  # before setting original positions
@@ -344,8 +344,9 @@ class Environment(BaseEnvironment):
         s = '  ' + ' '.join(self.Y) + '\n'
         for i in range(6):
             s += self.X[i] + ' ' + ' '.join([self.P[_piece(self.board[i, j])] for j in range(6)]) + '\n'
-        s += 'color = ' + self.C[self.color] + '\n'
-        s += 'record = ' + self.record_string()
+        s += 'remained = B:%d R:%d b:%d r:%d' % tuple(self.piece_cnt) + '\n'
+        s += 'turn = ' + str(self.turn_count).ljust(3) + ' color = ' + self.C[self.color]
+        # s += 'record = ' + self.record_string()
         return s
 
     def _set(self, layout):
@@ -410,7 +411,7 @@ class Environment(BaseEnvironment):
 
     def update(self, info, reset):
         if reset:
-            self.args = {**self.args, **info}
+            self.game_args = {**self.game_args, **info}
             self.reset(info)
         elif 'set' in info:
             self._set(info['set'])
@@ -448,6 +449,8 @@ class Environment(BaseEnvironment):
         if self.turn_count < 0:
             layout = action - 4 * 6 * 6
             return 0 <= layout < 70
+        elif not 0 <= action < 4 * 6 * 6:
+            return False
 
         pos_from = self.action2from(action, self.color)
         pos_to = self.action2to(action, self.color)
@@ -484,10 +487,6 @@ class Environment(BaseEnvironment):
                     actions.append(action)
 
         return actions
-
-    def action_length(self):
-        # maximum action label (it determines output size of policy function)
-        return 4 * 6 * 6 + 70
 
     def players(self):
         return [0, 1]

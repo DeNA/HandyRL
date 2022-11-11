@@ -78,6 +78,13 @@ class BaseEnvironment:
         return [self.turn()]
 
     #
+    # Should be defined if there are other players besides the turn player
+    # who should observe the environment (mainly with RNNs)
+    #
+    def observers(self):
+        return []
+
+    #
     # Should be defined in all games
     #
     def terminal(self):
@@ -99,12 +106,6 @@ class BaseEnvironment:
     # Should be defined in all games
     #
     def legal_actions(self, player):
-        raise NotImplementedError()
-
-    #
-    # Should be defined in all games
-    #
-    def action_length(self):
         raise NotImplementedError()
 
     #

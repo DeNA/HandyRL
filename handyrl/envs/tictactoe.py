@@ -271,10 +271,6 @@ class Environment(BaseEnvironment):
         player = self.turn()
         return [pos + 9 * player for pos in range(3 * 3) if self.board[pos // 3, pos % 3] == 0]
 
-    def action_length(self):
-        # maximum size of policy (it determines output size of policy function)
-        return 3 * 3
-
     def players(self):
         return [0, 1]
 

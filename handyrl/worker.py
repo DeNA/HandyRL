@@ -12,6 +12,7 @@ from collections import deque
 import multiprocessing as mp
 import pickle
 import copy
+import queue
 
 from .environment import prepare_env, make_env
 from .connection import QueueCommunicator
@@ -65,6 +66,8 @@ class Worker:
     def run(self):
         while True:
             args = send_recv(self.conn, ('args', None))
+            if args is None:
+                break
             role = args['role']
 
             models = {}
@@ -84,8 +87,8 @@ class Worker:
                 send_recv(self.conn, ('result', result))
 
 
-def make_worker_args(args, n_ga, gaid, wid, conn):
-    return args, conn, wid * n_ga + gaid
+def make_worker_args(args, n_ga, gaid, base_wid, wid, conn):
+    return args, conn, base_wid + wid * n_ga + gaid
 
 
 def open_worker(args, conn, wid):
@@ -107,29 +110,34 @@ class Gather(QueueCommunicator):
         n_pro, n_ga = args['worker']['num_parallel'], args['worker']['num_gathers']
 
         num_workers_per_gather = (n_pro // n_ga) + int(gaid < n_pro % n_ga)
+        base_wid = args['worker'].get('base_worker_id', 0)
+
         worker_conns = open_multiprocessing_connections(
             num_workers_per_gather,
             open_worker,
-            functools.partial(make_worker_args, args, n_ga, gaid)
+            functools.partial(make_worker_args, args, n_ga, gaid, base_wid)
         )
 
         for conn in worker_conns:
             self.add_connection(conn)
 
-        self.args_buf_len = 1 + len(worker_conns) // 4
-        self.result_buf_len = 1 + len(worker_conns) // 4
+        self.buffer_length = 1 + len(worker_conns) // 4
 
     def __del__(self):
         print('finished gather %d' % self.gather_id)
 
     def run(self):
-        while True:
-            conn, (command, args) = self.recv()
+        while self.connection_count() > 0:
+            try:
+                conn, (command, args) = self.recv(timeout=0.3)
+            except queue.Empty:
+                continue
+
             if command == 'args':
                 # When requested arguments, return buffered outputs
                 if len(self.args_queue) == 0:
                     # get multiple arguments from server and store them
-                    self.server_conn.send((command, [None] * self.args_buf_len))
+                    self.server_conn.send((command, [None] * self.buffer_length))
                     self.args_queue += self.server_conn.recv()
 
                 next_args = self.args_queue.popleft()
@@ -151,7 +159,7 @@ class Gather(QueueCommunicator):
                 self.result_send_map[command].append(args)
                 self.result_send_cnt += 1
 
-                if self.result_send_cnt >= self.result_buf_len:
+                if self.result_send_cnt >= self.buffer_length:
                     # send datum to server after buffering certain number of datum
                     for command, args_list in self.result_send_map.items():
                         self.server_conn.send((command, args_list))
@@ -161,11 +169,8 @@ class Gather(QueueCommunicator):
 
 
 def gather_loop(args, conn, gaid):
-    try:
-        gather = Gather(args, conn, gaid)
-        gather.run()
-    finally:
-        gather.shutdown()
+    gather = Gather(args, conn, gaid)
+    gather.run()
 
 
 class WorkerCluster(QueueCommunicator):
@@ -188,37 +193,35 @@ class WorkerServer(QueueCommunicator):
     def __init__(self, args):
         super().__init__()
         self.args = args
+        self.total_worker_count = 0
 
     def run(self):
         # prepare listening connections
         def entry_server(port):
             print('started entry server %d' % port)
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
-            while not self.shutdown_flag:
+            conn_acceptor = accept_socket_connections(port=port)
+            while True:
                 conn = next(conn_acceptor)
-                if conn is not None:
-                    worker_args = conn.recv()
-                    print('accepted connection from %s!' % worker_args['address'])
-                    args = copy.deepcopy(self.args)
-                    args['worker'] = worker_args
-                    conn.send(args)
-                    conn.close()
+                worker_args = conn.recv()
+                print('accepted connection from %s!' % worker_args['address'])
+                worker_args['base_worker_id'] = self.total_worker_count
+                self.total_worker_count += worker_args['num_parallel']
+                args = copy.deepcopy(self.args)
+                args['worker'] = worker_args
+                conn.send(args)
+                conn.close()
             print('finished entry server')
 
         def worker_server(port):
-            conn_acceptor = accept_socket_connections(port=port, timeout=0.3)
             print('started worker server %d' % port)
-            while not self.shutdown_flag:  # use super class's flag
+            conn_acceptor = accept_socket_connections(port=port)
+            while True:
                 conn = next(conn_acceptor)
-                if conn is not None:
-                    self.add_connection(conn)
+                self.add_connection(conn)
             print('finished worker server')
 
-        # use thread list of super class
-        self.threads.append(threading.Thread(target=entry_server, args=(9999,)))
-        self.threads.append(threading.Thread(target=worker_server, args=(9998,)))
-        self.threads[-2].start()
-        self.threads[-1].start()
+        threading.Thread(target=entry_server, args=(9999,), daemon=True).start()
+        threading.Thread(target=worker_server, args=(9998,), daemon=True).start()
 
 
 def entry(worker_args):
@@ -258,7 +261,11 @@ class RemoteWorkerCluster:
                 p.terminate()
 
 
-def worker_main(args):
+def worker_main(args, argv):
     # offline generation worker
-    worker = RemoteWorkerCluster(args=args['worker_args'])
+    worker_args = args['worker_args']
+    if len(argv) >= 1:
+        worker_args['num_parallel'] = int(argv[0])
+
+    worker = RemoteWorkerCluster(args=worker_args)
     worker.run()

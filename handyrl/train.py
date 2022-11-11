@@ -11,6 +11,7 @@ import random
 import bz2
 import pickle
 import warnings
+import queue
 from collections import deque
 
 import numpy as np
@@ -26,7 +27,6 @@ from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
 from .connection import MultiProcessJobExecutor
-from .connection import accept_socket_connections
 from .worker import WorkerCluster, WorkerServer
 
 
@@ -57,20 +57,23 @@ def make_batch(episodes, args):
         if not args['turn_based_training']:  # solo training
             players = [random.choice(players)]
 
-        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))  # template for padding
-        p_zeros = np.zeros_like(moments[0]['policy'][moments[0]['turn'][0]])  # template for padding
+        # template for padding
+        obs_zeros = map_r(moments[0]['observation'][moments[0]['turn'][0]], lambda o: np.zeros_like(o))
+        amask_zeros = np.zeros_like(moments[0]['action_mask'][moments[0]['turn'][0]])
 
-        # data that is chainge by training configuration
+        # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
             p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
+            prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
             act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
-            p = np.array([[replace_none(m['policy'][player], p_zeros) for player in players] for m in moments])
+            p = np.array([[replace_none(m['policy'][player], amask_zeros) for player in players] for m in moments])
+            prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
             act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
-            amask = np.array([[replace_none(m['action_mask'][player], p_zeros + 1e32) for player in players] for m in moments])
+            amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
 
         # reshape observation
         obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
@@ -83,47 +86,40 @@ def make_batch(episodes, args):
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
-        tmask = np.array([[[m['policy'][player] is not None] for player in players] for m in moments], dtype=np.float32)
-        omask = np.array([[[m['value'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        tmask = np.array([[[m['selected_prob'][player] is not None] for player in players] for m in moments], dtype=np.float32)
+        omask = np.array([[[m['observation'][player] is not None] for player in players] for m in moments], dtype=np.float32)
 
         progress = np.arange(ep['start'], ep['end'], dtype=np.float32)[..., np.newaxis] / ep['total']
 
         # pad each array if step length is short
+        batch_steps = args['burn_in_steps'] + args['forward_steps']
         if len(tmask) < args['forward_steps']:
-            pad_len = args['forward_steps'] - len(tmask)
-            obs = map_r(obs, lambda o: np.pad(o, [(0, pad_len)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
-            p = np.pad(p, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            v = np.concatenate([v, np.tile(oc, [pad_len, 1, 1])])
-            act = np.concatenate([act, [[[random.randrange(len(p[0]))]] for _ in range(pad_len)]])
-            rew = np.pad(rew, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            ret = np.pad(ret, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=0)
-            emask = np.pad(emask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
-            tmask = np.pad(tmask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
-            omask = np.pad(omask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1)
-            amask = np.pad(amask, [(0, pad_len), (0, 0), (0, 0)], 'constant', constant_values=1e32)
-            progress = np.pad(progress, [(0, pad_len), (0, 0)], 'constant', constant_values=1)
+            pad_len_b = args['burn_in_steps'] - (ep['train_start'] - ep['start'])
+            pad_len_a = batch_steps - len(tmask) - pad_len_b
+            obs = map_r(obs, lambda o: np.pad(o, [(pad_len_a, pad_len_b)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            p = np.pad(p, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            prob = np.pad(prob, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1)
+            v = np.concatenate([np.pad(v, [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0), np.tile(oc, [pad_len_a,     1, 1])])
+            act = np.pad(act, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            rew = np.pad(rew, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            ret = np.pad(ret, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            emask = np.pad(emask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            tmask = np.pad(tmask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            omask = np.pad(omask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
+            amask = np.pad(amask, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1e32)
+            progress = np.pad(progress, [(pad_len_b, pad_len_a), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
-
-    p, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = zip(*datum)
+        datum.append((p, prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    p = to_torch(np.array(p))
-    v = to_torch(np.array(v))
-    act = to_torch(np.array(act))
-    oc = to_torch(np.array(oc))
-    rew = to_torch(np.array(rew))
-    ret = to_torch(np.array(ret))
-    emask = to_torch(np.array(emask))
-    tmask = to_torch(np.array(tmask))
-    omask = to_torch(np.array(omask))
-    amask = to_torch(np.array(amask))
-    progress = to_torch(np.array(progress))
+    p, prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
-        'policy': p, 'value': v,
+        'policy': p,
+        'selected_prob': prob,
+        'value': v,
         'action': act, 'outcome': oc,
         'reward': rew, 'return': ret,
         'episode_mask': emask,
@@ -145,42 +141,54 @@ def forward_prediction(model, hidden, batch, args):
         tuple: batch outputs of neural network
     """
 
-    observations = batch['observation']  # (B, T, P, ...)
+    observations = batch['observation']  # (..., B, T, P or 1, ...)
+    batch_shape = batch['action'].size()[:3]  # (B, T, P or 1)
 
     if hidden is None:
         # feed-forward neural network
-        obs = map_r(observations, lambda o: o.view(-1, *o.size()[3:]))
+        obs = map_r(observations, lambda o: o.flatten(0, 2))  # (..., B * T * P or 1, ...)
         outputs = model(obs, None)
+        outputs = map_r(outputs, lambda o: o.unflatten(0, batch_shape))  # (..., B, T, P or 1, ...)
     else:
         # sequential computation with RNN
         outputs = {}
-        for t in range(batch['turn_mask'].size(1)):
-            obs = map_r(observations, lambda o: o[:, t].reshape(-1, *o.size()[3:]))  # (..., B * P, ...)
+        for t in range(batch_shape[1]):
+            obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
             action = batch['action'][:, t]
             #omask_ = batch['observation_mask'][:, t]
-            #omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (len(h.size()) - 2))))
+            #omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
             #hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
             #if args['turn_based_training'] and not args['observation']:
             #    hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
             #else:
-            #    hidden_ = map_r(hidden_, lambda h: h.view(-1, *h.size()[2:]))  # (..., B * P, ...)
+            #    hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
             hidden_ = hidden
-            outputs_ = model(obs, hidden_, action)
+            if t < args['burn_in_steps']:
+                model.eval()
+                with torch.no_grad():
+                    outputs_ = model(obs, hidden_, action)
+            else:
+                if not model.training:
+                    model.train()
+                outputs_ = model(obs, hidden_, action)
+            next_hidden = outputs_.pop('hidden')
+            outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
-                    next_hidden = outputs_['hidden']
+                    next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            #next_hidden = bimap_r(next_hidden, hidden, lambda nh, h: nh.view(h.size(0), -1, *h.size()[2:]))  # (..., B, P or 1, ...)
             #hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
             hidden = next_hidden
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
-        o = o.view(*batch['turn_mask'].size()[:2], -1, o.size(-1))
         if k == 'policy':
             # gather turn player's policies
-            outputs[k] = o.mul(batch['turn_mask']).sum(2, keepdim=True)# - batch['action_mask']
+            o = o.mul(batch['turn_mask'])
+            if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
+                o = o.sum(2, keepdim=True)  # gather turn player's policies
+            outputs[k] = o # - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
             o = o.view(*batch['turn_mask'].size()[:2], -1, 1)
@@ -201,9 +209,8 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
     losses = {}
     dcnt = tmasks.sum().item()
-    turn_advantages = total_advantages.mul(tmasks).sum(2, keepdim=True)
 
-    losses['p'] = (-log_selected_policies * turn_advantages).sum()
+    losses['p'] = (-log_selected_policies * total_advantages).mul(tmasks).sum()
     losses['pp'] = F.kl_div(F.log_softmax(outputs['policy'], -1), F.softmax(batch['policy'], -1), reduction='none').sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
@@ -226,11 +233,15 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
 
 def compute_loss(batch, model, hidden, args):
     outputs = forward_prediction(model, hidden, batch, args)
+    if args['burn_in_steps'] > 0:
+        batch = map_r(batch, lambda v: v[:, args['burn_in_steps']:] if v.size(1) > 1 else v)
+        outputs = map_r(outputs, lambda v: v[:, args['burn_in_steps']:])
+
     actions = batch['action']
     emasks = batch['episode_mask']
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
-    log_selected_b_policies = F.log_softmax(batch['policy']  , dim=-1).gather(-1, actions) * emasks
+    log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
     log_selected_t_policies = F.log_softmax(outputs['policy'], dim=-1).gather(-1, actions) * emasks
 
     # thresholds of importance sampling
@@ -271,9 +282,7 @@ class Batcher:
     def __init__(self, args, episodes):
         self.args = args
         self.episodes = episodes
-        self.shutdown_flag = False
-
-        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'], num_receivers=2)
+        self.executor = MultiProcessJobExecutor(self._worker, self._selector(), self.args['num_batchers'])
 
     def _selector(self):
         while True:
@@ -281,7 +290,7 @@ class Batcher:
 
     def _worker(self, conn, bid):
         print('started batcher %d' % bid)
-        while not self.shutdown_flag:
+        while True:
             episodes = conn.recv()
             batch = make_batch(episodes, self.args)
             conn.send(batch)
@@ -292,31 +301,29 @@ class Batcher:
 
     def select_episode(self):
         while True:
-            ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
-            accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
+            ep_count = min(len(self.episodes), self.args['maximum_episodes'])
+            ep_idx = random.randrange(ep_count)
+            accept_rate = 1 - (ep_count - 1 - ep_idx) / ep_count
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
         #turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
         turn_candidates = ep['steps']
-        st = random.randrange(turn_candidates)
-        ed = min(st + self.args['forward_steps'], ep['steps'])
+        train_st = random.randrange(turn_candidates)
+        st = max(0, train_st - self.args['burn_in_steps'])
+        ed = min(train_st + self.args['forward_steps'], ep['steps'])
         st_block = st // self.args['compress_steps']
         ed_block = (ed - 1) // self.args['compress_steps'] + 1
         ep_minimum = {
             'args': ep['args'], 'outcome': ep['outcome'],
             'moment': ep['moment'][st_block:ed_block],
             'base': st_block * self.args['compress_steps'],
-            'start': st, 'end': ed, 'total': ep['steps'],
+            'start': st, 'end': ed, 'train_start': train_st, 'total': ep['steps'],
         }
         return ep_minimum
 
     def batch(self):
         return self.executor.recv()
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.executor.shutdown()
 
 
 class Trainer:
@@ -331,11 +338,9 @@ class Trainer:
         lr = self.default_lr * self.data_cnt_ema
         self.optimizer = optim.Adam(self.params, lr=lr, weight_decay=1e-5) if len(self.params) > 0 else None
         self.steps = 0
-        self.lock = threading.Lock()
         self.batcher = Batcher(self.args, self.episodes)
-        self.updated_model = None, 0
         self.update_flag = False
-        self.shutdown_flag = False
+        self.update_queue = queue.Queue(maxsize=1)
 
         self.wrapped_model = ModelWrapper(self.model)
         self.trained_model = self.wrapped_model
@@ -343,43 +348,21 @@ class Trainer:
             self.trained_model = nn.DataParallel(self.wrapped_model)
 
     def update(self):
-        if len(self.episodes) < self.args['minimum_episodes']:
-            return None, 0  # return None before training
         self.update_flag = True
-        while True:
-            time.sleep(0.1)
-            model, steps = self.recheck_update()
-            if model is not None:
-                break
+        model, steps = self.update_queue.get()
         return model, steps
-
-    def report_update(self, model, steps):
-        self.lock.acquire()
-        self.update_flag = False
-        self.updated_model = model, steps
-        self.lock.release()
-
-    def recheck_update(self):
-        self.lock.acquire()
-        flag = self.update_flag
-        self.lock.release()
-        return (None, -1) if flag else self.updated_model
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.batcher.shutdown()
 
     def train(self):
         if self.optimizer is None:  # non-parametric model
-            print()
-            return
+            time.sleep(0.1)
+            return self.model
 
         batch_cnt, data_cnt, loss_sum = 0, 0, {}
         if self.gpu > 0:
             self.trained_model.cuda()
         self.trained_model.train()
 
-        while data_cnt == 0 or not (self.update_flag or self.shutdown_flag):
+        while data_cnt == 0 or not self.update_flag:
             batch = self.batcher.batch()
             batch_size = batch['value'].size(0)
             player_count = batch['value'].size(2)
@@ -413,15 +396,15 @@ class Trainer:
 
     def run(self):
         print('waiting training')
-        while not self.shutdown_flag:
-            if len(self.episodes) < self.args['minimum_episodes']:
-                time.sleep(1)
-                continue
-            if self.steps == 0:
-                self.batcher.run()
-                print('started training')
+        while len(self.episodes) < self.args['minimum_episodes']:
+            time.sleep(1)
+        if self.optimizer is not None:
+            self.batcher.run()
+            print('started training')
+        while True:
             model = self.train()
-            self.report_update(model, self.steps)
+            self.update_flag = False
+            self.update_queue.put((model, self.steps))
         print('finished training')
 
 
@@ -450,6 +433,7 @@ class Learner:
         # generated datum
         self.generation_results = {}
         self.num_episodes = 0
+        self.num_returned_episodes = 0
 
         # evaluated datum
         self.results = {}
@@ -461,12 +445,6 @@ class Learner:
 
         # thread connection
         self.trainer = Trainer(args, self.model)
-
-    def shutdown(self):
-        self.shutdown_flag = True
-        self.trainer.shutdown()
-        self.worker.shutdown()
-        self.thread.join()
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
@@ -493,6 +471,9 @@ class Learner:
                 outcome = episode['outcome'][p]
                 n, r, r2 = self.generation_results.get(model_id, (0, 0, 0))
                 self.generation_results[model_id] = n + 1, r + outcome, r2 + outcome ** 2
+            self.num_returned_episodes += 1
+            if self.num_returned_episodes % 100 == 0:
+                print(self.num_returned_episodes, end=' ', flush=True)
 
         # store generated episodes
         self.trainer.episodes.extend([e for e in episodes if e is not None])
@@ -539,7 +520,8 @@ class Learner:
                 name_tag = ' (%s)' % name if name != '' else ''
                 print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
 
-            if len(self.args.get('eval', {}).get('opponent', [])) <= 1:
+            keys = self.results_per_opponent[self.model_epoch]
+            if len(self.args.get('eval', {}).get('opponent', [])) <= 1 and len(keys) <= 1:
                 output_wp('', self.results[self.model_epoch])
             else:
                 output_wp('total', self.results[self.model_epoch])
@@ -567,17 +549,24 @@ class Learner:
         # returns as list if getting multiple requests as list
         print('started server')
         prev_update_episodes = self.args['minimum_episodes']
-        while self.model_epoch < self.args['epochs'] or self.args['epochs'] < 0:
-            # no update call before storing minimum number of episodes + 1 age
-            next_update_episodes = prev_update_episodes + self.args['update_episodes']
-            while not self.shutdown_flag and self.num_episodes < next_update_episodes:
-                conn, (req, data) = self.worker.recv()
-                multi_req = isinstance(data, list)
-                if not multi_req:
-                    data = [data]
-                send_data = []
+        # no update call before storing minimum number of episodes + 1 epoch
+        next_update_episodes = prev_update_episodes + self.args['update_episodes']
 
-                if req == 'args':
+        while self.worker.connection_count() > 0 or not self.shutdown_flag:
+            try:
+                conn, (req, data) = self.worker.recv(timeout=0.3)
+            except queue.Empty:
+                continue
+
+            multi_req = isinstance(data, list)
+            if not multi_req:
+                data = [data]
+            send_data = []
+
+            if req == 'args':
+                if self.shutdown_flag:
+                    send_data = [None] * len(data)
+                else:
                     for _ in data:
                         args = {'model_id': {}}
 
@@ -596,8 +585,6 @@ class Learner:
                                 else:
                                     args['model_id'][p] = -1
                             self.num_episodes += 1
-                            if self.num_episodes % 100 == 0:
-                                print(self.num_episodes, end=' ', flush=True)
 
                         elif args['role'] == 'e':
                             # evaluation configuration
@@ -611,46 +598,46 @@ class Learner:
 
                         send_data.append(args)
 
-                elif req == 'episode':
-                    # report generated episodes
-                    self.feed_episodes(data)
-                    send_data = [None] * len(data)
+            elif req == 'episode':
+                # report generated episodes
+                self.feed_episodes(data)
+                send_data = [None] * len(data)
 
-                elif req == 'result':
-                    # report evaluation results
-                    self.feed_results(data)
-                    send_data = [None] * len(data)
+            elif req == 'result':
+                # report evaluation results
+                self.feed_results(data)
+                send_data = [None] * len(data)
 
-                elif req == 'model':
-                    for model_id in data:
-                        model = self.model
-                        if model_id != self.model_epoch and model_id > 0:
-                            try:
-                                model = copy.deepcopy(self.model)
-                                model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
-                            except:
-                                # return latest model if failed to load specified model
-                                pass
-                        send_data.append(pickle.dumps(model))
+            elif req == 'model':
+                for model_id in data:
+                    model = self.model
+                    if model_id != self.model_epoch and model_id > 0:
+                        try:
+                            model = copy.deepcopy(self.model)
+                            model.load_state_dict(torch.load(self.model_path(model_id)), strict=False)
+                        except:
+                            # return latest model if failed to load specified model
+                            pass
+                    send_data.append(pickle.dumps(model))
 
-                if not multi_req and len(send_data) == 1:
-                    send_data = send_data[0]
-                self.worker.send(conn, send_data)
-            prev_update_episodes = next_update_episodes
-            self.update()
+            if not multi_req and len(send_data) == 1:
+                send_data = send_data[0]
+            self.worker.send(conn, send_data)
+
+            if self.num_returned_episodes >= next_update_episodes:
+                prev_update_episodes = next_update_episodes
+                next_update_episodes = prev_update_episodes + self.args['update_episodes']
+                self.update()
+                if self.args['epochs'] >= 0 and self.model_epoch >= self.args['epochs']:
+                    self.shutdown_flag = True
         print('finished server')
 
     def run(self):
-        try:
-            # open training thread
-            self.thread = threading.Thread(target=self.trainer.run)
-            self.thread.start()
-            # open generator, evaluator
-            self.worker.run()
-            self.server()
-
-        finally:
-            self.shutdown()
+        # open training thread
+        threading.Thread(target=self.trainer.run, daemon=True).start()
+        # open generator, evaluator
+        self.worker.run()
+        self.server()
 
 
 def train_main(args):

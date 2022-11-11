@@ -25,7 +25,6 @@ def test_environment_property(environment_path, env):
         env_module = importlib.import_module(env_path)
         e = env_module.Environment()
         e.players()
-        e.action_length()
         str(e)
     except Exception:
         traceback.print_exc()

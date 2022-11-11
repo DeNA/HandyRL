@@ -23,9 +23,12 @@ class RandomAgent:
 
 
 class RuleBasedAgent(RandomAgent):
+    def __init__(self, key=None):
+        self.key = key
+
     def action(self, env, player, show=False):
         if hasattr(env, 'rule_based_action'):
-            return env.rule_based_action(player)
+            return env.rule_based_action(player, key=self.key)
         else:
             return random.choice(env.legal_actions(player))
 
@@ -34,17 +37,19 @@ def print_outputs(env, prob, v):
     if hasattr(env, 'print_outputs'):
         env.print_outputs(prob, v)
     else:
-        print('v = %f' % v)
-        print('p = %s' % (prob * 1000).astype(int))
+        if v is not None:
+            print('v = %f' % v)
+        if prob is not None:
+            print('p = %s' % (prob * 1000).astype(int))
 
 
 class Agent:
-    def __init__(self, model, observation=False, temperature=0.0):
+    def __init__(self, model, temperature=0.0, observation=True):
         # model might be a neural net, or some planning algorithm such as game tree search
         self.model = model
         self.hidden = None
-        self.observation = observation
         self.temperature = temperature
+        self.observation = observation
 
     def reset(self, env, show=False):
         self.hidden = self.model.init_hidden()
@@ -55,7 +60,8 @@ class Agent:
         return outputs
 
     def action(self, env, player, show=False):
-        outputs = self.plan(env.observation(player))
+        obs = env.observation(player)
+        outputs = self.plan(obs)
         actions = env.legal_actions(player)
         p = outputs['policy']
         v = outputs.get('value', None)
@@ -75,11 +81,12 @@ class Agent:
     def observe(self, env, player, show=False):
         v = None
         if self.observation:
-            outputs = self.plan(env.observation(player))
+            obs = env.observation(player)
+            outputs = self.plan(obs)
             v = outputs.get('value', None)
             if show:
                 print_outputs(env, None, v)
-        return v if v is not None else [0.0]
+        return v
 
 
 class EnsembleAgent(Agent):
@@ -90,16 +97,16 @@ class EnsembleAgent(Agent):
         outputs = {}
         for i, model in enumerate(self.model):
             o = model.inference(obs, self.hidden[i])
-            for k, v in o:
+            for k, v in o.items():
                 if k == 'hidden':
                     self.hidden[i] = v
                 else:
-                    outputs[k] = outputs.get(k, []) + [o]
-        for k, vl in outputs:
+                    outputs[k] = outputs.get(k, []) + [v]
+        for k, vl in outputs.items():
             outputs[k] = np.mean(vl, axis=0)
         return outputs
 
 
 class SoftAgent(Agent):
-    def __init__(self, model, observation=False):
-        super().__init__(model, observation=observation, temperature=1.0)
+    def __init__(self, model):
+        super().__init__(model, temperature=1.0)

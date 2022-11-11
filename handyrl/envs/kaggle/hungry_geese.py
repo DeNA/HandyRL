@@ -183,14 +183,10 @@ class Environment(BaseEnvironment):
         # return legal action list
         return list(range(len(self.ACTION)))
 
-    def action_length(self):
-        # maximum action label (it determines output size of policy function)
-        return len(self.ACTION)
-
     def players(self):
         return list(range(self.NUM_AGENTS))
 
-    def rule_based_action(self, player):
+    def rule_based_action(self, player, key=None):
         from kaggle_environments.envs.hungry_geese.hungry_geese import Observation, Configuration, Action, GreedyAgent
         action_map = {'N': Action.NORTH, 'S': Action.SOUTH, 'W': Action.WEST, 'E': Action.EAST}
 

@@ -38,7 +38,11 @@ class ModelWrapper(nn.Module):
 
     def init_hidden(self, batch_size=None):
         if hasattr(self.model, 'init_hidden'):
-            return self.model.init_hidden(batch_size)
+            if batch_size is None:  # for inference
+                hidden = self.model.init_hidden([])
+                return map_r(hidden, lambda h: h.detach().numpy() if isinstance(h, torch.Tensor) else h)
+            else:  # for training
+                return self.model.init_hidden(batch_size)
         return None
 
     def forward(self, *args, **kwargs):
@@ -65,7 +69,7 @@ class RandomModel(nn.Module):
         wrapped_model = ModelWrapper(model)
         hidden = wrapped_model.init_hidden()
         outputs = wrapped_model.inference(x, hidden)
-        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items()}
+        self.output_dict = {key: np.zeros_like(value) for key, value in outputs.items() if key != 'hidden'}
 
-    def inference(self, *args):
+    def inference(self, *args, **kwargs):
         return self.output_dict
