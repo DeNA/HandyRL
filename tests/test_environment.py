@@ -7,7 +7,7 @@ import traceback
 ENVS = [
     'tictactoe',
     'geister',
-    'parallel_tictactoe',
+    #'parallel_tictactoe',
     'kaggle.hungry_geese',
 ]
 

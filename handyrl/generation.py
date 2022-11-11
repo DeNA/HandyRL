@@ -29,8 +29,9 @@ class Generator:
             return None
 
         while not self.env.terminal():
-            moment_keys = ['observation', 'selected_prob', 'action_mask', 'action', 'value', 'reward', 'return']
+            moment_keys = ['observation', 'policy', 'selected_prob', 'action_mask', 'action', 'value', 'reward', 'return']
             moment = {key: {p: None for p in self.env.players()} for key in moment_keys}
+            temperature = self.args['policy_decay'] ** len(moments)
 
             turn_players = self.env.turns()
             observers = self.env.observers()
@@ -54,9 +55,10 @@ class Generator:
                     legal_actions = self.env.legal_actions(player)
                     action_mask = np.ones_like(p_) * 1e32
                     action_mask[legal_actions] = 0
-                    p = softmax(p_ - action_mask)
+                    p = softmax(p_ / temperature - action_mask)
                     action = random.choices(legal_actions, weights=p[legal_actions])[0]
 
+                    moment['policy'][player] = p
                     moment['selected_prob'][player] = p[action]
                     moment['action_mask'][player] = action_mask
                     moment['action'][player] = action

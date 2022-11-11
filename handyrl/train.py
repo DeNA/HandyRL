@@ -64,11 +64,13 @@ def make_batch(episodes, args):
         # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
             obs = [[m['observation'][m['turn'][0]]] for m in moments]
+            p = np.array([[m['policy'][m['turn'][0]]] for m in moments])
             prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
             act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
         else:
             obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
+            p = np.array([[replace_none(m['policy'][player], amask_zeros) for player in players] for m in moments])
             prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
             act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
             amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
@@ -78,7 +80,7 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        v = np.array([replace_none(m['value'][m['turn'][0]], [0, 0]) for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
@@ -91,12 +93,13 @@ def make_batch(episodes, args):
 
         # pad each array if step length is short
         batch_steps = args['burn_in_steps'] + args['forward_steps']
-        if len(tmask) < batch_steps:
+        if len(tmask) < args['forward_steps']:
             pad_len_b = args['burn_in_steps'] - (ep['train_start'] - ep['start'])
             pad_len_a = batch_steps - len(tmask) - pad_len_b
-            obs = map_r(obs, lambda o: np.pad(o, [(pad_len_b, pad_len_a)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            obs = map_r(obs, lambda o: np.pad(o, [(pad_len_a, pad_len_b)] + [(0, 0)] * (len(o.shape) - 1), 'constant', constant_values=0))
+            p = np.pad(p, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
             prob = np.pad(prob, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=1)
-            v = np.concatenate([np.pad(v, [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0), np.tile(oc, [pad_len_a, 1, 1])])
+            v = np.concatenate([np.pad(v, [(pad_len_b, 0), (0, 0), (0, 0)], 'constant', constant_values=0), np.tile(oc, [pad_len_a,     1, 1])])
             act = np.pad(act, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
             rew = np.pad(rew, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
             ret = np.pad(ret, [(pad_len_b, pad_len_a), (0, 0), (0, 0)], 'constant', constant_values=0)
@@ -107,13 +110,14 @@ def make_batch(episodes, args):
             progress = np.pad(progress, [(pad_len_b, pad_len_a), (0, 0)], 'constant', constant_values=1)
 
         obss.append(obs)
-        datum.append((prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
+        datum.append((p, prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress))
 
     obs = to_torch(bimap_r(obs_zeros, rotate(obss), lambda _, o: np.array(o)))
-    prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
+    p, prob, v, act, oc, rew, ret, emask, tmask, omask, amask, progress = [to_torch(np.array(val)) for val in zip(*datum)]
 
     return {
         'observation': obs,
+        'policy': p,
         'selected_prob': prob,
         'value': v,
         'action': act, 'outcome': oc,
@@ -150,38 +154,44 @@ def forward_prediction(model, hidden, batch, args):
         outputs = {}
         for t in range(batch_shape[1]):
             obs = map_r(observations, lambda o: o[:, t].flatten(0, 1))  # (..., B * P or 1, ...)
-            omask_ = batch['observation_mask'][:, t]
-            omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
-            hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
-            if args['turn_based_training'] and not args['observation']:
-                hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
-            else:
-                hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
+            action = batch['action'][:, t]
+            #omask_ = batch['observation_mask'][:, t]
+            #omask = map_r(hidden, lambda h: omask_.view(*h.size()[:2], *([1] * (h.dim() - 2))))
+            #hidden_ = bimap_r(hidden, omask, lambda h, m: h * m)  # (..., B, P, ...)
+            #if args['turn_based_training'] and not args['observation']:
+            #    hidden_ = map_r(hidden_, lambda h: h.sum(1))  # (..., B * 1, ...)
+            #else:
+            #    hidden_ = map_r(hidden_, lambda h: h.flatten(0, 1))  # (..., B * P, ...)
+            hidden_ = hidden
             if t < args['burn_in_steps']:
                 model.eval()
                 with torch.no_grad():
-                    outputs_ = model(obs, hidden_)
+                    outputs_ = model(obs, hidden_, action)
             else:
                 if not model.training:
                     model.train()
-                outputs_ = model(obs, hidden_)
+                outputs_ = model(obs, hidden_, action)
+            next_hidden = outputs_.pop('hidden')
             outputs_ = map_r(outputs_, lambda o: o.unflatten(0, (batch_shape[0], batch_shape[2])))  # (..., B, P or 1, ...)
             for k, o in outputs_.items():
                 if k == 'hidden':
                     next_hidden = o
                 else:
                     outputs[k] = outputs.get(k, []) + [o]
-            hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
+            #hidden = trimap_r(hidden, next_hidden, omask, lambda h, nh, m: h * (1 - m) + nh * m)
+            hidden = next_hidden
         outputs = {k: torch.stack(o, dim=1) for k, o in outputs.items() if o[0] is not None}
 
     for k, o in outputs.items():
         if k == 'policy':
+            # gather turn player's policies
             o = o.mul(batch['turn_mask'])
             if o.size(2) > 1 and batch_shape[2] == 1:  # turn-alternating batch
                 o = o.sum(2, keepdim=True)  # gather turn player's policies
-            outputs[k] = o - batch['action_mask']
+            outputs[k] = o # - batch['action_mask']
         else:
             # mask valid target values and cumulative rewards
+            o = o.view(*batch['turn_mask'].size()[:2], -1, 1)
             outputs[k] = o.mul(batch['observation_mask'])
 
     return outputs
@@ -201,15 +211,20 @@ def compose_losses(outputs, log_selected_policies, total_advantages, targets, ba
     dcnt = tmasks.sum().item()
 
     losses['p'] = (-log_selected_policies * total_advantages).mul(tmasks).sum()
+    losses['pp'] = F.kl_div(F.log_softmax(outputs['policy'], -1), F.softmax(batch['policy'], -1), reduction='none').sum(-1, keepdim=True).mul(tmasks).sum()
     if 'value' in outputs:
         losses['v'] = ((outputs['value'] - targets['value']) ** 2).mul(omasks).sum() / 2
+        losses['pv'] = ((outputs['value'] - batch['outcome']) ** 2).mul(omasks).sum() / 2
     if 'return' in outputs:
         losses['r'] = F.smooth_l1_loss(outputs['return'], targets['return'], reduction='none').mul(omasks).sum()
 
-    entropy = dist.Categorical(logits=outputs['policy']).entropy().mul(tmasks.sum(-1))
+    entropy = dist.Categorical(logits=outputs['policy'] - batch['action_mask']).entropy().mul(tmasks.sum(-1))
     losses['ent'] = entropy.sum()
 
-    base_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
+    planning_weight = 1
+    reinforce_loss = losses['p'] + losses.get('v', 0) + losses.get('r', 0)
+    planning_loss = losses['pp'] + losses.get('pv', 0)
+    base_loss = (1 - planning_weight) * reinforce_loss + planning_weight * planning_loss
     entropy_loss = entropy.mul(1 - batch['progress'] * (1 - args['entropy_regularization_decay'])).sum() * -args['entropy_regularization']
     losses['total'] = base_loss + entropy_loss
 
@@ -292,7 +307,8 @@ class Batcher:
             if random.random() < accept_rate:
                 break
         ep = self.episodes[ep_idx]
-        turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        #turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
+        turn_candidates = ep['steps']
         train_st = random.randrange(turn_candidates)
         st = max(0, train_st - self.args['burn_in_steps'])
         ed = min(train_st + self.args['forward_steps'], ep['steps'])

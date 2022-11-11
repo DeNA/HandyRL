@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..environment import BaseEnvironment
+from ..search import MonteCarloTree
+from ..model import to_torch
 
 
 class Conv(nn.Module):
@@ -69,6 +71,121 @@ class SimpleConv2dModel(nn.Module):
         return {'policy': h_p, 'value': torch.tanh(h_v)}
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, filters0, filters1):
+        super().__init__()
+        self.conv = Conv(filters0, filters1, 3, bn=True)
+
+    def forward(self, x):
+        h = self.conv(x)
+        return F.relu_(x + h)
+
+
+class MuZero(nn.Module):
+    class Representation(nn.Module):
+        ''' Conversion from observation to inner abstract state '''
+        def __init__(self, input_dim, layers, filters):
+            super().__init__()
+            self.layer0 = Conv(input_dim, filters, 3, bn=True)
+            self.blocks = nn.ModuleList([ResidualBlock(filters, filters) for _ in range(layers)])
+
+        def forward(self, x):
+            h = F.relu_(self.layer0(x))
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, x):
+            self.eval()
+            with torch.no_grad():
+                rp = self(to_torch(x).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    class Prediction(nn.Module):
+        ''' Policy and value prediction from inner abstract state '''
+        def __init__(self, internal_size, num_players, action_length):
+            super().__init__()
+            self.head_p = Head(internal_size, 4, num_players * action_length)
+            self.head_v = Head(internal_size, 2, num_players)
+
+        def forward(self, rp):
+            p = self.head_p(rp)
+            v = self.head_v(rp)
+            return p, torch.tanh(v)
+
+        def inference(self, rp):
+            self.eval()
+            with torch.no_grad():
+                p, v = self(to_torch(rp).unsqueeze(0))
+            return p.cpu().numpy().squeeze(0), v.cpu().numpy().squeeze(0)
+
+    class Dynamics(nn.Module):
+        '''Abstract state transition'''
+        def __init__(self, rp_shape, layers, num_players, action_length, action_filters):
+            super().__init__()
+            self.action_shape = action_filters, rp_shape[1], rp_shape[2]
+            filters = rp_shape[0]
+            self.action_embedding = nn.Embedding(num_players * action_length, embedding_dim=np.prod(self.action_shape))
+            self.layer0 = Conv(filters + action_filters, filters, 3, bn=True)
+            self.blocks = nn.ModuleList([ResidualBlock(filters, filters) for _ in range(layers)])
+
+        def forward(self, rp, a):
+            arp = self.action_embedding(a).view(-1, *self.action_shape)
+            h = torch.cat([rp, arp], dim=1)
+            h = F.relu_(self.layer0(h))
+            for block in self.blocks:
+                h = block(h)
+            return h
+
+        def inference(self, rp, a):
+            self.eval()
+            with torch.no_grad():
+                rp = self(to_torch(rp).unsqueeze(0), to_torch(a).unsqueeze(0))
+            return rp.cpu().numpy().squeeze(0)
+
+    def __init__(self, env, obs, action_length):
+        super().__init__()
+        self.num_players = len(env.players())
+        self.action_length = action_length
+        self.input_size = obs.shape
+
+        layers, filters = 3, 32
+        action_filters = 4
+        internal_size = (filters, *self.input_size[1:])
+        self.planning_args = {
+            'root_noise_alpha': 0.15,
+            'root_noise_coef': 0.25,
+        }
+
+        self.nets = nn.ModuleDict({
+            'representation': self.Representation(self.input_size[0], layers, filters),
+            'prediction': self.Prediction(internal_size, self.num_players, self.action_length),
+            'dynamics': self.Dynamics(internal_size, layers, self.num_players, self.action_length, action_filters),
+        })
+
+    def init_hidden(self, batch_size=None):
+        return {}
+
+    def forward(self, x, hidden, action=None):
+        if 'representation' not in hidden:
+            rp = self.nets['representation'](x)
+        else:
+            rp = hidden['representation']
+        p, v = self.nets['prediction'](rp)
+        outputs = {'policy': p, 'value': v}
+
+        if action is not None:
+            next_rp = self.nets['dynamics'](rp, action)
+            outputs['hidden'] = {'representation': next_rp}
+        return outputs
+
+    def inference(self, x, hidden=None, num_simulations=30):
+        tree = MonteCarloTree(self.nets, self.planning_args)
+        p, v = tree.think(x, num_simulations)
+        return {'policy': p, 'value': v}
+
+
+
 class Environment(BaseEnvironment):
     X, Y = 'ABC',  '123'
     BLACK, WHITE = 1, -1
@@ -85,10 +202,12 @@ class Environment(BaseEnvironment):
         self.record = []
 
     def action2str(self, a, _=None):
-        return self.X[a // 3] + self.Y[a % 3]
+        pos = a % 9
+        return self.X[pos // 3] + self.Y[pos % 3]
 
-    def str2action(self, s, _=None):
-        return self.X.find(s[0]) * 3 + self.Y.find(s[1])
+    def str2action(self, s, player):
+        pos = self.X.find(s[0]) * 3 + self.Y.find(s[1])
+        return pos + 9 * player
 
     def record_string(self):
         return ' '.join([self.action2str(a) for a in self.record])
@@ -103,7 +222,8 @@ class Environment(BaseEnvironment):
     def play(self, action, _=None):
         # state transition function
         # action is integer (0 ~ 8)
-        x, y = action // 3, action % 3
+        pos = action % 9
+        x, y = pos // 3, pos % 3
         self.board[x, y] = self.color
 
         # check winning condition
@@ -127,7 +247,7 @@ class Environment(BaseEnvironment):
         if reset:
             self.reset()
         else:
-            action = self.str2action(info)
+            action = self.str2action(info, self.turn())
             self.play(action)
 
     def turn(self):
@@ -148,22 +268,22 @@ class Environment(BaseEnvironment):
 
     def legal_actions(self, _=None):
         # legal action list
-        return [a for a in range(3 * 3) if self.board[a // 3, a % 3] == 0]
+        player = self.turn()
+        return [pos + 9 * player for pos in range(3 * 3) if self.board[pos // 3, pos % 3] == 0]
 
     def players(self):
         return [0, 1]
 
     def net(self):
-        return SimpleConv2dModel()
+        obs = self.observation(self.players()[0])
+        return MuZero(self, obs, 9)
 
     def observation(self, player=None):
         # input feature for neural nets
-        turn_view = player is None or player == self.turn()
-        color = self.color if turn_view else -self.color
         a = np.stack([
-            np.ones_like(self.board) if turn_view else np.zeros_like(self.board),
-            self.board == color,
-            self.board == -color
+            np.ones_like(self.board) if self.turn() == 0 else np.zeros_like(self.board),
+            self.board == self.BLACK,
+            self.board == self.WHITE,
         ]).astype(np.float32)
         return a
 

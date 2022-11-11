@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .util import map_r
+from .search import MonteCarloTree
 
 
 def to_torch(x):
