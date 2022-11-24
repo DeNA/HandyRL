@@ -289,9 +289,13 @@ class Batcher:
             ep_count = min(len(self.episodes), self.args['maximum_episodes'])
             ep_idx = random.randrange(ep_count)
             accept_rate = 1 - (ep_count - 1 - ep_idx) / ep_count
-            if random.random() < accept_rate:
+            if random.random() >= accept_rate:
+                continue
+            try:
+                ep = self.episodes[ep_idx]
                 break
-        ep = self.episodes[ep_idx]
+            except IndexError:
+                continue
         turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
         train_st = random.randrange(turn_candidates)
         st = max(0, train_st - self.args['burn_in_steps'])
