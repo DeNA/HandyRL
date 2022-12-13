@@ -3,6 +3,7 @@
 
 # evaluation of policies or planning algorithms
 
+import functools
 import importlib
 import random
 import re
@@ -16,6 +17,11 @@ from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
 
 
 network_match_port = 9876
+
+_agent_aliases = {
+    'random': RandomAgent,
+    'rulebase': RuleBasedAgent,
+}
 
 
 def view(env, player=None):
@@ -188,14 +194,37 @@ def parse_args(arg_list):
     return args, kwargs
 
 
+def register_agent(alias=None):
+    """Register a custom agent alias.
+
+    Example:
+        >>> @register_agent(alias="transformer")
+        ... class TransformerAgent:
+        ...     pass
+        >>> env = Environment({})
+        >>> agent = build_agent("transformer", env)
+    """
+
+    def _registered_class(cls, alias=None):
+        if alias is None:
+            alias = cls.__name__
+
+        # Register agent class
+        _agent_aliases[str(alias).lower()] = cls
+
+        return cls
+
+    registered_class = functools.partial(_registered_class, alias=alias)
+    return registered_class
+
+
 def build_agent(raw, env=None):
     agent_name, *arg_list = split_except_quoted_field(raw, ',')
     args, kwargs = parse_args(arg_list)
 
-    if agent_name.lower() == 'random':
-        agent = RandomAgent()
-    elif agent_name.lower() == 'rulebase':
-        agent = RuleBasedAgent(*args, **kwargs)
+    if agent_name.lower() in _agent_aliases:
+        AgentClass = _agent_aliases[agent_name.lower()]
+        agent = AgentClass(*args, **kwargs)
     elif Path(agent_name).exists():
         # model path e.g. models/latst.pth, models/latest.pth.onnx
         model = load_model(agent_name, env.net())
