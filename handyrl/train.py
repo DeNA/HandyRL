@@ -403,7 +403,7 @@ class Learner:
         random.seed(args['seed'])
 
         self.env = make_env(env_args)
-        self.eval_rate_fn = lambda n: (n ** self.args['eval_coef']) / n
+        self.eval_rate_fn = lambda n: (n ** self.args.get('eval_coef', 0.85)) / n
         self.eval_rate = self.eval_rate_fn(self.args['minimum_episodes'] + self.args['update_episodes'])
         self.shutdown_flag = False
         self.flags = set()
