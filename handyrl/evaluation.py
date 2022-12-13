@@ -203,6 +203,14 @@ def register_agent(alias=None):
         ...     pass
         >>> env = Environment({})
         >>> agent = build_agent("transformer", env)
+
+    Note:
+        The agent class must be defined in the current context.
+        For example, if you define a class in `src/agent.py`, you need to add the following line to `main.py`.
+
+        ```python
+        import src.agent
+        ```
     """
 
     def _registered_class(cls, alias=None):
