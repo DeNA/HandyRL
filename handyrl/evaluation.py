@@ -155,7 +155,7 @@ def split_except_quoted_field(string, delimiter=','):
 
     Example:
         >>> agent_config = 'transformer, temperature=1.0, hoge="hoge, fuga"'
-        >>> split_except_quoted_field(agent_config, ' ')
+        >>> split_except_quoted_field(agent_config, ',')
         ['transformer',
          'temperature=1.0',
          'hoge="hoge, fuga"']
@@ -171,7 +171,7 @@ def parse_args(arg_list):
     def _convert_dtype(value):
         try:
             value = eval(value)
-        except ValueError:
+        except:
             pass
         return value
 
