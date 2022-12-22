@@ -247,7 +247,7 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
             finished_cnt += 1
             continue
         pat_idx, agent_ids, results = ret
-        outcome = results.get('outcome')
+        outcome = results.get('result')
         if outcome is not None:
             for idx, p in enumerate(env.players()):
                 agent_id = agent_ids[idx]
