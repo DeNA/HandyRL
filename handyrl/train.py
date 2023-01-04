@@ -432,7 +432,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, self.model)
+        self.trainer = Trainer(args, copy.deepcopy(self.model))
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
