@@ -42,7 +42,7 @@ class Worker:
 
     def _gather_models(self, model_ids):
         for model_id in model_ids:
-            if model_id is not None and model_id not in self.model_pool:
+            if model_id is not None and model_id >= 0 and model_id not in self.model_pool:
                 # get model from server
                 model = pickle.loads(send_recv(self.conn, ('model', model_id)))
                 if model_id == 0:
