@@ -21,8 +21,10 @@ class Generator:
         # episode generation
         moments = []
         hidden = {}
+        total_rewards = {}
         for player in self.env.players():
             hidden[player] = models[player].init_hidden()
+            total_rewards[player] = 0
 
         err = self.env.reset()
         if err:
@@ -68,6 +70,7 @@ class Generator:
             reward = self.env.reward()
             for player in self.env.players():
                 moment['reward'][player] = reward.get(player, None)
+                total_rewards[player] += np.array(reward.get(player, 0)).reshape(-1)
 
             moment['turn'] = turn_players
             moments.append(moment)
@@ -78,12 +81,12 @@ class Generator:
         for player in self.env.players():
             ret = 0
             for i, m in reversed(list(enumerate(moments))):
-                ret = (m['reward'][player] or 0) + self.args['gamma'] * ret
+                ret = np.array(m['reward'][player] or 0) + np.array(self.args['gamma']) * ret
                 moments[i]['return'][player] = ret
 
         episode = {
             'args': args, 'steps': len(moments),
-            'outcome': self.env.outcome(),
+            'total_reward': total_rewards,
             'moment': [
                 bz2.compress(pickle.dumps(moments[i:i+self.args['compress_steps']]))
                 for i in range(0, len(moments), self.args['compress_steps'])

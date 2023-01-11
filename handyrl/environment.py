@@ -99,12 +99,6 @@ class BaseEnvironment:
     #
     # Should be defined in all games
     #
-    def outcome(self):
-        raise NotImplementedError()
-
-    #
-    # Should be defined in all games
-    #
     def legal_actions(self, player):
         raise NotImplementedError()
 

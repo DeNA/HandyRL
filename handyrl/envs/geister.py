@@ -162,8 +162,9 @@ class GeisterNet(nn.Module):
         h_p = torch.cat([h_p_move, h_p_set], -1)
         h_v = self.head_v(h)
         h_r = self.head_r(h)
+        h_v = torch.cat([torch.tanh(h_v), h_r], -1)
 
-        return {'policy': h_p, 'value': torch.tanh(h_v), 'return': h_r, 'hidden': hidden}
+        return {'policy': h_p, 'value': h_v, 'hidden': hidden}
 
 
 class Environment(BaseEnvironment):
@@ -433,17 +434,17 @@ class Environment(BaseEnvironment):
         return self.win_color is not None
 
     def reward(self):
-        # return immediate rewards
-        return {p: -0.01 for p in self.players()}
+        # immediate rewards
+        turn_rewards = [-0.01, -0.01]
 
-    def outcome(self):
-        # return terminal outcomes
-        outcomes = [0, 0]
+        # terminal reward
+        terminal_rewards = [0, 0]
         if self.win_color == self.BLACK:
-            outcomes = [1, -1]
+            terminal_rewards = [1, -1]
         elif self.win_color == self.WHITE:
-            outcomes = [-1, 1]
-        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
+            terminal_rewards = [-1, 1]
+
+        return {p: [terminal_rewards[idx], turn_rewards[idx]] for idx, p in enumerate(self.players())}
 
     def legal(self, action):
         if self.turn_count < 0:
@@ -543,11 +544,14 @@ class Environment(BaseEnvironment):
 if __name__ == '__main__':
     e = Environment()
     for _ in range(100):
+        total_rewards = {}
         e.reset()
         while not e.terminal():
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a, e.turn()) for a in actions])
             e.play(random.choice(actions))
+            for p, r in e.reward().items():
+                total_rewards[p] = total_rewards.get(p, 0) + np.array(r)
         print(e)
-        print(e.outcome())
+        print(total_rewards)

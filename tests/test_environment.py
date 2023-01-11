@@ -47,7 +47,6 @@ def test_environment_local(environment_path, env):
                     actions[player] = random.choice(e.legal_actions(player))
                 e.step(actions)
                 e.reward()
-            e.outcome()
         no_error_loop = True
     except Exception:
         traceback.print_exc()
@@ -81,7 +80,6 @@ def test_environment_network(environment_path, env):
                     info = e.diff_info(p)
                     e_.update(info, False)
                 e.reward()
-            e.outcome()
         no_error_loop = True
     except Exception:
         traceback.print_exc()

@@ -7,6 +7,8 @@ import random
 import time
 import multiprocessing as mp
 
+import numpy as np
+
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
@@ -43,8 +45,8 @@ class NetworkAgentClient:
                 break
             if command == 'quit':
                 break
-            elif command == 'outcome':
-                print('outcome = %f' % args[0])
+            elif command == 'reward':
+                print('reward = %s' % args[0])
             elif hasattr(self.agent, command):
                 if command == 'action' or command == 'observe':
                     view(self.env)
@@ -84,8 +86,10 @@ def exec_match(env, agents, critic=None, show=False, game_args={}):
     ''' match with shared game environment '''
     if env.reset(game_args):
         return None
-    for agent in agents.values():
+    total_rewards = {}
+    for p, agent in agents.items():
         agent.reset(env, show=show)
+        total_rewards[p] = 0
     while not env.terminal():
         if show:
             view(env)
@@ -103,19 +107,22 @@ def exec_match(env, agents, critic=None, show=False, game_args={}):
             return None
         if show:
             view_transition(env)
-    outcome = env.outcome()
+        for p, reward in env.reward().items():
+            total_rewards[p] += np.array(reward).reshape(-1)
     if show:
-        print('final outcome = %s' % outcome)
-    return outcome
+        print('total rewards = %s' % total_rewards)
+    return total_rewards
 
 
 def exec_network_match(env, network_agents, critic=None, show=False, game_args={}):
     ''' match with divided game environment '''
     if env.reset(game_args):
         return None
+    total_rewards = {}
     for p, agent in network_agents.items():
         info = env.diff_info(p)
         agent.update(info, True)
+        total_rewards[p] = 0
     while not env.terminal():
         if show:
             view(env)
@@ -132,13 +139,14 @@ def exec_network_match(env, network_agents, critic=None, show=False, game_args={
                 agent.observe(p)
         if env.step(actions):
             return None
+        for p, reward in env.reward().items():
+            total_rewards[p] += np.array(reward).reshape(-1)
         for p, agent in network_agents.items():
             info = env.diff_info(p)
             agent.update(info, False)
-    outcome = env.outcome()
     for p, agent in network_agents.items():
-        agent.outcome(outcome[p])
-    return outcome
+        agent.reward(total_rewards[p])
+    return total_rewards
 
 
 def build_agent(raw, env=None):
@@ -170,11 +178,11 @@ class Evaluator:
             else:
                 agents[p] = Agent(model)
 
-        outcome = exec_match(self.env, agents)
-        if outcome is None:
+        total_rewards = exec_match(self.env, agents)
+        if total_rewards is None:
             print('None episode in evaluation!')
             return None
-        return {'args': args, 'result': outcome, 'opponent': opponent}
+        return {'args': args, 'total_reward': total_rewards, 'opponent': opponent}
 
 
 def wp_func(results):

@@ -137,14 +137,13 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return self.win_color != 0 or len(self.record) == 3 * 3
 
-    def outcome(self):
-        # terminal outcome
-        outcomes = [0, 0]
+    def reward(self):
+        rewards = [0, 0]
         if self.win_color > 0:
-            outcomes = [1, -1]
+            rewards = [1, -1]
         if self.win_color < 0:
-            outcomes = [-1, 1]
-        return {p: outcomes[idx] for idx, p in enumerate(self.players())}
+            rewards = [-1, 1]
+        return {p: rewards[idx] for idx, p in enumerate(self.players())}
 
     def legal_actions(self, _=None):
         # legal action list
@@ -171,11 +170,14 @@ class Environment(BaseEnvironment):
 if __name__ == '__main__':
     e = Environment()
     for _ in range(100):
+        total_rewards = {}
         e.reset()
         while not e.terminal():
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
+            for p, r in e.reward().items():
+                total_rewards[p] = total_rewards.get(p, 0) + r
         print(e)
-        print(e.outcome())
+        print(total_rewards)
