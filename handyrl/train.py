@@ -224,7 +224,9 @@ def compute_loss(batch, model, hidden, args):
 
     actions = batch['action']
     emasks = batch['episode_mask']
-    value_target_masks, return_target_masks = batch['observation_mask'], batch['observation_mask']
+    omasks = batch['observation_mask']
+    value_target_masks, return_target_masks = omasks, omasks
+
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
@@ -240,10 +242,10 @@ def compute_loss(batch, model, hidden, args):
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
         if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
-            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
-            values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
-            value_target_masks_inv = torch.stack([value_target_masks[:, :, 1], value_target_masks[:, :, 0]], dim=2)
-            value_target_masks = torch.clamp(value_target_masks + value_target_masks_inv, 0, 1)
+            values_nograd_opponent = -torch.flip(values_nograd, dims=[2])
+            omasks_opponent = torch.flip(omasks, dims=[2])
+            values_nograd = (values_nograd * omasks + values_nograd_opponent * omasks_opponent) / (omasks + omasks_opponent + 1e-8)
+            value_target_masks = torch.clamp(omasks + omasks_opponent, 0, 1)
         outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
 
     # compute targets and advantage
@@ -435,7 +437,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, self.model)
+        self.trainer = Trainer(args, copy.deepcopy(self.model))
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
