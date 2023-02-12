@@ -87,8 +87,9 @@ last_win_rate = {}
 for opponent in opponents:
     wp_list = averaged_wp_lists[opponent]
     start = start_epoch[opponent]
-    # ax.plot(clipped_epoch_list[start:], wp_list[start:], label=opponent)
-    ax.plot(clipped_game_list[start:], wp_list[start:], label=opponent)
+    end = min(min(len(clipped_epoch_list), len(clipped_game_list)), len(wp_list))
+    # ax.plot(clipped_epoch_list[start:end], wp_list[start:end], label=opponent)
+    ax.plot(clipped_game_list[start:end], wp_list[start:end], label=opponent)
     last_win_rate[opponent] = wp_list[-1]
 
 ax.set_xlabel('Games', size=14)
