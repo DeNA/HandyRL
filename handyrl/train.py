@@ -22,7 +22,7 @@ import torch.distributions as dist
 import torch.optim as optim
 import psutil
 
-from .environment import prepare_env, make_env
+from .environment import make_env
 from .util import map_r, bimap_r, trimap_r, rotate
 from .model import to_torch, to_gpu, ModelWrapper
 from .losses import compute_target
@@ -633,7 +633,6 @@ class Learner:
 
 
 def train_main(args):
-    prepare_env(args['env_args'])  # preparing environment is needed in stand-alone mode
     learner = Learner(args=args)
     learner.run()
 

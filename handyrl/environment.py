@@ -14,17 +14,6 @@ ENVS = {
 }
 
 
-def prepare_env(env_args):
-    env_name = env_args['env']
-    env_source = ENVS.get(env_name, env_name)
-    env_module = importlib.import_module(env_source)
-
-    if env_module is None:
-        print("No environment %s" % env_name)
-    elif hasattr(env_module, 'prepare'):
-        env_module.prepare()
-
-
 def make_env(env_args):
     env_name = env_args['env']
     env_source = ENVS.get(env_name, env_name)
