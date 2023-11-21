@@ -29,9 +29,6 @@ class PickledConnection:
             self.conn.close()
             self.conn = None
 
-    def fileno(self):
-        return self.conn.fileno()
-
     def _recv(self, size):
         buf = io.BytesIO()
         while size > 0:

@@ -63,24 +63,23 @@ def make_batch(episodes, args):
 
         # data that is changed by training configuration
         if args['turn_based_training'] and not args['observation']:
-            obs = [[m['observation'][m['turn'][0]]] for m in moments]
-            prob = np.array([[[m['selected_prob'][m['turn'][0]]]] for m in moments])
-            act = np.array([[m['action'][m['turn'][0]]] for m in moments], dtype=np.int64)[..., np.newaxis]
-            amask = np.array([[m['action_mask'][m['turn'][0]]] for m in moments])
+            players_list = [[m['turn'][0]] for m in moments]
         else:
-            obs = [[replace_none(m['observation'][player], obs_zeros) for player in players] for m in moments]
-            prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players] for m in moments])
-            act = np.array([[replace_none(m['action'][player], 0) for player in players] for m in moments], dtype=np.int64)[..., np.newaxis]
-            amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players] for m in moments])
+            players_list = [players for m in moments]
+
+        obs = [[replace_none(m['observation'][player], obs_zeros) for player in players_] for m, players_ in zip(moments, players_list)]
+        prob = np.array([[[replace_none(m['selected_prob'][player], 1.0)] for player in players_] for m, players_ in zip(moments, players_list)])
+        act = np.array([[replace_none(m['action'][player], 0) for player in players_] for m, players_ in zip(moments, players_list)], dtype=np.int64)[..., np.newaxis]
+        amask = np.array([[replace_none(m['action_mask'][player], amask_zeros + 1e32) for player in players_] for m, players_ in zip(moments, players_list)])
 
         # reshape observation
         obs = rotate(rotate(obs))  # (T, P, ..., ...) -> (P, ..., T, ...) -> (..., T, P, ...)
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
-        rew = np.array([[replace_none(m['reward'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
-        ret = np.array([[replace_none(m['return'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        v = np.array([[replace_none(m['value'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        rew = np.array([[replace_none(m['reward'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        ret = np.array([[replace_none(m['return'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
 
         emask = np.ones((len(moments), 1, 1), dtype=np.float32)  # episode mask
@@ -224,6 +223,9 @@ def compute_loss(batch, model, hidden, args):
 
     actions = batch['action']
     emasks = batch['episode_mask']
+    omasks = batch['observation_mask']
+    value_target_masks, return_target_masks = omasks, omasks
+
     clip_rho_threshold, clip_c_threshold = 1.0, 1.0
 
     log_selected_b_policies = torch.log(torch.clamp(batch['selected_prob'], 1e-16, 1)) * emasks
@@ -239,16 +241,18 @@ def compute_loss(batch, model, hidden, args):
     if 'value' in outputs_nograd:
         values_nograd = outputs_nograd['value']
         if args['turn_based_training'] and values_nograd.size(2) == 2:  # two player zerosum game
-            values_nograd_opponent = -torch.stack([values_nograd[:, :, 1], values_nograd[:, :, 0]], dim=2)
-            values_nograd = (values_nograd + values_nograd_opponent) / (batch['observation_mask'].sum(dim=2, keepdim=True) + 1e-8)
+            values_nograd_opponent = -torch.flip(values_nograd, dims=[2])
+            omasks_opponent = torch.flip(omasks, dims=[2])
+            values_nograd = (values_nograd * omasks + values_nograd_opponent * omasks_opponent) / (omasks + omasks_opponent + 1e-8)
+            value_target_masks = torch.clamp(omasks + omasks_opponent, 0, 1)
         outputs_nograd['value'] = values_nograd * emasks + batch['outcome'] * (1 - emasks)
 
     # compute targets and advantage
     targets = {}
     advantages = {}
 
-    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs
-    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs
+    value_args = outputs_nograd.get('value', None), batch['outcome'], None, args['lambda'], 1, clipped_rhos, cs, value_target_masks
+    return_args = outputs_nograd.get('return', None), batch['return'], batch['reward'], args['lambda'], args['gamma'], clipped_rhos, cs, return_target_masks
 
     targets['value'], advantages['value'] = compute_target(args['value_target'], *value_args)
     targets['return'], advantages['return'] = compute_target(args['value_target'], *return_args)
@@ -286,11 +290,16 @@ class Batcher:
 
     def select_episode(self):
         while True:
-            ep_idx = random.randrange(min(len(self.episodes), self.args['maximum_episodes']))
-            accept_rate = 1 - (len(self.episodes) - 1 - ep_idx) / self.args['maximum_episodes']
-            if random.random() < accept_rate:
+            ep_count = min(len(self.episodes), self.args['maximum_episodes'])
+            ep_idx = random.randrange(ep_count)
+            accept_rate = 1 - (ep_count - 1 - ep_idx) / ep_count
+            if random.random() >= accept_rate:
+                continue
+            try:
+                ep = self.episodes[ep_idx]
                 break
-        ep = self.episodes[ep_idx]
+            except IndexError:
+                continue
         turn_candidates = 1 + max(0, ep['steps'] - self.args['forward_steps'])  # change start turn by sequence length
         train_st = random.randrange(turn_candidates)
         st = max(0, train_st - self.args['burn_in_steps'])
@@ -427,7 +436,7 @@ class Learner:
         self.worker = WorkerServer(args) if remote else WorkerCluster(args)
 
         # thread connection
-        self.trainer = Trainer(args, self.model)
+        self.trainer = Trainer(args, copy.deepcopy(self.model))
 
     def model_path(self, model_id):
         return os.path.join('models', str(model_id) + '.pth')
