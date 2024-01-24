@@ -77,7 +77,7 @@ def make_batch(episodes, args):
         obs = bimap_r(obs_zeros, obs, lambda _, o: np.array(o))
 
         # datum that is not changed by training configuration
-        v = np.array([[replace_none(m['value'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
+        v = np.array([[replace_none(m['value'][player], [0]) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         rew = np.array([[replace_none(m['reward'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         ret = np.array([[replace_none(m['return'][player], 0) for player in players] for m in moments], dtype=np.float32).reshape(len(moments), len(players), -1)
         oc = np.array([ep['outcome'][player] for player in players], dtype=np.float32).reshape(1, len(players), -1)
