@@ -207,7 +207,7 @@ class WorkerServer(QueueCommunicator):
                 worker_args['base_worker_id'] = self.total_worker_count
                 self.total_worker_count += worker_args['num_parallel']
                 args = copy.deepcopy(self.args)
-                args['worker'] = worker_args
+                args['worker'].update(worker_args)
                 conn.send(args)
                 conn.close()
             print('finished entry server')
