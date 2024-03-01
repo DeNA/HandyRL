@@ -396,7 +396,7 @@ def eval_main(args, argv):
 
     print('%d process, %d games' % (num_process, num_games))
 
-    seed = random.randrange(1e8)
+    seed = random.randrange(int(1e8))
     print('seed = %d' % seed)
 
     opponent = model_paths[1] if len(model_paths) > 1 else 'random'
@@ -416,7 +416,7 @@ def eval_server_main(args, argv):
 
     print('%d process, %d games' % (num_process, num_games))
 
-    seed = random.randrange(1e8)
+    seed = random.randrange(int(1e8))
     print('seed = %d' % seed)
 
     evaluate_mp(env, [None] * len(env.players()), None, env_args, {'default': {}}, num_process, num_games, seed)
