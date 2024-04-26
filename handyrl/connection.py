@@ -204,6 +204,8 @@ class QueueCommunicator:
             conn, send_data = self.output_queue.get()
             try:
                 conn.send(send_data)
+            except TimeoutError:
+                self.disconnect(conn)
             except ConnectionResetError:
                 self.disconnect(conn)
             except BrokenPipeError:
@@ -215,6 +217,9 @@ class QueueCommunicator:
             for conn in conns:
                 try:
                     recv_data = conn.recv()
+                except TimeoutError:
+                    self.disconnect(conn)
+                    continue
                 except ConnectionResetError:
                     self.disconnect(conn)
                     continue
