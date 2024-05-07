@@ -400,8 +400,49 @@ class Trainer:
         print('finished training')
 
 
+def preprocess_config(args):
+    default_config = {
+        'train_args': {
+            'turn_based_training': True,
+            'observation': False,
+            'gamma': 0.8,
+            'forward_steps': 16,
+            'compress_steps': 4,
+            'entropy_regularization': 1.0e-1,
+            'entropy_regularization_decay': 0.1,
+            'update_episodes': 200,
+            'batch_size': 128,
+            'minimum_episodes': 400,
+            'maximum_episodes': 100000,
+            'epochs': -1,
+            'num_batchers': 2,
+            'eval_rate': 0.1,
+            'worker': {
+                'num_parallel': 6,
+            },
+            'lambda': 0.7,
+            'policy_target': 'TD',
+            'value_target': 'TD',
+            'seed': 0,
+            'restart_epoch': 0,
+        },
+    }
+
+    def recursive_update(dct, merge_dct):
+        for k, v in merge_dct.items():
+            if k in dct and isinstance(dct[k], dict) and isinstance(v, dict):
+                recursive_update(dct[k], v)
+            else:
+                dct[k] = v
+
+    recursive_update(default_config, args)
+    return default_config
+
+
 class Learner:
     def __init__(self, args, net=None, remote=False):
+        args = preprocess_config(args)
+        print(args)
         train_args = args['train_args']
         env_args = args['env_args']
         train_args['env'] = env_args
