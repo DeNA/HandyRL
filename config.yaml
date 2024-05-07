@@ -1,4 +1,3 @@
-
 env_args:
     env: 'TicTacToe'
     #env: 'Geister'
@@ -35,4 +34,3 @@ train_args:
 worker_args:
     server_address: ''
     num_parallel: 8
-
