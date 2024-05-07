@@ -7,7 +7,7 @@ import random
 import time
 import multiprocessing as mp
 
-from .environment import prepare_env, make_env
+from .environment import make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
 from .agent import RandomAgent, RuleBasedAgent, Agent, EnsembleAgent, SoftAgent
 
@@ -377,7 +377,6 @@ def client_mp_child(env_args, model_path, conn):
 
 def eval_main(args, argv):
     env_args = args['env_args']
-    prepare_env(env_args)
     env = make_env(env_args)
 
     model_paths = argv[0].split(':') if len(argv) >= 1 else ['models/latest.pth']
@@ -408,7 +407,6 @@ def eval_main(args, argv):
 def eval_server_main(args, argv):
     print('network match server mode')
     env_args = args['env_args']
-    prepare_env(env_args)
     env = make_env(env_args)
 
     num_games = int(argv[0]) if len(argv) >= 1 else 100
