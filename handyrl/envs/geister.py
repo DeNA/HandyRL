@@ -1,4 +1,5 @@
-# Copyright (c) 2020 DeNA Co., Ltd.
+# Copyright (c) 2017 Andrea Palazzi (ConvLSTMCell)
+# Copyright (c) 2020 DeNA Co., Ltd. (other)
 # Licensed under The MIT License [see LICENSE for details]
 
 # implementation of Geister
